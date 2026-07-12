@@ -167,6 +167,86 @@ func (m *AssistantMessage) ToolCalls() []*ToolCall {
 // ModelCost is the price per million tokens for each category.
 type ModelCost struct{ Input, Output, CacheRead, CacheWrite float64 }
 
+// ThinkingFormat selects how a reasoning request is encoded on the wire for
+// OpenAI-compatible endpoints (port of OpenAICompletionsCompat.thinkingFormat).
+type ThinkingFormat string
+
+// ThinkingFormat values.
+const (
+	// ThinkingFormatOpenAI (default): top-level "reasoning_effort".
+	ThinkingFormatOpenAI ThinkingFormat = "openai"
+	// ThinkingFormatZai: "thinking": {"type": "enabled"|"disabled"} plus
+	// "reasoning_effort" when a level maps to a non-empty value.
+	ThinkingFormatZai ThinkingFormat = "zai"
+	// ThinkingFormatQwen: top-level "enable_thinking": bool.
+	ThinkingFormatQwen ThinkingFormat = "qwen"
+	// ThinkingFormatQwenChatTemplate: "chat_template_kwargs":
+	// {"enable_thinking": bool, "preserve_thinking": true}.
+	ThinkingFormatQwenChatTemplate ThinkingFormat = "qwen-chat-template"
+	// ThinkingFormatChatTemplate: configurable "chat_template_kwargs" built
+	// from Compat.ChatTemplateKwargs (see ChatTemplateVar).
+	ThinkingFormatChatTemplate ThinkingFormat = "chat-template"
+	// ThinkingFormatDeepseek: "thinking": {"type": ...} plus "reasoning_effort".
+	ThinkingFormatDeepseek ThinkingFormat = "deepseek"
+	// ThinkingFormatOpenRouter: "reasoning": {"effort": ...}.
+	ThinkingFormatOpenRouter ThinkingFormat = "openrouter"
+	// ThinkingFormatTogether: "reasoning": {"enabled": bool} plus
+	// "reasoning_effort".
+	ThinkingFormatTogether ThinkingFormat = "together"
+	// ThinkingFormatStringThinking: top-level "thinking": "<level>".
+	ThinkingFormatStringThinking ThinkingFormat = "string-thinking"
+	// ThinkingFormatAntLing: "reasoning": {"effort": ...} only when the level
+	// maps to a non-empty value.
+	ThinkingFormatAntLing ThinkingFormat = "ant-ling"
+)
+
+// ChatTemplateVar is a dynamic chat_template_kwargs value resolved per request
+// (port of the {"$var": ...} form of ChatTemplateKwargValue).
+type ChatTemplateVar struct {
+	// Var is "thinking.enabled" (bool: reasoning requested) or
+	// "thinking.effort" (mapped ThinkingLevelMap value or the raw level).
+	Var string
+	// OmitWhenOff drops the key entirely when reasoning is off.
+	OmitWhenOff bool
+}
+
+// Compat holds per-model wire-compatibility switches for OpenAI-compatible
+// endpoints. All fields are read by wire/openai; the zero value matches the
+// previous behavior of the thin port. It is a trimmed port of
+// OpenAICompletionsCompat in pi's types.ts.
+type Compat struct {
+	// ThinkingFormat selects the reasoning request encoding. Empty =>
+	// ThinkingFormatOpenAI ("reasoning_effort").
+	ThinkingFormat ThinkingFormat
+	// ChatTemplateKwargs is emitted as "chat_template_kwargs" when
+	// ThinkingFormat is ThinkingFormatChatTemplate. Values are literals
+	// (string/number/bool/nil) or ChatTemplateVar.
+	ChatTemplateKwargs map[string]any
+	// SupportsUsageInStreaming=false omits stream_options.include_usage
+	// (some proxies reject it). Nil pointer semantics avoided: this is an
+	// opt-out flag, so the field is inverted relative to pi.
+	NoUsageInStreaming bool
+	// SupportsDeveloperRole sends the system prompt with role "developer"
+	// when the model has Reasoning=true.
+	SupportsDeveloperRole bool
+	// SupportsStrictMode adds "strict": false on tool definitions (pi sends
+	// it unless the provider rejects it; here it is opt-in to preserve the
+	// thin port's wire shape).
+	SupportsStrictMode bool
+	// RequiresThinkingAsText replays assistant thinking blocks as plain text
+	// instead of under their signature key.
+	RequiresThinkingAsText bool
+	// RequiresToolResultName adds "name" to role:"tool" messages.
+	RequiresToolResultName bool
+	// RequiresAssistantAfterToolResult inserts a synthetic assistant message
+	// between a tool result and a following user message.
+	RequiresAssistantAfterToolResult bool
+	// ExtraBody is merged into the request body after all other fields
+	// (occlusion uses this for endpoint-specific fields the port does not
+	// model). Keys set here override generated fields.
+	ExtraBody map[string]any
+}
+
 // Model describes a model and its wire configuration.
 type Model struct {
 	ID               string
@@ -182,4 +262,5 @@ type Model struct {
 	Headers          map[string]string // optional default headers
 	ThinkingLevelMap map[string]string // optional: pi level -> provider value
 	MaxTokensField   string            // optional: "max_tokens" or "max_completion_tokens" (default)
+	Compat           *Compat           // optional wire-compatibility switches
 }

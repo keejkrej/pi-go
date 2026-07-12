@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	ag "github.com/keejkrej/pi-go/agentloop"
@@ -44,6 +46,44 @@ func StreamSimple(ctx context.Context, model *ag.Model, c *ag.Context, opts *ag.
 	return out
 }
 
+// DefaultMaxRetryDelay caps pre-stream retry backoff and server-requested
+// Retry-After waits (matches pi's maxRetryDelayMs default of 60s).
+const DefaultMaxRetryDelay = 60 * time.Second
+
+// retryableStatus reports whether an HTTP status is worth a pre-stream retry.
+func retryableStatus(code int) bool {
+	return code == http.StatusRequestTimeout || code == http.StatusTooManyRequests || code >= 500
+}
+
+// retryDelay picks the wait before pre-stream retry attempt (1-based),
+// honoring a Retry-After header when present, capped at maxDelay.
+func retryDelay(attempt int, retryAfter string, maxDelay time.Duration) time.Duration {
+	d := time.Second << (attempt - 1)
+	if secs, err := strconv.Atoi(strings.TrimSpace(retryAfter)); err == nil && secs > 0 {
+		d = time.Duration(secs) * time.Second
+	}
+	if d > maxDelay {
+		d = maxDelay
+	}
+	return d
+}
+
+// sleepCtx sleeps for d unless ctx is done first; returns true when the full
+// delay elapsed.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	if d <= 0 {
+		return ctx.Err() == nil
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
+	}
+}
+
 // run performs the request and parses the response, emitting events.
 func run(ctx context.Context, model *ag.Model, c *ag.Context, opts *ag.StreamOptions, out *ag.AssistantMessageEventStream, output *ag.AssistantMessage) {
 	body := buildRequestBody(model, c, opts)
@@ -54,32 +94,66 @@ func run(ctx context.Context, model *ag.Model, c *ag.Context, opts *ag.StreamOpt
 	}
 
 	url := completionsURL(model.BaseURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
-	if err != nil {
-		finishError(ctx, out, output, "failed to build request: "+err.Error())
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if opts != nil && opts.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+opts.APIKey)
-	}
-	for k, v := range model.Headers {
-		req.Header.Set(k, v)
+	maxRetries := 0
+	maxDelay := DefaultMaxRetryDelay
+	if opts != nil {
+		maxRetries = opts.MaxRetries
+		if opts.MaxRetryDelay > 0 {
+			maxDelay = opts.MaxRetryDelay
+		}
 	}
 
-	resp, err := HTTPClient.Do(req)
-	if err != nil {
-		finishError(ctx, out, output, "request failed: "+err.Error())
+	// Pre-stream retries are safe: no event has been emitted before the
+	// first 2xx response, so a retried request is invisible to consumers.
+	var resp *http.Response
+	for attempt := 0; ; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
+		if err != nil {
+			finishError(ctx, out, output, "failed to build request: "+err.Error())
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if opts != nil && opts.APIKey != "" {
+			req.Header.Set("Authorization", "Bearer "+opts.APIKey)
+		}
+		for k, v := range model.Headers {
+			req.Header.Set(k, v)
+		}
+		if opts != nil {
+			for k, v := range opts.Headers {
+				if v == "" {
+					req.Header.Del(k)
+					continue
+				}
+				req.Header.Set(k, v)
+			}
+		}
+
+		resp, err = HTTPClient.Do(req)
+		if err != nil {
+			if attempt < maxRetries && ctx.Err() == nil &&
+				sleepCtx(ctx, retryDelay(attempt+1, "", maxDelay)) {
+				continue
+			}
+			finishError(ctx, out, output, "request failed: "+err.Error())
+			return
+		}
+
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			break
+		}
+
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+		retryAfter := resp.Header.Get("Retry-After")
+		resp.Body.Close()
+		if attempt < maxRetries && retryableStatus(resp.StatusCode) && ctx.Err() == nil &&
+			sleepCtx(ctx, retryDelay(attempt+1, retryAfter, maxDelay)) {
+			continue
+		}
+		finishError(ctx, out, output, fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(bodyBytes)))
 		return
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
-		msg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
-		finishError(ctx, out, output, msg)
-		return
-	}
 
 	// Success: emit start, then parse the stream.
 	out.Push(&ag.StartEvent{Partial: output})

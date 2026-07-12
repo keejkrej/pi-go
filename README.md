@@ -81,6 +81,17 @@ Key configuration (`AgentLoopConfig`):
 - Optional hooks: `TransformContext`, `GetApiKey`, `BeforeToolCall`,
   `AfterToolCall`, `ShouldStopAfterTurn`, `PrepareNextTurn`,
   `GetSteeringMessages`, `GetFollowUpMessages`.
+- `AutoRetry *AutoRetryConfig` — when set, a turn whose assistant response fails
+  with a transient provider/transport error (per `IsRetryableAssistantError`, a
+  port of pi's retry classifier) is restarted with exponential backoff. The
+  errored assistant message is dropped from the context and the run result, and
+  an `AutoRetryEvent` is emitted before each backoff sleep.
+- Per-request wire knobs forwarded to the `StreamFn` on every turn: `Headers`
+  (override/suppress model default headers), `ToolChoice`
+  (`auto`/`none`/`required`/forced function), `OnPayload` (inspect/replace the
+  outgoing request body — the universal escape hatch), and
+  `MaxRetries`/`MaxRetryDelay` (pre-stream HTTP retries in the adapter, safe
+  because they happen before any event is emitted; honors `Retry-After`).
 
 Event ordering guarantees (the central correctness property of the port):
 
@@ -160,19 +171,43 @@ stream := agentloop.AgentLoop(ctx, prompts, agentCtx, config,
     ))
 ```
 
+## Ported pi features beyond the thin loop
+
+The port has grown a parity layer with pi's `@earendil-works/pi-ai` OpenAI
+adapter and selected agent-runtime utilities:
+
+- **Model compat switches** (`agentloop.Compat` on `Model.Compat`): thinking
+  request formats (`openai` `reasoning_effort`, `zai`, `qwen`,
+  `qwen-chat-template`, `chat-template` with `ChatTemplateVar` placeholders,
+  `deepseek`, `openrouter`, `together`, `ant-ling`, `string-thinking`),
+  developer-role system prompts, `strict:false` tool mode, tool-result `name`,
+  synthetic assistant after tool results, `stream_options` opt-out, and
+  `ExtraBody` (arbitrary extra request fields, e.g. vLLM
+  `chat_template_kwargs` cousins).
+- **Thinking replay**: assistant thinking blocks are re-sent under the delta
+  field name they arrived on (`reasoning_content` etc.), or folded into plain
+  text with `RequiresThinkingAsText` — matching pi's signature replay.
+- **Tool-result images**: when the model declares `image` input, image blocks in
+  tool results are re-emitted as a follow-up user message ("Attached image(s)
+  from tool result:"), since OpenAI `role:"tool"` messages cannot carry images.
+- **Retry**: `IsRetryableAssistantError` (pi's classifier regexes), pre-stream
+  HTTP retries with `Retry-After` support in the adapter, and loop-level
+  `AutoRetry` with exponential backoff.
+- **Transcript persistence**: `MarshalMessages`/`UnmarshalMessages` round-trip
+  the sealed message/content unions using pi's JSONL field names, so hosts can
+  store and resume transcripts.
+- **Output truncation**: `TruncateHead`/`TruncateTail`/`TruncateLine` port pi's
+  line+byte tool-output limits.
+
 ## Out of scope vs pi
 
-This is a thin port focused on the loop and one wire adapter. Intentionally
-omitted:
+This remains a focused port. Intentionally omitted:
 
 - **No provider zoo.** Only OpenAI Chat Completions streaming; no Anthropic,
-  Bedrock, Vertex, or per-provider compatibility shims. No developer-role,
-  cache-control, or strict-mode request features.
-- **No sessions / persistence.** No transcript storage, resume-from-disk, or
-  message history management beyond what the caller passes in.
+  Bedrock, Vertex, or Responses-API adapters. No cache-control markers or
+  session-affinity headers.
+- **No session tree.** Transcripts serialize to JSON, but there is no
+  entry-tree storage, branching, forking, or leaf navigation.
 - **No TUI.** `cmd/pi-agent` is a plain stdout trace, not an interactive UI.
 - **No context compaction / summarization.** The context grows as the loop runs;
   there is no automatic trimming.
-- **Thinking blocks** are accepted by the engine but are not re-sent in OpenAI
-  request messages, and tool-result images are text-joined rather than re-emitted
-  as image messages.

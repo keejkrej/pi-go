@@ -1,6 +1,9 @@
 package agentloop
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // AgentContext is the mutable state the loop operates on.
 type AgentContext struct {
@@ -16,12 +19,37 @@ type Context struct {
 	Tools        []AgentTool // adapter reads Name/Description/Parameters only
 }
 
+// ToolChoice constrains which tool the model may call (port of pi's
+// toolChoice option). The zero value means the provider default ("auto").
+type ToolChoice struct {
+	// Mode is "auto", "none", "required", or "function".
+	Mode string
+	// Name is the forced tool name when Mode == "function".
+	Name string
+}
+
 // StreamOptions are the per-call options handed to a StreamFn.
 type StreamOptions struct {
 	Temperature *float64
 	MaxTokens   int
 	APIKey      string
 	Reasoning   ThinkingLevel // "" or "off" => no reasoning
+
+	// Headers are per-request headers applied after Model.Headers (an empty
+	// string value suppresses a model default header).
+	Headers map[string]string
+	// ToolChoice constrains tool selection; nil => provider default.
+	ToolChoice *ToolChoice
+	// OnPayload, if set, may inspect and replace the outgoing request body
+	// just before it is sent (the universal escape hatch, port of pi's
+	// onPayload). Return nil to keep the body unchanged.
+	OnPayload func(body map[string]any, model *Model) map[string]any
+	// MaxRetries is the number of pre-stream HTTP retries (429/5xx/network
+	// failures before any event is emitted). 0 => no retries.
+	MaxRetries int
+	// MaxRetryDelay caps server-requested (Retry-After) and backoff delays
+	// between pre-stream retries. Zero means DefaultMaxRetryDelay.
+	MaxRetryDelay time.Duration
 }
 
 // StreamFn produces an assistant response as an event stream. It must NOT
@@ -92,6 +120,18 @@ type AgentLoopConfig struct {
 	MaxTokens   int
 	Reasoning   ThinkingLevel
 	APIKey      string
+
+	// Headers/ToolChoice/OnPayload/MaxRetries/MaxRetryDelay are forwarded to
+	// the StreamFn on every turn (see StreamOptions).
+	Headers       map[string]string
+	ToolChoice    *ToolChoice
+	OnPayload     func(body map[string]any, model *Model) map[string]any
+	MaxRetries    int
+	MaxRetryDelay time.Duration
+
+	// AutoRetry, when non-nil, restarts an assistant turn whose response
+	// failed with a transient provider/transport error (see AutoRetryConfig).
+	AutoRetry *AutoRetryConfig
 
 	ConvertToLlm     func(messages []AgentMessage) ([]Message, error) // REQUIRED
 	TransformContext func(ctx context.Context, messages []AgentMessage) ([]AgentMessage, error)

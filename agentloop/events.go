@@ -1,5 +1,7 @@
 package agentloop
 
+import "time"
+
 // AssistantMessageEvent is a sealed union emitted by a StreamFn.
 type AssistantMessageEvent interface{ isAssistantMessageEvent() }
 
@@ -141,6 +143,17 @@ type ToolExecutionEndEvent struct {
 	IsError              bool
 }
 
+// AutoRetryEvent signals the loop is about to restart an assistant turn after
+// a retryable provider error (see AgentLoopConfig.AutoRetry). It fires before
+// the backoff sleep. The errored assistant message has already been removed
+// from the context and the run result.
+type AutoRetryEvent struct {
+	Attempt      int // 1-based retry attempt
+	MaxAttempts  int
+	Delay        time.Duration
+	ErrorMessage string
+}
+
 func (*AgentStartEvent) isAgentEvent()          {}
 func (*AgentEndEvent) isAgentEvent()            {}
 func (*TurnStartEvent) isAgentEvent()           {}
@@ -151,3 +164,4 @@ func (*MessageEndEvent) isAgentEvent()          {}
 func (*ToolExecutionStartEvent) isAgentEvent()  {}
 func (*ToolExecutionUpdateEvent) isAgentEvent() {}
 func (*ToolExecutionEndEvent) isAgentEvent()    {}
+func (*AutoRetryEvent) isAgentEvent()           {}

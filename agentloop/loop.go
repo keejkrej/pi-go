@@ -126,6 +126,8 @@ func runLoop(ctx context.Context, currentContext *AgentContext, newMessages *[]A
 		}
 	}
 
+	retryAttempt := 0
+
 	for { // outer follow-up loop
 		hasMoreToolCalls := true
 
@@ -150,10 +152,32 @@ func runLoop(ctx context.Context, currentContext *AgentContext, newMessages *[]A
 			*newMessages = append(*newMessages, message)
 
 			if message.StopReason == StopReasonError || message.StopReason == StopReasonAborted {
+				if shouldAutoRetry(ctx, config, message, retryAttempt) {
+					retryAttempt++
+					dropLastAssistantMessage(currentContext, newMessages, message)
+					delay := config.AutoRetry.delay(retryAttempt)
+					sink.emit(&AutoRetryEvent{
+						Attempt:      retryAttempt,
+						MaxAttempts:  config.AutoRetry.MaxAttempts,
+						Delay:        delay,
+						ErrorMessage: message.ErrorMessage,
+					})
+					sink.emit(&TurnEndEvent{Message: message, ToolResults: []*ToolResultMessage{}})
+					if sleepCtx(ctx, delay) {
+						continue // restart the assistant turn
+					}
+					// Aborted during backoff: restore the errored message and
+					// end the run.
+					currentContext.Messages = append(currentContext.Messages, message)
+					*newMessages = append(*newMessages, message)
+					sink.emit(&AgentEndEvent{Messages: *newMessages})
+					return
+				}
 				sink.emit(&TurnEndEvent{Message: message, ToolResults: []*ToolResultMessage{}})
 				sink.emit(&AgentEndEvent{Messages: *newMessages})
 				return
 			}
+			retryAttempt = 0
 
 			toolCalls := message.ToolCalls()
 			toolResults := []*ToolResultMessage{}
@@ -233,6 +257,48 @@ func runLoop(ctx context.Context, currentContext *AgentContext, newMessages *[]A
 	sink.emit(&AgentEndEvent{Messages: *newMessages})
 }
 
+// shouldAutoRetry reports whether the errored assistant message qualifies for
+// an in-loop retry under config.AutoRetry.
+func shouldAutoRetry(ctx context.Context, config *AgentLoopConfig, message *AssistantMessage, attemptsSoFar int) bool {
+	if config.AutoRetry == nil || ctx.Err() != nil {
+		return false
+	}
+	if attemptsSoFar >= config.AutoRetry.MaxAttempts {
+		return false
+	}
+	return IsRetryableAssistantError(message)
+}
+
+// dropLastAssistantMessage removes the just-appended errored assistant message
+// from the live context and the run result before a retry. The message was
+// already reported via message_start/message_end events; consumers keep their
+// own history if they need it (mirrors pi's coding-agent, which drops the
+// error from the live context but keeps it in the session log).
+func dropLastAssistantMessage(currentContext *AgentContext, newMessages *[]AgentMessage, message *AssistantMessage) {
+	if n := len(currentContext.Messages); n > 0 && currentContext.Messages[n-1] == AgentMessage(message) {
+		currentContext.Messages = currentContext.Messages[:n-1]
+	}
+	if n := len(*newMessages); n > 0 && (*newMessages)[n-1] == AgentMessage(message) {
+		*newMessages = (*newMessages)[:n-1]
+	}
+}
+
+// sleepCtx sleeps for d unless ctx is done first; it returns true when the
+// full delay elapsed.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	if d <= 0 {
+		return ctx.Err() == nil
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
+	}
+}
+
 func copyAssistant(m *AssistantMessage) *AssistantMessage {
 	cp := *m
 	return &cp
@@ -278,10 +344,15 @@ func streamAssistantResponse(ctx context.Context, agentCtx *AgentContext,
 	}
 
 	opts := &StreamOptions{
-		Temperature: config.Temperature,
-		MaxTokens:   config.MaxTokens,
-		APIKey:      key,
-		Reasoning:   config.Reasoning,
+		Temperature:   config.Temperature,
+		MaxTokens:     config.MaxTokens,
+		APIKey:        key,
+		Reasoning:     config.Reasoning,
+		Headers:       config.Headers,
+		ToolChoice:    config.ToolChoice,
+		OnPayload:     config.OnPayload,
+		MaxRetries:    config.MaxRetries,
+		MaxRetryDelay: config.MaxRetryDelay,
 	}
 
 	response := streamFn(ctx, config.Model, wireCtx, opts)
