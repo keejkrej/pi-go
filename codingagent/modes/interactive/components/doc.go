@@ -1,0 +1,51 @@
+// Package components is the Go port of these pi v1.0.0 TypeScript files
+// (authoritative mapping: porting/filemap.tsv):
+//
+//   - packages/coding-agent/src/modes/interactive/components/armin-3d.lazy.ts -> armin_3d_lazy.go
+//   - packages/coding-agent/src/modes/interactive/components/armin-3d.ts -> armin_3d.go
+//   - packages/coding-agent/src/modes/interactive/components/armin.ts -> armin.go
+//   - packages/coding-agent/src/modes/interactive/components/assistant-message.ts -> assistant_message.go
+//   - packages/coding-agent/src/modes/interactive/components/bash-execution.ts -> bash_execution.go
+//   - packages/coding-agent/src/modes/interactive/components/bordered-loader.ts -> bordered_loader.go
+//   - packages/coding-agent/src/modes/interactive/components/branch-summary-message.ts -> branch_summary_message.go
+//   - packages/coding-agent/src/modes/interactive/components/compaction-summary-message.ts -> compaction_summary_message.go
+//   - packages/coding-agent/src/modes/interactive/components/config-selector.ts -> config_selector.go
+//   - packages/coding-agent/src/modes/interactive/components/countdown-timer.ts -> countdown_timer.go
+//   - packages/coding-agent/src/modes/interactive/components/custom-editor.ts -> custom_editor.go
+//   - packages/coding-agent/src/modes/interactive/components/custom-entry.ts -> custom_entry.go
+//   - packages/coding-agent/src/modes/interactive/components/custom-message.ts -> custom_message.go
+//   - packages/coding-agent/src/modes/interactive/components/daxnuts.ts -> daxnuts.go
+//   - packages/coding-agent/src/modes/interactive/components/dynamic-border.ts -> dynamic_border.go
+//   - packages/coding-agent/src/modes/interactive/components/earendil-announcement.ts -> earendil_announcement.go
+//   - packages/coding-agent/src/modes/interactive/components/extension-editor.ts -> extension_editor.go
+//   - packages/coding-agent/src/modes/interactive/components/extension-input.ts -> extension_input.go
+//   - packages/coding-agent/src/modes/interactive/components/extension-selector.ts -> extension_selector.go
+//   - packages/coding-agent/src/modes/interactive/components/first-time-setup.ts -> first_time_setup.go
+//   - packages/coding-agent/src/modes/interactive/components/footer.ts -> footer.go
+//   - packages/coding-agent/src/modes/interactive/components/login-dialog.ts -> login_dialog.go
+//   - packages/coding-agent/src/modes/interactive/components/markdown-transform.ts -> markdown_transform.go
+//   - packages/coding-agent/src/modes/interactive/components/mermaid.ts -> mermaid.go
+//   - packages/coding-agent/src/modes/interactive/components/model-selector.ts -> model_selector.go
+//   - packages/coding-agent/src/modes/interactive/components/oauth-selector.ts -> oauth_selector.go
+//   - packages/coding-agent/src/modes/interactive/components/pi-logo.ts -> pi_logo.go
+//   - packages/coding-agent/src/modes/interactive/components/radius-login-selector.ts -> radius_login_selector.go
+//   - packages/coding-agent/src/modes/interactive/components/scoped-models-selector.ts -> scoped_models_selector.go
+//   - packages/coding-agent/src/modes/interactive/components/session-selector-search.ts -> session_selector_search.go
+//   - packages/coding-agent/src/modes/interactive/components/session-selector.ts -> session_selector.go
+//   - packages/coding-agent/src/modes/interactive/components/settings-selector.ts -> settings_selector.go
+//   - packages/coding-agent/src/modes/interactive/components/settings-submenu.ts -> settings_submenu.go
+//   - packages/coding-agent/src/modes/interactive/components/show-images-selector.ts -> show_images_selector.go
+//   - packages/coding-agent/src/modes/interactive/components/skill-invocation-message.ts -> skill_invocation_message.go
+//   - packages/coding-agent/src/modes/interactive/components/status-indicator.ts -> status_indicator.go
+//   - packages/coding-agent/src/modes/interactive/components/theme-selector.ts -> theme_selector.go
+//   - packages/coding-agent/src/modes/interactive/components/themed-text.ts -> themed_text.go
+//   - packages/coding-agent/src/modes/interactive/components/thinking-selector.ts -> thinking_selector.go
+//   - packages/coding-agent/src/modes/interactive/components/tool-execution.ts -> tool_execution.go
+//   - packages/coding-agent/src/modes/interactive/components/tree-selector.ts -> tree_selector.go
+//   - packages/coding-agent/src/modes/interactive/components/trust-selector.ts -> trust_selector.go
+//   - packages/coding-agent/src/modes/interactive/components/user-message-selector.ts -> user_message_selector.go
+//   - packages/coding-agent/src/modes/interactive/components/user-message.ts -> user_message.go
+//   - packages/coding-agent/src/modes/interactive/external-editor.ts -> external_editor.go
+//   - packages/coding-agent/src/modes/interactive/model-catalog-refresh.ts -> model_catalog_refresh.go
+//   - packages/coding-agent/src/modes/interactive/model-search.ts -> model_search.go
+package components

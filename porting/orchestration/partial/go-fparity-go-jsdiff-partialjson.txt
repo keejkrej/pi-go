@@ -1,0 +1,2 @@
+[dry] copied 1:
+  internal/jsdiff/vectors_test.go

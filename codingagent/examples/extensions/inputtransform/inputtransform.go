@@ -1,0 +1,3 @@
+// Ported from packages/coding-agent/examples/extensions/input-transform.ts (pi v1.0.0).
+
+package inputtransform

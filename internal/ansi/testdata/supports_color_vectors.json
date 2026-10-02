@@ -1,0 +1,5531 @@
+[
+ {
+  "env": {},
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TERM": "dumb"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TERM": "xterm"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM": "xterm-256color"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM": "screen-256"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM": "xterm-kitty"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   false,
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM": "xterm-ghostty"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   false,
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM": "wezterm"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   false,
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM": "linux"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM": "foo"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TERM": "VT100"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM": "xterm-truecolor-ANSI"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "COLORTERM": "truecolor"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   false,
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   }
+  ]
+ },
+ {
+  "env": {
+   "COLORTERM": "1"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "COLORTERM": "truecolor",
+   "TERM": "dumb"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "0"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "1"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "2"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "3"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "7"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "99999999999999999999"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "true"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": ""
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "false"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "yes"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "1.5"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "true",
+   "TERM": "xterm-256color"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "",
+   "TERM": "dumb"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "1",
+   "COLORTERM": "truecolor"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TF_BUILD": "1",
+   "AGENT_NAME": "x"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TF_BUILD": "1"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "CI": "1"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "CI": "1",
+   "GITHUB_ACTIONS": "true"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   false,
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   }
+  ]
+ },
+ {
+  "env": {
+   "CI": "",
+   "GITEA_ACTIONS": ""
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   false,
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   }
+  ]
+ },
+ {
+  "env": {
+   "CI": "1",
+   "CIRCLECI": "1"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   false,
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   }
+  ]
+ },
+ {
+  "env": {
+   "CI": "1",
+   "TRAVIS": "1"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "CI": "1",
+   "GITLAB_CI": "1"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "CI": "1",
+   "CI_NAME": "codeship"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "CI": "1",
+   "BUILDKITE": "1",
+   "TERM": "xterm-256color"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "CI": "1",
+   "FORCE_COLOR": "true"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TEAMCITY_VERSION": "9.1."
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TEAMCITY_VERSION": "9.0.0"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TEAMCITY_VERSION": "2023.05"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TEAMCITY_VERSION": "8.1"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TEAMCITY_VERSION": "9.0.1."
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TERM_PROGRAM": "iTerm.app",
+   "TERM_PROGRAM_VERSION": "3.4.19"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   false,
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM_PROGRAM": "iTerm.app",
+   "TERM_PROGRAM_VERSION": "2.9"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM_PROGRAM": "iTerm.app"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM_PROGRAM": "iTerm.app",
+   "TERM_PROGRAM_VERSION": " 12abc"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   false,
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM_PROGRAM": "Apple_Terminal"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM_PROGRAM": "vscode",
+   "TERM": "xterm-256color"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM_PROGRAM": "vscode"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {},
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "2"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "true"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "0"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TERM": "xterm-256color"
+  },
+  "argv": [],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [
+   "--no-color"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "2"
+  },
+  "argv": [
+   "--no-color"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "true"
+  },
+  "argv": [
+   "--no-color"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "0"
+  },
+  "argv": [
+   "--no-color"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TERM": "xterm-256color"
+  },
+  "argv": [
+   "--no-color"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [
+   "--color"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "2"
+  },
+  "argv": [
+   "--color"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "true"
+  },
+  "argv": [
+   "--color"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "0"
+  },
+  "argv": [
+   "--color"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TERM": "xterm-256color"
+  },
+  "argv": [
+   "--color"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [
+   "--color=256"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "2"
+  },
+  "argv": [
+   "--color=256"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "true"
+  },
+  "argv": [
+   "--color=256"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "0"
+  },
+  "argv": [
+   "--color=256"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TERM": "xterm-256color"
+  },
+  "argv": [
+   "--color=256"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [
+   "--color=16m"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   false,
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "2"
+  },
+  "argv": [
+   "--color=16m"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "true"
+  },
+  "argv": [
+   "--color=16m"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "0"
+  },
+  "argv": [
+   "--color=16m"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TERM": "xterm-256color"
+  },
+  "argv": [
+   "--color=16m"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [
+   "--color=full"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   false,
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "2"
+  },
+  "argv": [
+   "--color=full"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "true"
+  },
+  "argv": [
+   "--color=full"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "0"
+  },
+  "argv": [
+   "--color=full"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TERM": "xterm-256color"
+  },
+  "argv": [
+   "--color=full"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [
+   "--color=truecolor"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   false,
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "2"
+  },
+  "argv": [
+   "--color=truecolor"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "true"
+  },
+  "argv": [
+   "--color=truecolor"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "0"
+  },
+  "argv": [
+   "--color=truecolor"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TERM": "xterm-256color"
+  },
+  "argv": [
+   "--color=truecolor"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [
+   "--color=never"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "2"
+  },
+  "argv": [
+   "--color=never"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "true"
+  },
+  "argv": [
+   "--color=never"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "0"
+  },
+  "argv": [
+   "--color=never"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TERM": "xterm-256color"
+  },
+  "argv": [
+   "--color=never"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [
+   "--colors"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "2"
+  },
+  "argv": [
+   "--colors"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "true"
+  },
+  "argv": [
+   "--colors"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "0"
+  },
+  "argv": [
+   "--colors"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TERM": "xterm-256color"
+  },
+  "argv": [
+   "--colors"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [
+   "--",
+   "--color"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "2"
+  },
+  "argv": [
+   "--",
+   "--color"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "true"
+  },
+  "argv": [
+   "--",
+   "--color"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "0"
+  },
+  "argv": [
+   "--",
+   "--color"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TERM": "xterm-256color"
+  },
+  "argv": [
+   "--",
+   "--color"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [
+   "--color=always",
+   "--no-colors"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "2"
+  },
+  "argv": [
+   "--color=always",
+   "--no-colors"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "true"
+  },
+  "argv": [
+   "--color=always",
+   "--no-colors"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "0"
+  },
+  "argv": [
+   "--color=always",
+   "--no-colors"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TERM": "xterm-256color"
+  },
+  "argv": [
+   "--color=always",
+   "--no-colors"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [
+   "--no-colors",
+   "--color=256"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "2"
+  },
+  "argv": [
+   "--no-colors",
+   "--color=256"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "true"
+  },
+  "argv": [
+   "--no-colors",
+   "--color=256"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "0"
+  },
+  "argv": [
+   "--no-colors",
+   "--color=256"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "TERM": "xterm-256color"
+  },
+  "argv": [
+   "--no-colors",
+   "--color=256"
+  ],
+  "platform": "darwin",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0.19045",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   false,
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM": "dumb"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0.19045",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "CI": "1"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0.19045",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   false,
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "1"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0.19045",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0.10586",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM": "dumb"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0.10586",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "CI": "1"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0.10586",
+  "results": [
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   },
+   {
+    "level": 2,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "1"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0.10586",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0.14931",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   false,
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM": "dumb"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0.14931",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "CI": "1"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0.14931",
+  "results": [
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   false,
+   false,
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   },
+   {
+    "level": 3,
+    "hasBasic": true,
+    "has256": true,
+    "has16m": true
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "1"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0.14931",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0.10000",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM": "dumb"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0.10000",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "CI": "1"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0.10000",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "1"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0.10000",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [],
+  "platform": "win32",
+  "release": "6.3.9600",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM": "dumb"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "6.3.9600",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "CI": "1"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "6.3.9600",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "1"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "6.3.9600",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM": "dumb"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "CI": "1"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "1"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "10.0",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [],
+  "platform": "win32",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM": "dumb"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "CI": "1"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "1"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {},
+  "argv": [],
+  "platform": "win32",
+  "release": "x.y.z",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "TERM": "dumb"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "x.y.z",
+  "results": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "env": {
+   "CI": "1"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "x.y.z",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   false,
+   false,
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ },
+ {
+  "env": {
+   "FORCE_COLOR": "1"
+  },
+  "argv": [],
+  "platform": "win32",
+  "release": "x.y.z",
+  "results": [
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   },
+   {
+    "level": 1,
+    "hasBasic": true,
+    "has256": false,
+    "has16m": false
+   }
+  ]
+ }
+]
