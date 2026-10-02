@@ -1,9 +1,0 @@
-{
-  "note": "Foundation progress when the macOS run was stopped (2026-10-02 13:5x). foundDone: port = ported, parity review still needed; all = ported and reviewed. partial: unsynced files of interrupted agents.",
-  "foundDone": { "go-js-omap": "port", "go-jsonx": "all", "go-quickjs": "all", "go-hostedgit-lockfile-ansi": "port", "go-jsdiff-partialjson": "port" },
-  "partial": {
-    "go-jsre-sse-xspawn": "partial/go-found-go-jsre-sse-xspawn",
-    "go-hostedgit-lockfile-ansi": "partial/go-fparity-go-hostedgit-lockfile-ansi",
-    "go-jsdiff-partialjson": "partial/go-fparity-go-jsdiff-partialjson"
-  }
-}
