@@ -1,0 +1,534 @@
+{
+  "rules": [
+    {
+      "pattern": "*",
+      "source": "(?:^|\\/)[^/]*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "**",
+      "source": "(?:^|\\/)[^\\/]*[^/]*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "***",
+      "source": "(?:^|\\/)[^\\/]*[^/]*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "****",
+      "source": "(?:^|\\/)[^\\/]*[^/]*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "a***",
+      "source": "(?:^|\\/)a[^\\/]*[^/]*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "***b",
+      "source": "(?:^|\\/)[^\\/]*b(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "a***b",
+      "source": "(?:^|\\/)a[^\\/]*b(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "**/foo",
+      "source": "^(?:.*\\/)?foo(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "**/*",
+      "source": "^(?:.*\\/)?[^/]*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "**/*.js",
+      "source": "^(?:.*\\/)?[^\\/]*\\.js(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "**/**",
+      "source": "^(?:.*\\/)?[^\\/]*[^/]*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo/**",
+      "source": "^foo\\/.+(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "a/**/b",
+      "source": "^a(?:\\/[^\\/]+)*\\/b(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "a/**/",
+      "source": "^a(?:\\/[^\\/]+)+\\/$",
+      "negative": false
+    },
+    {
+      "pattern": "a/**/**/b",
+      "source": "^a(?:\\/[^\\/]+)*(?:\\/[^\\/]+)*\\/b(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo/**/bar",
+      "source": "^foo(?:\\/[^\\/]+)*\\/bar(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo/**/bar/",
+      "source": "^foo(?:\\/[^\\/]+)*\\/bar\\/$",
+      "negative": false
+    },
+    {
+      "pattern": "*.log",
+      "source": "(?:^|\\/)[^\\/]*\\.log(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "*foo",
+      "source": "(?:^|\\/)[^\\/]*foo(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo/",
+      "source": "(?:^|\\/)foo\\/$",
+      "negative": false
+    },
+    {
+      "pattern": "/foo",
+      "source": "^foo(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo/*",
+      "source": "^foo\\/[^/]+(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "?.log",
+      "source": "(?:^|\\/)[^\\/]\\.log(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo*bar*baz*",
+      "source": "(?:^|\\/)foo(?:(?!b)[^\\/])*bar[^\\/]*baz[^/]*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "*x*y*z",
+      "source": "(?:^|\\/)(?:(?!x)[^\\/])*x(?:(?!y)[^\\/])*y[^\\/]*z(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[a-c]",
+      "source": "(?:^|\\/)[a-c](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[[:alpha:]]",
+      "source": "(?:^|\\/)[A-Za-z](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[c-a]",
+      "source": "(?:^|\\/)[c](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[]]",
+      "source": "(?:^|\\/)[\\]](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[]",
+      "source": "(?:^|\\/)[](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[[:digit:]].txt",
+      "source": "(?:^|\\/)[0-9]\\.txt(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "\\*",
+      "source": "(?:^|\\/)\\*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo\\*",
+      "source": "(?:^|\\/)foo\\*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "\\#c",
+      "source": "(?:^|\\/)#c(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo\\ ",
+      "source": "(?:^|\\/)foo (?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo\\\\ bar",
+      "source": "(?:^|\\/)foo\\\\ bar(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "a b",
+      "source": "(?:^|\\/)a b(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "!foo",
+      "source": "(?:^|\\/)foo(?=$|\\/$)",
+      "negative": true
+    },
+    {
+      "pattern": "!dir/file",
+      "source": "^dir\\/file(?=$|\\/$)",
+      "negative": true
+    },
+    {
+      "pattern": "foo*",
+      "source": "(?:^|\\/)foo[^/]*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "a/***/b",
+      "source": "^a\\/[^\\/]*\\/b(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "\\\\\\",
+      "source": "(?:^|\\/)\\\\undefined(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "\\\\\\\\",
+      "source": "(?:^|\\/)\\\\\\\\(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "a\\\\\\",
+      "source": "(?:^|\\/)a\\\\undefined(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo\\\\ ",
+      "source": "(?:^|\\/)foo\\\\(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo\\ ",
+      "source": "(?:^|\\/)foo (?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[[:blank:]]",
+      "source": "(?:^|\\/)[ \\t](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[[:space:]]",
+      "source": "(?:^|\\/)[ \\t\\n\\r](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[[:cntrl:]]",
+      "source": "(?:^|\\/)[\\x00-\\x1f\\x7f](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[[:graph:]]",
+      "source": "(?:^|\\/)[!-.0-~](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[[:print:]]",
+      "source": "(?:^|\\/)[ -.0-~](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[[:punct:]]",
+      "source": "(?:^|\\/)[!-.:-@\\[-`{-~](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[[:lower:]]",
+      "source": "(?:^|\\/)[a-z](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[[:upper:]]",
+      "source": "(?:^|\\/)[A-Z](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[[:alnum:]]",
+      "source": "(?:^|\\/)[0-9A-Za-z](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[[:xdigit:]]",
+      "source": "(?:^|\\/)[0-9A-Fa-f](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo/***",
+      "source": "^foo\\/[^\\/]*[^/]*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "a/***/",
+      "source": "^a\\/[^\\/]*\\/$",
+      "negative": false
+    },
+    {
+      "pattern": "**/**/b",
+      "source": "^(?:.*\\/)?b(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "dir/**",
+      "source": "^dir\\/.+(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "/foo/bar",
+      "source": "^foo\\/bar(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo/bar",
+      "source": "^foo\\/bar(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo/bar/",
+      "source": "^foo\\/bar\\/$",
+      "negative": false
+    },
+    {
+      "pattern": "*[a-c]*",
+      "source": "(?:^|\\/)[^\\/]*[a-c][^/]*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "a?b",
+      "source": "(?:^|\\/)a[^\\/]b(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo bar",
+      "source": "(?:^|\\/)foo bar(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo\\ bar",
+      "source": "(?:^|\\/)foo bar(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "\\!",
+      "source": "(?:^|\\/)!(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "\\#hash",
+      "source": "(?:^|\\/)#hash(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "!important",
+      "source": "(?:^|\\/)important(?=$|\\/$)",
+      "negative": true
+    },
+    {
+      "pattern": "foo\\[bar]",
+      "source": "(?:^|\\/)foo\\[bar](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[/]",
+      "source": "^(?!\\/)[/](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[.-0]",
+      "source": "(?:^|\\/)(?!\\/)[.-0](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[a-c-e]",
+      "source": "(?:^|\\/)[a-c\\-e](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[[:digit:][:alpha:]]",
+      "source": "(?:^|\\/)[0-9A-Za-z](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo\\?",
+      "source": "(?:^|\\/)foo\\?(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "\\?",
+      "source": "(?:^|\\/)\\?(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "a\\*b",
+      "source": "(?:^|\\/)a\\*b(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "***foo***",
+      "source": "(?:^|\\/)(?:(?!f)[^\\/])*foo[^\\/]*[^/]*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "a/**/**/",
+      "source": "^a(?:\\/[^\\/]+)*(?:\\/[^\\/]+)+\\/$",
+      "negative": false
+    },
+    {
+      "pattern": "foo/**/bar/**/baz",
+      "source": "^foo(?:\\/[^\\/]+)*\\/bar(?:\\/[^\\/]+)*\\/baz(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "\t",
+      "source": "(?:^|\\/)\t(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo\t",
+      "source": "(?:^|\\/)foo\t(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo \t",
+      "source": "(?:^|\\/)foo \t(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "\\ ",
+      "source": "(?:^|\\/) (?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "a b c",
+      "source": "(?:^|\\/)a b c(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo\\*bar",
+      "source": "(?:^|\\/)foo\\*bar(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[!a]",
+      "source": "(?:^|\\/)[^\\/a](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[^a]",
+      "source": "(?:^|\\/)[^\\/a](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[[]",
+      "source": "(?:^|\\/)[\\[](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[a-]",
+      "source": "(?:^|\\/)[a\\-](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "[-a]",
+      "source": "(?:^|\\/)[\\-a](?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo[abc]bar",
+      "source": "(?:^|\\/)foo[abc]bar(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "a/**/b/**",
+      "source": "^a(?:\\/[^\\/]+)*\\/b\\/.+(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "**/",
+      "source": "^(?:.*\\/)?(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "/**",
+      "source": "^[^\\/]*[^/]*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "/*",
+      "source": "^[^/]*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "f[o]o",
+      "source": "(?:^|\\/)f[o]o(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo/*/bar",
+      "source": "^foo\\/[^\\/]*\\/bar(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "a/***/c/d",
+      "source": "^a\\/[^\\/]*\\/c\\/d(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo\\ ",
+      "source": "(?:^|\\/)foo (?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "a\\\\\\b",
+      "source": "(?:^|\\/)a\\\\b(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "foo\\\\bar",
+      "source": "(?:^|\\/)foo\\\\bar(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "*x*",
+      "source": "(?:^|\\/)[^\\/]*x[^/]*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "a*b*c*",
+      "source": "(?:^|\\/)a(?:(?!b)[^\\/])*b[^\\/]*c[^/]*(?=$|\\/$)",
+      "negative": false
+    },
+    {
+      "pattern": "****b",
+      "source": "(?:^|\\/)[^\\/]*b(?=$|\\/$)",
+      "negative": false
+    }
+  ]
+}

@@ -1,0 +1,2980 @@
+[
+  {
+    "name": "readme-lr",
+    "fn": "render",
+    "src": "flowchart LR\n  A[Start] --> B[Done]",
+    "kind": "flowchart",
+    "err": false,
+    "plain": [
+      "┌───────┐    ┌──────┐",
+      "│ Start ├───▶│ Done │",
+      "└───────┘    └──────┘"
+    ],
+    "width": 21,
+    "warnings": [],
+    "styled": [
+      [
+        {
+          "text": "┌───────┐",
+          "cls": "border"
+        },
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "┌──────┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "Start",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "├",
+          "cls": "border"
+        },
+        {
+          "text": "───▶",
+          "cls": "edge"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "Done",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "└───────┘",
+          "cls": "border"
+        },
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "└──────┘",
+          "cls": "border"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "readme-broken",
+    "fn": "render",
+    "src": "graph TD\n A[Start --> B",
+    "kind": "flowchart",
+    "err": false,
+    "plain": [
+      " ┌─────────────┐",
+      " │ Start --> B │",
+      " └─────────────┘"
+    ],
+    "width": 16,
+    "warnings": [
+      "node \"A\": label is missing its closing `]`"
+    ],
+    "styled": [
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "┌─────────────┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "Start --> B",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "└─────────────┘",
+          "cls": "border"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "readme-state-drop",
+    "fn": "render",
+    "src": "stateDiagram-v2\n A --> B\n some garbage line",
+    "kind": "state",
+    "err": false,
+    "plain": [
+      " ╭───╮",
+      " │ A │",
+      " ╰─┬─╯",
+      "   │",
+      "   ▼",
+      " ╭───╮",
+      " │ B │",
+      " ╰───╯"
+    ],
+    "width": 6,
+    "warnings": [
+      "dropped, unreadable final line: \"some garbage line\""
+    ],
+    "styled": [
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "╭───╮",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "A",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "╰─┬─╯",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "▼",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "╭───╮",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "B",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "╰───╯",
+          "cls": "border"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "flowchart-td",
+    "fn": "render",
+    "src": "flowchart TD\n  A{Go?} -->|yes| B[Do it]\n  A -->|no| C[Stop]",
+    "kind": "flowchart",
+    "err": false,
+    "plain": [
+      "       ╭─────╮",
+      "       │ Go? │",
+      "       ╰──┬──╯",
+      "     ┌────┴─────┐",
+      "     ▼yes       ▼no",
+      " ┌───────┐  ┌──────┐",
+      " │ Do it │  │ Stop │",
+      " └───────┘  └──────┘"
+    ],
+    "width": 20,
+    "warnings": [],
+    "styled": [
+      [
+        {
+          "text": "       ",
+          "cls": "none"
+        },
+        {
+          "text": "╭─────╮",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "       ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "Go?",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "       ",
+          "cls": "none"
+        },
+        {
+          "text": "╰──┬──╯",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "     ",
+          "cls": "none"
+        },
+        {
+          "text": "┌────┴─────┐",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "     ",
+          "cls": "none"
+        },
+        {
+          "text": "▼",
+          "cls": "edge"
+        },
+        {
+          "text": "yes",
+          "cls": "edgeLabel"
+        },
+        {
+          "text": "       ",
+          "cls": "none"
+        },
+        {
+          "text": "▼",
+          "cls": "edge"
+        },
+        {
+          "text": "no",
+          "cls": "edgeLabel"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "┌───────┐",
+          "cls": "border"
+        },
+        {
+          "text": "  ",
+          "cls": "none"
+        },
+        {
+          "text": "┌──────┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "Do it",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": "  ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "Stop",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "└───────┘",
+          "cls": "border"
+        },
+        {
+          "text": "  ",
+          "cls": "none"
+        },
+        {
+          "text": "└──────┘",
+          "cls": "border"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "flowchart-bt",
+    "fn": "render",
+    "src": "flowchart BT\n  A[Top] --> B[Bottom]",
+    "kind": "flowchart",
+    "err": false,
+    "plain": [
+      "┌────────┐",
+      "│ Bottom │",
+      "└────────┘",
+      "     ▲",
+      "     │",
+      "  ┌──┴──┐",
+      "  │ Top │",
+      "  └─────┘"
+    ],
+    "width": 10,
+    "warnings": [],
+    "styled": [
+      [
+        {
+          "text": "┌────────┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "Bottom",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "└────────┘",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "     ",
+          "cls": "none"
+        },
+        {
+          "text": "▲",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "     ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "  ",
+          "cls": "none"
+        },
+        {
+          "text": "┌──┴──┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "  ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "Top",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "  ",
+          "cls": "none"
+        },
+        {
+          "text": "└─────┘",
+          "cls": "border"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "flowchart-rl",
+    "fn": "render",
+    "src": "flowchart RL\n  A[Left] --> B[Right]",
+    "kind": "flowchart",
+    "err": false,
+    "plain": [
+      "┌───────┐    ┌──────┐",
+      "│ Right │◄───┤ Left │",
+      "└───────┘    └──────┘"
+    ],
+    "width": 21,
+    "warnings": [],
+    "styled": [
+      [
+        {
+          "text": "┌───────┐",
+          "cls": "border"
+        },
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "┌──────┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "Right",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": "◄───",
+          "cls": "edge"
+        },
+        {
+          "text": "┤",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "Left",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "└───────┘",
+          "cls": "border"
+        },
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "└──────┘",
+          "cls": "border"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "flowchart-styles",
+    "fn": "render",
+    "src": "flowchart LR\n  A[a] ==> B[b]\n  B -.-> C[c]\n  C -- text --> D[d]\n  D --o E[e]\n  E x--x F[f]",
+    "kind": "flowchart",
+    "err": false,
+    "plain": [
+      "┌───┐       ┌───┐       ┌───┐ text  ┌───┐       ┌───┐       ┌───┐",
+      "│ a ├━━━━━━▶│ b ├╌╌╌╌╌╌▶│ c ├──────▶│ d ├──────o│ e ×──────×│ f │",
+      "└───┘       └───┘       └───┘       └───┘       └───┘       └───┘"
+    ],
+    "width": 65,
+    "warnings": [],
+    "styled": [
+      [
+        {
+          "text": "┌───┐",
+          "cls": "border"
+        },
+        {
+          "text": "       ",
+          "cls": "none"
+        },
+        {
+          "text": "┌───┐",
+          "cls": "border"
+        },
+        {
+          "text": "       ",
+          "cls": "none"
+        },
+        {
+          "text": "┌───┐",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "text",
+          "cls": "edgeLabel"
+        },
+        {
+          "text": "  ",
+          "cls": "none"
+        },
+        {
+          "text": "┌───┐",
+          "cls": "border"
+        },
+        {
+          "text": "       ",
+          "cls": "none"
+        },
+        {
+          "text": "┌───┐",
+          "cls": "border"
+        },
+        {
+          "text": "       ",
+          "cls": "none"
+        },
+        {
+          "text": "┌───┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "a",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "├",
+          "cls": "border"
+        },
+        {
+          "text": "━━━━━━▶",
+          "cls": "edge"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "b",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "├",
+          "cls": "border"
+        },
+        {
+          "text": "╌╌╌╌╌╌▶",
+          "cls": "edge"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "c",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "├",
+          "cls": "border"
+        },
+        {
+          "text": "──────▶",
+          "cls": "edge"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "d",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "├",
+          "cls": "border"
+        },
+        {
+          "text": "──────o",
+          "cls": "edge"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "e",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "×──────×",
+          "cls": "edge"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "f",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "└───┘",
+          "cls": "border"
+        },
+        {
+          "text": "       ",
+          "cls": "none"
+        },
+        {
+          "text": "└───┘",
+          "cls": "border"
+        },
+        {
+          "text": "       ",
+          "cls": "none"
+        },
+        {
+          "text": "└───┘",
+          "cls": "border"
+        },
+        {
+          "text": "       ",
+          "cls": "none"
+        },
+        {
+          "text": "└───┘",
+          "cls": "border"
+        },
+        {
+          "text": "       ",
+          "cls": "none"
+        },
+        {
+          "text": "└───┘",
+          "cls": "border"
+        },
+        {
+          "text": "       ",
+          "cls": "none"
+        },
+        {
+          "text": "└───┘",
+          "cls": "border"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "subgraph",
+    "fn": "render",
+    "src": "flowchart TB\n  subgraph one\n    A-->B\n  end\n  subgraph two\n    C-->D\n  end\n  A-->C",
+    "kind": "flowchart",
+    "err": false,
+    "plain": [
+      "┌ one ─┐",
+      "│ ┌───┐│",
+      "│ │ A ││",
+      "│ └─┬─┘│",
+      "│   │  │",
+      "│   ▼  │",
+      "│ ┌───┐│",
+      "│ │ B ││",
+      "│ └───┘│",
+      "└───┬──┘",
+      "    │",
+      "    ▼",
+      "┌ two ─┐",
+      "│ ┌───┐│",
+      "│ │ C ││",
+      "│ └─┬─┘│",
+      "│   │  │",
+      "│   ▼  │",
+      "│ ┌───┐│",
+      "│ │ D ││",
+      "│ └───┘│",
+      "└──────┘"
+    ],
+    "width": 8,
+    "warnings": [],
+    "styled": [
+      [
+        {
+          "text": "┌",
+          "cls": "border"
+        },
+        {
+          "text": " one ",
+          "cls": "text"
+        },
+        {
+          "text": "─┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "┌───┐│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "A",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "││",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "└─┬─┘│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": "  ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "▼",
+          "cls": "edge"
+        },
+        {
+          "text": "  ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "┌───┐│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "B",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "││",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "└───┘│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "└───┬──┘",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "▼",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "┌",
+          "cls": "border"
+        },
+        {
+          "text": " two ",
+          "cls": "text"
+        },
+        {
+          "text": "─┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "┌───┐│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "C",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "││",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "└─┬─┘│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": "  ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "▼",
+          "cls": "edge"
+        },
+        {
+          "text": "  ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "┌───┐│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "D",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "││",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "└───┘│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "└──────┘",
+          "cls": "border"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "state",
+    "fn": "render",
+    "src": "stateDiagram-v2\n  [*] --> A\n  A --> B: go\n  B --> [*]\n  state C <<choice>>",
+    "kind": "state",
+    "err": false,
+    "plain": [
+      " ╭───╮   ╭───╮",
+      " │ ● │   │ C │",
+      " ╰─┬─╯   ╰───╯",
+      "   │",
+      "   ▼",
+      " ╭───╮",
+      " │ A │",
+      " ╰─┬─╯",
+      "   │",
+      "   ▼go",
+      " ╭───╮",
+      " │ B │",
+      " ╰─┬─╯",
+      "   │",
+      "   ▼",
+      " ╭───╮",
+      " │ ● │",
+      " ╰───╯"
+    ],
+    "width": 14,
+    "warnings": [],
+    "styled": [
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "╭───╮",
+          "cls": "border"
+        },
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "╭───╮",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "●",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "C",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "╰─┬─╯",
+          "cls": "border"
+        },
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "╰───╯",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "▼",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "╭───╮",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "A",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "╰─┬─╯",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "▼",
+          "cls": "edge"
+        },
+        {
+          "text": "go",
+          "cls": "edgeLabel"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "╭───╮",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "B",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "╰─┬─╯",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "▼",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "╭───╮",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "●",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "╰───╯",
+          "cls": "border"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "class",
+    "fn": "render",
+    "src": "classDiagram\n  Animal <|-- Duck\n  Animal : +int age\n  Animal : +isMammal()\n  class Duck {\n    +String beak\n    +swim()\n  }",
+    "kind": "class",
+    "err": false,
+    "plain": [
+      " ┌─────────────┐",
+      " │   Animal    │",
+      " ├─────────────┤",
+      " │ +int age    │",
+      " ├─────────────┤",
+      " │ +isMammal() │",
+      " └──────△──────┘",
+      "        │",
+      "        │",
+      "┌──────────────┐",
+      "│     Duck     │",
+      "├──────────────┤",
+      "│ +String beak │",
+      "├──────────────┤",
+      "│ +swim()      │",
+      "└──────────────┘"
+    ],
+    "width": 16,
+    "warnings": [],
+    "styled": [
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "┌─────────────┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "Animal",
+          "cls": "text"
+        },
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "├─────────────┤",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "+int age",
+          "cls": "text"
+        },
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "├─────────────┤",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "+isMammal()",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "└──────",
+          "cls": "border"
+        },
+        {
+          "text": "△",
+          "cls": "edge"
+        },
+        {
+          "text": "──────┘",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "        ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "        ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "┌──────────────┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": "     ",
+          "cls": "none"
+        },
+        {
+          "text": "Duck",
+          "cls": "text"
+        },
+        {
+          "text": "     ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "├──────────────┤",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "+String beak",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "├──────────────┤",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "+swim()",
+          "cls": "text"
+        },
+        {
+          "text": "      ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "└──────────────┘",
+          "cls": "border"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "er",
+    "fn": "render",
+    "src": "erDiagram\n  CUSTOMER ||--o{ ORDER : places\n  ORDER {\n    int id\n    string name\n  }",
+    "kind": "er",
+    "err": false,
+    "plain": [
+      "  ┌──────────┐",
+      "  │ CUSTOMER │",
+      "  └─────┬────┘",
+      "        │",
+      "        │1 places 0..*",
+      " ┌─────────────┐",
+      " │    ORDER    │",
+      " ├─────────────┤",
+      " │ int id      │",
+      " │ string name │",
+      " └─────────────┘"
+    ],
+    "width": 22,
+    "warnings": [],
+    "styled": [
+      [
+        {
+          "text": "  ",
+          "cls": "none"
+        },
+        {
+          "text": "┌──────────┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "  ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "CUSTOMER",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "  ",
+          "cls": "none"
+        },
+        {
+          "text": "└─────┬────┘",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "        ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "        ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": "1 places 0..*",
+          "cls": "edgeLabel"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "┌─────────────┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "ORDER",
+          "cls": "text"
+        },
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "├─────────────┤",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "int id",
+          "cls": "text"
+        },
+        {
+          "text": "      ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "string name",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "└─────────────┘",
+          "cls": "border"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "sequence",
+    "fn": "render",
+    "src": "sequenceDiagram\n  participant Alice\n  participant Bob\n  Alice->>Bob: Hello\n  Bob-->>Alice: Hi\n  Note right of Bob: thinking\n  loop Every day\n    Alice->>Alice: think\n  end",
+    "kind": "sequence",
+    "err": false,
+    "plain": [
+      "┌───────┐    ┌─────┐",
+      "│ Alice │    │ Bob │",
+      "└───┬───┘    └──┬──┘",
+      "    │           │",
+      "    │   Hello   │",
+      "    ├──────────▶│",
+      "    │           │",
+      "    │    Hi     │",
+      "    │◄╌╌╌╌╌╌╌╌╌╌┤",
+      "    │           │",
+      "    │           │ ┌──────────┐",
+      "    │           │ │ thinking │",
+      "    │           │ └──────────┘",
+      "    │           │",
+      "── loop Every day ─────────────",
+      "    │           │",
+      "    ├──╮        │",
+      "    │  │ think  │",
+      "    │◄─╯        │",
+      "    │           │",
+      "── end ────────────────────────",
+      "    │           │",
+      "┌───┴───┐    ┌──┴──┐",
+      "│ Alice │    │ Bob │",
+      "└───────┘    └─────┘"
+    ],
+    "width": 31,
+    "warnings": [],
+    "styled": [
+      [
+        {
+          "text": "┌───────┐",
+          "cls": "border"
+        },
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "┌─────┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "Alice",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "Bob",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "└───┬───┘",
+          "cls": "border"
+        },
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "└──┬──┘",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": "           ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "Hello",
+          "cls": "text"
+        },
+        {
+          "text": "   ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "├──────────▶│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": "           ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "Hi",
+          "cls": "text"
+        },
+        {
+          "text": "     ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│◄╌╌╌╌╌╌╌╌╌╌┤",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": "           ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": "           ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "┌──────────┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": "           ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "thinking",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": "           ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "└──────────┘",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": "           ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "──",
+          "cls": "edge"
+        },
+        {
+          "text": " loop Every day ",
+          "cls": "edgeLabel"
+        },
+        {
+          "text": "─────────────",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": "           ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "├──╮",
+          "cls": "edge"
+        },
+        {
+          "text": "        ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": "  ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "think",
+          "cls": "text"
+        },
+        {
+          "text": "  ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│◄─╯",
+          "cls": "edge"
+        },
+        {
+          "text": "        ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": "           ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "──",
+          "cls": "edge"
+        },
+        {
+          "text": " end ",
+          "cls": "edgeLabel"
+        },
+        {
+          "text": "────────────────────────",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        },
+        {
+          "text": "           ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "┌───┴───┐",
+          "cls": "border"
+        },
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "┌──┴──┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "Alice",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "Bob",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "└───────┘",
+          "cls": "border"
+        },
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "└─────┘",
+          "cls": "border"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "self",
+    "fn": "render",
+    "src": "flowchart TD\n  A[Loop] --> A",
+    "kind": "flowchart",
+    "err": false,
+    "plain": [
+      "┌──────┐",
+      "│ Loop │",
+      "└────┬─┘",
+      "     │▲",
+      "     ╰╯"
+    ],
+    "width": 8,
+    "warnings": [],
+    "styled": [
+      [
+        {
+          "text": "┌──────┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "Loop",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "└────┬─┘",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "     ",
+          "cls": "none"
+        },
+        {
+          "text": "│▲",
+          "cls": "edge"
+        }
+      ],
+      [
+        {
+          "text": "     ",
+          "cls": "none"
+        },
+        {
+          "text": "╰╯",
+          "cls": "edge"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "cjk",
+    "fn": "render",
+    "src": "flowchart LR\n  A[开始] --> B[结束]",
+    "kind": "flowchart",
+    "err": false,
+    "plain": [
+      "┌──────┐    ┌──────┐",
+      "│ 开始 ├───▶│ 结束 │",
+      "└──────┘    └──────┘"
+    ],
+    "width": 20,
+    "warnings": [],
+    "styled": [
+      [
+        {
+          "text": "┌──────┐",
+          "cls": "border"
+        },
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "┌──────┐",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "开始",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "├",
+          "cls": "border"
+        },
+        {
+          "text": "───▶",
+          "cls": "edge"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "结束",
+          "cls": "text"
+        },
+        {
+          "text": " ",
+          "cls": "none"
+        },
+        {
+          "text": "│",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "└──────┘",
+          "cls": "border"
+        },
+        {
+          "text": "    ",
+          "cls": "none"
+        },
+        {
+          "text": "└──────┘",
+          "cls": "border"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "empty",
+    "fn": "render",
+    "src": "   \n",
+    "kind": null,
+    "err": true
+  },
+  {
+    "name": "unsupported",
+    "fn": "render",
+    "src": "pie title Pets\n  \"Dogs\" : 10",
+    "kind": null,
+    "err": true
+  },
+  {
+    "name": "blank-graph",
+    "fn": "render",
+    "src": "flowchart TD",
+    "kind": "flowchart",
+    "err": true
+  },
+  {
+    "name": "source-box",
+    "fn": "sourceBox",
+    "src": "flowchart LR\n  A[Start] --> B[Done]",
+    "maxWidth": 40,
+    "err": false,
+    "plain": [
+      "╭ mermaid: flowchart ────╮",
+      "│ flowchart LR           │",
+      "│   A[Start] --> B[Done] │",
+      "╰────────────────────────╯"
+    ],
+    "width": 26,
+    "warnings": [],
+    "styled": [
+      [
+        {
+          "text": "╭",
+          "cls": "border"
+        },
+        {
+          "text": " mermaid: flowchart ",
+          "cls": "title"
+        },
+        {
+          "text": "────╮",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│ ",
+          "cls": "border"
+        },
+        {
+          "text": "flowchart LR",
+          "cls": "text"
+        },
+        {
+          "text": "           │",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "│ ",
+          "cls": "border"
+        },
+        {
+          "text": "  A[Start] --> B[Done]",
+          "cls": "text"
+        },
+        {
+          "text": " │",
+          "cls": "border"
+        }
+      ],
+      [
+        {
+          "text": "╰────────────────────────╯",
+          "cls": "border"
+        }
+      ]
+    ]
+  },
+  {
+    "name": "ansi",
+    "fn": "ansi",
+    "src": "flowchart LR\n  A[Start] --> B[Done]",
+    "lines": [
+      "\u001b[2m┌───────┐\u001b[0m    \u001b[2m┌──────┐\u001b[0m",
+      "\u001b[2m│\u001b[0m Start \u001b[2m├\u001b[0m\u001b[36m───▶\u001b[0m\u001b[2m│\u001b[0m Done \u001b[2m│\u001b[0m",
+      "\u001b[2m└───────┘\u001b[0m    \u001b[2m└──────┘\u001b[0m"
+    ]
+  }
+]

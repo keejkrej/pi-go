@@ -1,0 +1,52 @@
+// Package providers is the Go port of these pi v1.0.0 TypeScript files
+// (authoritative mapping: porting/filemap.tsv):
+//
+//   - packages/ai/src/providers/all.ts -> all.go
+//   - packages/ai/src/providers/amazon-bedrock.ts -> amazon_bedrock.go
+//   - packages/ai/src/providers/ant-ling.ts -> ant_ling.go
+//   - packages/ai/src/providers/anthropic.ts -> anthropic.go
+//   - packages/ai/src/providers/azure-openai-responses.ts -> azure_openai_responses.go
+//   - packages/ai/src/providers/baseten.ts -> baseten.go
+//   - packages/ai/src/providers/cerebras.ts -> cerebras.go
+//   - packages/ai/src/providers/cloudflare-ai-gateway.ts -> cloudflare_ai_gateway.go
+//   - packages/ai/src/providers/cloudflare-auth.ts -> cloudflare_auth.go
+//   - packages/ai/src/providers/cloudflare-stream.ts -> cloudflare_stream.go
+//   - packages/ai/src/providers/cloudflare-workers-ai.ts -> cloudflare_workers_ai.go
+//   - packages/ai/src/providers/deepseek.ts -> deepseek.go
+//   - packages/ai/src/providers/faux.ts -> faux.go
+//   - packages/ai/src/providers/fireworks.ts -> fireworks.go
+//   - packages/ai/src/providers/github-copilot.ts -> github_copilot.go
+//   - packages/ai/src/providers/google-vertex.ts -> google_vertex.go
+//   - packages/ai/src/providers/google.ts -> google.go
+//   - packages/ai/src/providers/groq.ts -> groq.go
+//   - packages/ai/src/providers/huggingface.ts -> huggingface.go
+//   - packages/ai/src/providers/images/register-builtins.ts -> images_register_builtins.go
+//   - packages/ai/src/providers/kimi-coding.ts -> kimi_coding.go
+//   - packages/ai/src/providers/meta.ts -> meta.go
+//   - packages/ai/src/providers/minimax-cn.ts -> minimax_cn.go
+//   - packages/ai/src/providers/minimax.ts -> minimax.go
+//   - packages/ai/src/providers/mistral.ts -> mistral.go
+//   - packages/ai/src/providers/moonshotai-cn.ts -> moonshotai_cn.go
+//   - packages/ai/src/providers/moonshotai.ts -> moonshotai.go
+//   - packages/ai/src/providers/nvidia.ts -> nvidia.go
+//   - packages/ai/src/providers/openai-codex.ts -> openai_codex.go
+//   - packages/ai/src/providers/openai.ts -> openai.go
+//   - packages/ai/src/providers/opencode-go.ts -> opencode_go.go
+//   - packages/ai/src/providers/opencode-headers.ts -> opencode_headers.go
+//   - packages/ai/src/providers/opencode.ts -> opencode.go
+//   - packages/ai/src/providers/openrouter.ts -> openrouter.go
+//   - packages/ai/src/providers/qwen-token-plan-cn.ts -> qwen_token_plan_cn.go
+//   - packages/ai/src/providers/qwen-token-plan-individual.ts -> qwen_token_plan_individual.go
+//   - packages/ai/src/providers/qwen-token-plan.ts -> qwen_token_plan.go
+//   - packages/ai/src/providers/radius.ts -> radius.go
+//   - packages/ai/src/providers/together.ts -> together.go
+//   - packages/ai/src/providers/typesafe.ts -> typesafe.go
+//   - packages/ai/src/providers/vercel-ai-gateway.ts -> vercel_ai_gateway.go
+//   - packages/ai/src/providers/xai.ts -> xai.go
+//   - packages/ai/src/providers/xiaomi-token-plan-ams.ts -> xiaomi_token_plan_ams.go
+//   - packages/ai/src/providers/xiaomi-token-plan-cn.ts -> xiaomi_token_plan_cn.go
+//   - packages/ai/src/providers/xiaomi-token-plan-sgp.ts -> xiaomi_token_plan_sgp.go
+//   - packages/ai/src/providers/xiaomi.ts -> xiaomi.go
+//   - packages/ai/src/providers/zai-coding-cn.ts -> zai_coding_cn.go
+//   - packages/ai/src/providers/zai.ts -> zai.go
+package providers

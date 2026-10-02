@@ -1,0 +1,4997 @@
+{
+ "generator": "quickjs-wasi 3.6.2 via node v24.21.0",
+ "evalCases": [
+  {
+   "name": "number",
+   "code": "1 + 2",
+   "result": {
+    "ok": {
+     "typeof": "number",
+     "dump": 3
+    }
+   }
+  },
+  {
+   "name": "string",
+   "code": "'hello ' + 'world'",
+   "result": {
+    "ok": {
+     "typeof": "string",
+     "dump": "hello world"
+    }
+   }
+  },
+  {
+   "name": "bomString",
+   "code": "'\\uFEFFbom'",
+   "result": {
+    "ok": {
+     "typeof": "string",
+     "dump": "bom"
+    }
+   }
+  },
+  {
+   "name": "bomMidString",
+   "code": "'a\\uFEFFb'",
+   "result": {
+    "ok": {
+     "typeof": "string",
+     "dump": "a﻿b"
+    }
+   }
+  },
+  {
+   "name": "bomWithSurrogate",
+   "code": "'\\uFEFF\\uD800x'",
+   "result": {
+    "ok": {
+     "typeof": "string",
+     "dump": {
+      "$": "wtf16",
+      "v": [
+       65279,
+       55296,
+       120
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "nulString",
+   "code": "'a\\u0000b'",
+   "result": {
+    "ok": {
+     "typeof": "string",
+     "dump": "a\u0000b"
+    }
+   }
+  },
+  {
+   "name": "emoji",
+   "code": "'\\uD83D\\uDE00 emoji'",
+   "result": {
+    "ok": {
+     "typeof": "string",
+     "dump": "😀 emoji"
+    }
+   }
+  },
+  {
+   "name": "loneLow",
+   "code": "'lone \\uDC00 low'",
+   "result": {
+    "ok": {
+     "typeof": "string",
+     "dump": {
+      "$": "wtf16",
+      "v": [
+       108,
+       111,
+       110,
+       101,
+       32,
+       56320,
+       32,
+       108,
+       111,
+       119
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "loneHighEnd",
+   "code": "'end\\uD83D'",
+   "result": {
+    "ok": {
+     "typeof": "string",
+     "dump": {
+      "$": "wtf16",
+      "v": [
+       101,
+       110,
+       100,
+       55357
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "undefined",
+   "code": "undefined",
+   "result": {
+    "ok": {
+     "typeof": "undefined",
+     "dump": {
+      "$": "undefined"
+     }
+    }
+   }
+  },
+  {
+   "name": "null",
+   "code": "null",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": null
+    }
+   }
+  },
+  {
+   "name": "true",
+   "code": "true",
+   "result": {
+    "ok": {
+     "typeof": "boolean",
+     "dump": true
+    }
+   }
+  },
+  {
+   "name": "false",
+   "code": "false",
+   "result": {
+    "ok": {
+     "typeof": "boolean",
+     "dump": false
+    }
+   }
+  },
+  {
+   "name": "nan",
+   "code": "NaN",
+   "result": {
+    "ok": {
+     "typeof": "number",
+     "dump": {
+      "$": "number",
+      "v": "NaN"
+     }
+    }
+   }
+  },
+  {
+   "name": "negZero",
+   "code": "-0",
+   "result": {
+    "ok": {
+     "typeof": "number",
+     "dump": {
+      "$": "number",
+      "v": "-0"
+     }
+    }
+   }
+  },
+  {
+   "name": "infinity",
+   "code": "-Infinity",
+   "result": {
+    "ok": {
+     "typeof": "number",
+     "dump": {
+      "$": "number",
+      "v": "-Infinity"
+     }
+    }
+   }
+  },
+  {
+   "name": "big",
+   "code": "1e300",
+   "result": {
+    "ok": {
+     "typeof": "number",
+     "dump": 1e+300
+    }
+   }
+  },
+  {
+   "name": "fraction",
+   "code": "0.1 + 0.2",
+   "result": {
+    "ok": {
+     "typeof": "number",
+     "dump": 0.30000000000000004
+    }
+   }
+  },
+  {
+   "name": "bigint",
+   "code": "123456789012345678n",
+   "result": {
+    "ok": {
+     "typeof": "bigint",
+     "dump": {
+      "$": "bigint",
+      "v": "123456789012345678"
+     }
+    }
+   }
+  },
+  {
+   "name": "bigintNeg",
+   "code": "-5n",
+   "result": {
+    "ok": {
+     "typeof": "bigint",
+     "dump": {
+      "$": "bigint",
+      "v": "-5"
+     }
+    }
+   }
+  },
+  {
+   "name": "bigintHuge",
+   "code": "2n ** 64n + 7n",
+   "result": {
+    "ok": {
+     "typeof": "bigint",
+     "dump": {
+      "$": "bigint",
+      "v": "7"
+     }
+    }
+   }
+  },
+  {
+   "name": "bigintMin",
+   "code": "-(2n ** 63n)",
+   "result": {
+    "ok": {
+     "typeof": "bigint",
+     "dump": {
+      "$": "bigint",
+      "v": "-9223372036854775808"
+     }
+    }
+   }
+  },
+  {
+   "name": "globalSymbol",
+   "code": "Symbol.for('x')",
+   "result": {
+    "ok": {
+     "typeof": "symbol",
+     "dump": {
+      "$": "symbol",
+      "v": "x"
+     }
+    }
+   }
+  },
+  {
+   "name": "localSymbol",
+   "code": "Symbol('local')",
+   "result": {
+    "ok": {
+     "typeof": "symbol",
+     "dump": {
+      "$": "undefined"
+     }
+    }
+   }
+  },
+  {
+   "name": "wellKnownSymbol",
+   "code": "Symbol.iterator",
+   "result": {
+    "ok": {
+     "typeof": "symbol",
+     "dump": {
+      "$": "undefined"
+     }
+    }
+   }
+  },
+  {
+   "name": "arrayBuffer",
+   "code": "new Uint8Array([1, 2, 3, 4]).buffer",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "ArrayBuffer",
+      "v": [
+       1,
+       2,
+       3,
+       4
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "uint8",
+   "code": "new Uint8Array([1, 2, 255])",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "Uint8Array",
+      "v": [
+       1,
+       2,
+       255
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "int8",
+   "code": "new Int8Array([-1, 2])",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "Uint8Array",
+      "v": [
+       255,
+       2
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "clamped",
+   "code": "new Uint8ClampedArray([300, -5])",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "Uint8Array",
+      "v": [
+       255,
+       0
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "uint16",
+   "code": "new Uint16Array([1, 65535])",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "Uint16Array",
+      "v": [
+       1,
+       65535
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "int16",
+   "code": "new Int16Array([-2])",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "Uint16Array",
+      "v": [
+       65534
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "int32",
+   "code": "new Int32Array([-1, 7])",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "Uint32Array",
+      "v": [
+       4294967295,
+       7
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "float32",
+   "code": "new Float32Array([1.5])",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "Uint32Array",
+      "v": [
+       1069547520
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "float64",
+   "code": "new Float64Array([1.5, NaN, -0])",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "Float64Array",
+      "v": [
+       1.5,
+       {
+        "$": "number",
+        "v": "NaN"
+       },
+       {
+        "$": "number",
+        "v": "-0"
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "bigint64",
+   "code": "new BigInt64Array([1n])",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "Float64Array",
+      "v": [
+       5e-324
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "subarray",
+   "code": "new Uint8Array([1, 2, 3, 4]).subarray(1, 3)",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "Uint8Array",
+      "v": [
+       2,
+       3
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "dataView",
+   "code": "new DataView(new ArrayBuffer(2))",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "object",
+      "id": 0,
+      "v": []
+     }
+    }
+   }
+  },
+  {
+   "name": "array",
+   "code": "[1, 'two', [3, [4]], null, undefined]",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "array",
+      "id": 0,
+      "v": [
+       1,
+       "two",
+       {
+        "$": "array",
+        "id": 1,
+        "v": [
+         3,
+         {
+          "$": "array",
+          "id": 2,
+          "v": [
+           4
+          ]
+         }
+        ]
+       },
+       null,
+       {
+        "$": "undefined"
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "emptyArray",
+   "code": "[]",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "array",
+      "v": []
+     }
+    }
+   }
+  },
+  {
+   "name": "holeyArray",
+   "code": "[, 1]",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "array",
+      "id": 0,
+      "v": [
+       {
+        "$": "undefined"
+       },
+       1
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "cyclicArray",
+   "code": "(() => { const a = [1]; a.push(a); return a })()",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "array",
+      "id": 0,
+      "v": [
+       1,
+       {
+        "$": "ref",
+        "id": 0
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "cyclicObject",
+   "code": "(() => { const o = { x: 1 }; o.self = o; return o })()",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "object",
+      "id": 0,
+      "v": [
+       [
+        "x",
+        1
+       ],
+       [
+        "self",
+        {
+         "$": "ref",
+         "id": 0
+        }
+       ]
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "sharedObject",
+   "code": "(() => { const s = { v: 1 }; return [s, s, { s }] })()",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "array",
+      "id": 0,
+      "v": [
+       {
+        "$": "object",
+        "id": 1,
+        "v": [
+         [
+          "v",
+          1
+         ]
+        ]
+       },
+       {
+        "$": "ref",
+        "id": 1
+       },
+       {
+        "$": "object",
+        "id": 2,
+        "v": [
+         [
+          "s",
+          {
+           "$": "ref",
+           "id": 1
+          }
+         ]
+        ]
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "keyOrder",
+   "code": "({ b: 1, a: 2, 10: 'ten', 2: 'two' })",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "object",
+      "id": 0,
+      "v": [
+       [
+        "2",
+        "two"
+       ],
+       [
+        "10",
+        "ten"
+       ],
+       [
+        "b",
+        1
+       ],
+       [
+        "a",
+        2
+       ]
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "protoKey",
+   "code": "({ ['__proto__']: 5, x: 1 })",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "object",
+      "id": 0,
+      "v": [
+       [
+        "x",
+        1
+       ]
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "getter",
+   "code": "({ get g() { return 42 }, n: 1 })",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "object",
+      "id": 0,
+      "v": [
+       [
+        "g",
+        42
+       ],
+       [
+        "n",
+        1
+       ]
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "methods",
+   "code": "({ f() {}, n: 1 })",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "object",
+      "id": 0,
+      "v": [
+       [
+        "f",
+        {
+         "$": "undefined"
+        }
+       ],
+       [
+        "n",
+        1
+       ]
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "nulKey",
+   "code": "({ 'a\\u0000b': 1 })",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "object",
+      "id": 0,
+      "v": [
+       [
+        "a\u0000b",
+        1
+       ]
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "surrogateKey",
+   "code": "({ ['k\\uD800']: 2 })",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "object",
+      "id": 0,
+      "v": [
+       [
+        {
+         "$": "wtf16",
+         "v": [
+          107,
+          55296
+         ]
+        },
+        2
+       ]
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "map",
+   "code": "new Map([[1, 2]])",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "object",
+      "id": 0,
+      "v": []
+     }
+    }
+   }
+  },
+  {
+   "name": "date",
+   "code": "new Date(0)",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "object",
+      "id": 0,
+      "v": []
+     }
+    }
+   }
+  },
+  {
+   "name": "regexp",
+   "code": "/re/g",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "object",
+      "id": 0,
+      "v": []
+     }
+    }
+   }
+  },
+  {
+   "name": "error",
+   "code": "new Error('m')",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "Error",
+      "name": "Error",
+      "message": "m",
+      "stack": "    at <eval> (case.js:1:5)\n"
+     }
+    }
+   }
+  },
+  {
+   "name": "typeError",
+   "code": "new TypeError('t')",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "Error",
+      "name": "TypeError",
+      "message": "t",
+      "stack": "    at <eval> (case.js:1:5)\n"
+     }
+    }
+   }
+  },
+  {
+   "name": "namedError",
+   "code": "(() => { const e = new Error('x'); e.name = 'Custom'; return e })()",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "Error",
+      "name": "Custom",
+      "message": "x",
+      "stack": "    at <anonymous> (case.js:1:24)\n    at <eval> (case.js:1:63)\n"
+     }
+    }
+   }
+  },
+  {
+   "name": "errorNoStack",
+   "code": "(() => { const e = new RangeError('r'); delete e.stack; return e })()",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "Error",
+      "name": "RangeError",
+      "message": "r",
+      "stack": "    at <anonymous> (case.js:1:24)\n    at <eval> (case.js:1:65)\n"
+     }
+    }
+   }
+  },
+  {
+   "name": "errorProps",
+   "code": "Object.assign(new Error('with props'), { code: 42 })",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "Error",
+      "name": "Error",
+      "message": "with props",
+      "stack": "    at <eval> (case.js:1:19)\n"
+     }
+    }
+   }
+  },
+  {
+   "name": "aggregateError",
+   "code": "new AggregateError([1], 'agg')",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "Error",
+      "name": "AggregateError",
+      "message": "agg",
+      "stack": "    at <eval> (case.js:1:5)\n"
+     }
+    }
+   }
+  },
+  {
+   "name": "promise",
+   "code": "Promise.resolve(1)",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "object",
+      "id": 0,
+      "v": []
+     }
+    }
+   }
+  },
+  {
+   "name": "function",
+   "code": "(function foo() {})",
+   "result": {
+    "ok": {
+     "typeof": "function",
+     "dump": {
+      "$": "undefined"
+     }
+    }
+   }
+  },
+  {
+   "name": "arrow",
+   "code": "() => 1",
+   "result": {
+    "ok": {
+     "typeof": "function",
+     "dump": {
+      "$": "undefined"
+     }
+    }
+   }
+  },
+  {
+   "name": "classInstance",
+   "code": "new (class Point { constructor() { this.x = 1 } })()",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "object",
+      "id": 0,
+      "v": [
+       [
+        "x",
+        1
+       ]
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "throwError",
+   "code": "throw new Error('boom')",
+   "result": {
+    "error": {
+     "kind": "JSException",
+     "name": "Error",
+     "message": "boom",
+     "stack": "    at <eval> (case.js:1:11)\n"
+    }
+   }
+  },
+  {
+   "name": "throwTypeError",
+   "code": "throw new TypeError('bad type')",
+   "result": {
+    "error": {
+     "kind": "JSException",
+     "name": "TypeError",
+     "message": "bad type",
+     "stack": "    at <eval> (case.js:1:11)\n"
+    }
+   }
+  },
+  {
+   "name": "throwNumber",
+   "code": "throw 42",
+   "result": {
+    "error": {
+     "kind": "JSException",
+     "name": "Error",
+     "message": "42",
+     "stack": null
+    }
+   }
+  },
+  {
+   "name": "throwString",
+   "code": "throw 'str'",
+   "result": {
+    "error": {
+     "kind": "JSException",
+     "name": "Error",
+     "message": "str",
+     "stack": null
+    }
+   }
+  },
+  {
+   "name": "throwNull",
+   "code": "throw null",
+   "result": {
+    "error": {
+     "kind": "JSException",
+     "name": "<null>",
+     "message": "<null>",
+     "stack": "<null>"
+    }
+   }
+  },
+  {
+   "name": "throwUndefined",
+   "code": "throw undefined",
+   "result": {
+    "error": {
+     "kind": "JSException",
+     "name": "<null>",
+     "message": "<null>",
+     "stack": "<null>"
+    }
+   }
+  },
+  {
+   "name": "throwObjectMessage",
+   "code": "throw { message: 'obj msg' }",
+   "result": {
+    "error": {
+     "kind": "JSException",
+     "name": "Error",
+     "message": "obj msg",
+     "stack": null
+    }
+   }
+  },
+  {
+   "name": "throwObjectName",
+   "code": "throw { name: 'N' }",
+   "result": {
+    "error": {
+     "kind": "JSException",
+     "name": "N",
+     "message": "[object Object]",
+     "stack": null
+    }
+   }
+  },
+  {
+   "name": "throwNamed",
+   "code": "throw Object.assign(new Error('e'), { name: 'Named' })",
+   "result": {
+    "error": {
+     "kind": "JSException",
+     "name": "Named",
+     "message": "e",
+     "stack": "    at <eval> (case.js:1:25)\n"
+    }
+   }
+  },
+  {
+   "name": "throwSubclass",
+   "code": "class E extends Error { constructor(m) { super(m); this.name = 'E' } }; throw new E('custom')",
+   "result": {
+    "error": {
+     "kind": "JSException",
+     "name": "E",
+     "message": "custom",
+     "stack": "    at E (case.js:1:48)\n    at <eval> (case.js:1:83)\n"
+    }
+   }
+  },
+  {
+   "name": "syntaxError",
+   "code": "let let = 1",
+   "result": {
+    "error": {
+     "kind": "JSException",
+     "name": "SyntaxError",
+     "message": "'let' is not a valid lexical identifier",
+     "stack": "    at case.js:1:5\n"
+    }
+   }
+  },
+  {
+   "name": "referenceError",
+   "code": "undefinedVariable",
+   "result": {
+    "error": {
+     "kind": "JSException",
+     "name": "ReferenceError",
+     "message": "undefinedVariable is not defined",
+     "stack": "    at <eval> (case.js:1:1)\n"
+    }
+   }
+  },
+  {
+   "name": "nullProperty",
+   "code": "null.x",
+   "result": {
+    "error": {
+     "kind": "JSException",
+     "name": "TypeError",
+     "message": "cannot read property 'x' of null",
+     "stack": "    at <eval> (case.js:1:1)\n"
+    }
+   }
+  },
+  {
+   "name": "nestedStack",
+   "code": "function a() { b() }\nfunction b() { throw new Error('deep') }\na()",
+   "result": {
+    "error": {
+     "kind": "JSException",
+     "name": "Error",
+     "message": "deep",
+     "stack": "    at b (case.js:2:26)\n    at a (case.js:1:15)\n    at <eval> (case.js:3:1)\n"
+    }
+   }
+  },
+  {
+   "name": "stackOverflowDefault",
+   "code": "function f(n) { return f(n + 1) + 1 }\nf(0)",
+   "result": {
+    "error": {
+     "kind": "RangeError",
+     "name": "RangeError",
+     "message": "Maximum call stack size exceeded"
+    }
+   }
+  },
+  {
+   "name": "json",
+   "code": "JSON.parse('{\"a\":[1,2,{\"b\":null}]}')",
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "dump": {
+      "$": "object",
+      "id": 0,
+      "v": [
+       [
+        "a",
+        {
+         "$": "array",
+         "id": 1,
+         "v": [
+          1,
+          2,
+          {
+           "$": "object",
+           "id": 2,
+           "v": [
+            [
+             "b",
+             null
+            ]
+           ]
+          }
+         ]
+        }
+       ]
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "unicode",
+   "code": "'h\\u00e9llo \\u4e16\\u754c'",
+   "result": {
+    "ok": {
+     "typeof": "string",
+     "dump": "héllo 世界"
+    }
+   }
+  }
+ ],
+ "flagCases": [
+  {
+   "name": "strict",
+   "code": "x = 1",
+   "flags": 8,
+   "result": {
+    "error": {
+     "kind": "JSException",
+     "name": "ReferenceError",
+     "message": "x is not defined",
+     "stack": "    at <eval> (flags.js:1:1)\n"
+    }
+   }
+  },
+  {
+   "name": "sloppy",
+   "code": "x = 1",
+   "flags": 0,
+   "result": {
+    "ok": {
+     "typeof": "number",
+     "isPromise": false,
+     "dump": 1
+    }
+   }
+  },
+  {
+   "name": "compileOnly",
+   "code": "1 + 2",
+   "flags": 32,
+   "result": {
+    "ok": {
+     "typeof": "unknown",
+     "isPromise": false,
+     "dump": {
+      "$": "undefined"
+     }
+    }
+   }
+  },
+  {
+   "name": "module",
+   "code": "export const a = 1; export default 'd'",
+   "flags": 1,
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "isPromise": true,
+     "before": 1,
+     "jobs": 0,
+     "after": 1,
+     "value": {
+      "$": "object",
+      "id": 0,
+      "v": [
+       [
+        "a",
+        1
+       ],
+       [
+        "default",
+        "d"
+       ]
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "moduleThrows",
+   "code": "throw new Error('mod boom')",
+   "flags": 1,
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "isPromise": true,
+     "before": 2,
+     "jobs": 0,
+     "after": 2,
+     "error": {
+      "$": "Error",
+      "name": "Error",
+      "message": "mod boom",
+      "stack": "    at <anonymous> (flags.js:1:11)\n"
+     }
+    }
+   }
+  },
+  {
+   "name": "moduleSyntax",
+   "code": "export const = 1",
+   "flags": 1,
+   "result": {
+    "error": {
+     "kind": "JSException",
+     "name": "SyntaxError",
+     "message": "variable name expected",
+     "stack": "    at flags.js:1:14\n"
+    }
+   }
+  },
+  {
+   "name": "async",
+   "code": "await Promise.resolve(5); 42",
+   "flags": 128,
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "isPromise": true,
+     "before": 0,
+     "jobs": 1,
+     "after": 1,
+     "value": {
+      "$": "object",
+      "id": 0,
+      "v": [
+       [
+        "value",
+        42
+       ]
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "asyncThrows",
+   "code": "await null; throw new RangeError('later')",
+   "flags": 128,
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "isPromise": true,
+     "before": 0,
+     "jobs": 1,
+     "after": 2,
+     "error": {
+      "$": "Error",
+      "name": "RangeError",
+      "message": "later",
+      "stack": "    at <eval> (flags.js:1:23)\n"
+     }
+    }
+   }
+  },
+  {
+   "name": "asyncValue",
+   "code": "const v = await Promise.resolve({ k: 'v' }); v",
+   "flags": 128,
+   "result": {
+    "ok": {
+     "typeof": "object",
+     "isPromise": true,
+     "before": 0,
+     "jobs": 1,
+     "after": 1,
+     "value": {
+      "$": "object",
+      "id": 0,
+      "v": [
+       [
+        "value",
+        {
+         "$": "object",
+         "id": 1,
+         "v": [
+          [
+           "k",
+           "v"
+          ]
+         ]
+        }
+       ]
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "backtraceBarrier",
+   "code": "throw new Error('barrier')",
+   "flags": 64,
+   "result": {
+    "error": {
+     "kind": "JSException",
+     "name": "Error",
+     "message": "barrier",
+     "stack": "    at <eval> (flags.js:1:11)\n"
+    }
+   }
+  }
+ ],
+ "values": [
+  {
+   "expr": "undefined",
+   "isUndefined": true,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": false,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": false,
+   "toBoolean": false,
+   "classId": 0,
+   "className": {
+    "ok": null
+   },
+   "promiseState": -1,
+   "typeof": "undefined",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "undefined",
+   "constructorName": {
+    "ok": "<null>"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "null",
+   "isUndefined": false,
+   "isNull": true,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": false,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": false,
+   "toBoolean": false,
+   "classId": 0,
+   "className": {
+    "ok": null
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": 0,
+   "toString": "null",
+   "constructorName": {
+    "ok": "<null>"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "true",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": true,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": false,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": false,
+   "toBoolean": true,
+   "classId": 0,
+   "className": {
+    "ok": null
+   },
+   "promiseState": -1,
+   "typeof": "boolean",
+   "toNumber": 1,
+   "toString": "true",
+   "constructorName": {
+    "ok": "Boolean"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "0",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": true,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": false,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": false,
+   "toBoolean": false,
+   "classId": 0,
+   "className": {
+    "ok": null
+   },
+   "promiseState": -1,
+   "typeof": "number",
+   "toNumber": 0,
+   "toString": "0",
+   "constructorName": {
+    "ok": "Number"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "-0",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": true,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": false,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": false,
+   "toBoolean": false,
+   "classId": 0,
+   "className": {
+    "ok": null
+   },
+   "promiseState": -1,
+   "typeof": "number",
+   "toNumber": {
+    "$": "number",
+    "v": "-0"
+   },
+   "toString": "0",
+   "constructorName": {
+    "ok": "Number"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "42.5",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": true,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": false,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": false,
+   "toBoolean": true,
+   "classId": 0,
+   "className": {
+    "ok": null
+   },
+   "promiseState": -1,
+   "typeof": "number",
+   "toNumber": 42.5,
+   "toString": "42.5",
+   "constructorName": {
+    "ok": "Number"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "NaN",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": true,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": false,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": false,
+   "toBoolean": false,
+   "classId": 0,
+   "className": {
+    "ok": null
+   },
+   "promiseState": -1,
+   "typeof": "number",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "NaN",
+   "constructorName": {
+    "ok": "Number"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "''",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": true,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": false,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": false,
+   "classId": 0,
+   "className": {
+    "ok": null
+   },
+   "promiseState": -1,
+   "typeof": "string",
+   "toNumber": 0,
+   "toString": "",
+   "constructorName": {
+    "ok": "String"
+   },
+   "length": 0
+  },
+  {
+   "expr": "'42'",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": true,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": false,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 0,
+   "className": {
+    "ok": null
+   },
+   "promiseState": -1,
+   "typeof": "string",
+   "toNumber": 42,
+   "toString": "42",
+   "constructorName": {
+    "ok": "String"
+   },
+   "length": 2
+  },
+  {
+   "expr": "'abc'",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": true,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": false,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 0,
+   "className": {
+    "ok": null
+   },
+   "promiseState": -1,
+   "typeof": "string",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "abc",
+   "constructorName": {
+    "ok": "String"
+   },
+   "length": 3
+  },
+  {
+   "expr": "7n",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": true,
+   "isObject": false,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": false,
+   "toBoolean": true,
+   "classId": 0,
+   "className": {
+    "ok": null
+   },
+   "promiseState": -1,
+   "typeof": "bigint",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "7",
+   "constructorName": {
+    "ok": "BigInt"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "Symbol.for('s')",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": true,
+   "isBigInt": false,
+   "isObject": false,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 0,
+   "className": {
+    "ok": null
+   },
+   "promiseState": -1,
+   "typeof": "symbol",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "<null>",
+   "constructorName": {
+    "ok": "Symbol"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "({})",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 1,
+   "className": {
+    "ok": "Object"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "[object Object]",
+   "constructorName": {
+    "ok": "Object"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "[1, 2, 3]",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": true,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 2,
+   "className": {
+    "ok": "Array"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "1,2,3",
+   "constructorName": {
+    "ok": "Array"
+   },
+   "length": 3
+  },
+  {
+   "expr": "(function named(a, b) {})",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": true,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 13,
+   "className": {
+    "ok": "Function"
+   },
+   "promiseState": -1,
+   "typeof": "function",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "function named(a, b) {}",
+   "constructorName": {
+    "ok": "Function"
+   },
+   "length": 2
+  },
+  {
+   "expr": "() => {}",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": true,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 13,
+   "className": {
+    "ok": "Function"
+   },
+   "promiseState": -1,
+   "typeof": "function",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "() => {}",
+   "constructorName": {
+    "ok": "Function"
+   },
+   "length": 0
+  },
+  {
+   "expr": "new Error('e')",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": true,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 3,
+   "className": {
+    "ok": "Error"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "Error: e",
+   "constructorName": {
+    "ok": "Error"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "Promise.resolve(1)",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": true,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 52,
+   "className": {
+    "ok": "Promise"
+   },
+   "promiseState": 1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "[object Promise]",
+   "constructorName": {
+    "ok": "Promise"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "Promise.reject(2)",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": true,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 52,
+   "className": {
+    "ok": "Promise"
+   },
+   "promiseState": 2,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "[object Promise]",
+   "constructorName": {
+    "ok": "Promise"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "new Promise(() => {})",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": true,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 52,
+   "className": {
+    "ok": "Promise"
+   },
+   "promiseState": 0,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "[object Promise]",
+   "constructorName": {
+    "ok": "Promise"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "new ArrayBuffer(8)",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": true,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 20,
+   "className": {
+    "ok": "ArrayBuffer"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "[object ArrayBuffer]",
+   "constructorName": {
+    "ok": "ArrayBuffer"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "new Uint8Array(3)",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 24,
+   "className": {
+    "ok": "Uint8Array"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "0,0,0",
+   "constructorName": {
+    "ok": "Uint8Array"
+   },
+   "length": 3
+  },
+  {
+   "expr": "new Proxy({}, {})",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": true,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 51,
+   "className": {
+    "ok": "Object"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "[object Object]",
+   "constructorName": {
+    "ok": "Object"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "new Map()",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": true,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 36,
+   "className": {
+    "ok": "Map"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "[object Map]",
+   "constructorName": {
+    "ok": "Map"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "new Set()",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": true,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 37,
+   "className": {
+    "ok": "Set"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "[object Set]",
+   "constructorName": {
+    "ok": "Set"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "new Date(0)",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": true,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 10,
+   "className": {
+    "ok": "Date"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": 0,
+   "toString": "Thu Jan 01 1970 00:00:00 GMT+0000",
+   "constructorName": {
+    "ok": "Date"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "/x/",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": true,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 19,
+   "className": {
+    "ok": "RegExp"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "/x/",
+   "constructorName": {
+    "ok": "RegExp"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "new WeakRef({})",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": true,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 62,
+   "className": {
+    "ok": "WeakRef"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "[object WeakRef]",
+   "constructorName": {
+    "ok": "WeakRef"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "new WeakMap()",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": true,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 38,
+   "className": {
+    "ok": "WeakMap"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "[object WeakMap]",
+   "constructorName": {
+    "ok": "WeakMap"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "new WeakSet()",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": true,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 39,
+   "className": {
+    "ok": "WeakSet"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "[object WeakSet]",
+   "constructorName": {
+    "ok": "WeakSet"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "new DataView(new ArrayBuffer(1))",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": true,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 34,
+   "className": {
+    "ok": "DataView"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "[object DataView]",
+   "constructorName": {
+    "ok": "DataView"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "Object.create(null)",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 1,
+   "className": {
+    "ok": "Object"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "<null>",
+   "constructorName": {
+    "ok": null
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "new (class Foo {})()",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 1,
+   "className": {
+    "ok": "Object"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "[object Object]",
+   "constructorName": {
+    "ok": "Foo"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "({ toString() { return 'custom' } })",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 1,
+   "className": {
+    "ok": "Object"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "custom",
+   "constructorName": {
+    "ok": "Object"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "({ toString() { throw new Error('nope') } })",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 1,
+   "className": {
+    "ok": "Object"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "<null>",
+   "constructorName": {
+    "ok": "Object"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "Math",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 1,
+   "className": {
+    "ok": "Object"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "[object Math]",
+   "constructorName": {
+    "ok": "Object"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  },
+  {
+   "expr": "globalThis",
+   "isUndefined": false,
+   "isNull": false,
+   "isBool": false,
+   "isNumber": false,
+   "isString": false,
+   "isSymbol": false,
+   "isBigInt": false,
+   "isObject": true,
+   "isArray": false,
+   "isFunction": false,
+   "isError": false,
+   "isPromise": false,
+   "isArrayBuffer": false,
+   "isProxy": false,
+   "isMap": false,
+   "isSet": false,
+   "isDate": false,
+   "isRegExp": false,
+   "isWeakRef": false,
+   "isWeakMap": false,
+   "isWeakSet": false,
+   "isDataView": false,
+   "hasIdentity": true,
+   "toBoolean": true,
+   "classId": 1,
+   "className": {
+    "ok": "Object"
+   },
+   "promiseState": -1,
+   "typeof": "object",
+   "toNumber": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "toString": "[object global]",
+   "constructorName": {
+    "ok": "Object"
+   },
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   }
+  }
+ ],
+ "scenarios": {
+  "hostFunctionBasic": {
+   "sum": {
+    "ok": 5
+   },
+   "meta": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      "add",
+      0,
+      "function",
+      "function add() {\n    [native code]\n}"
+     ]
+    }
+   }
+  },
+  "hostFunctionThrows": {
+   "fail": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      true,
+      "Error",
+      "host fail",
+      "string",
+      true
+     ]
+    }
+   },
+   "failType": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      true,
+      "TypeError",
+      "bad type",
+      "string",
+      true
+     ]
+    }
+   },
+   "uncaught": {
+    "error": {
+     "kind": "JSException",
+     "name": "Error",
+     "message": "host fail",
+     "stack": "Error: host fail\n    at JSValueHandle.<anonymous> (file:///private/tmp/pi-port/wt/go-fparity-go-quickjs/internal/quickjs/testdata/gen_vectors.mjs:363:9)\n    at QuickJS.handleHostCall (file:///Users/jack/.t3/worktrees/pi/t3code-ef43beb3/node_modules/quickjs-wasi/dist/index.js:714:37)\n    at hostCall (file:///Users/jack/.t3/worktrees/pi/t3code-ef43beb3/node_modules/quickjs-wasi/dist/index.js:571:23)\n    at wasm://wasm/0026e776:wasm-function[1607]:0x732f0\n    at wasm://wasm/0026e776:wasm-function[555]:0x2c4ac\n    at wasm://wasm/0026e776:wasm-function[92]:0x7779\n    at wasm://wasm/0026e776:wasm-function[92]:0xfb79\n    at wasm://wasm/0026e776:wasm-function[161]:0x15dee\n    at wasm://wasm/0026e776:wasm-function[413]:0x236f3\n    at wasm://wasm/0026e776:wasm-function[644]:0x30070"
+    }
+   }
+  },
+  "hostFunctionArgs": {
+   "log": [
+    [
+     1,
+     "undefined",
+     [
+      "string"
+     ]
+    ],
+    [
+     4,
+     "undefined",
+     [
+      "string",
+      "number",
+      "number",
+      "number"
+     ]
+    ],
+    [
+     0,
+     "object",
+     []
+    ],
+    [
+     0,
+     "number",
+     []
+    ],
+    [
+     0,
+     "undefined",
+     []
+    ]
+   ],
+   "ret": {
+    "ok": {
+     "$": "undefined"
+    }
+   }
+  },
+  "hostFunctionReturnsArgument": {
+   "ok": {
+    "$": "array",
+    "id": 0,
+    "v": [
+     true,
+     "s",
+     1.5
+    ]
+   }
+  },
+  "unregisteredCallback": {
+   "first": {
+    "ok": "eph ok"
+   },
+   "after": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      "Error",
+      "Host callback \"__ephemeral:1\" is not registered: it was unregistered, its ephemeral function handle was disposed, or it was never re-registered after a snapshot restore."
+     ]
+    }
+   },
+   "u1": true,
+   "u2": false,
+   "afterUnregister": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      "Error",
+      "Host callback \"named\" is not registered: it was unregistered, its ephemeral function handle was disposed, or it was never re-registered after a snapshot restore."
+     ]
+    }
+   }
+  },
+  "duplicateFunctionName": {
+   "error": {
+    "kind": "Error",
+    "name": "Error",
+    "message": "Host callback with name \"dup\" is already registered"
+   }
+  },
+  "callFunction": {
+   "ok": {
+    "ok": 6
+   },
+   "thrown": {
+    "error": {
+     "kind": "JSException",
+     "name": "SyntaxError",
+     "message": "in call",
+     "stack": "    at <anonymous> (<eval>:1:26)\n"
+    }
+   },
+   "notFn": {
+    "error": {
+     "kind": "JSException",
+     "name": "TypeError",
+     "message": "not a function",
+     "stack": ""
+    }
+   },
+   "constructed": {
+    "ok": {
+     "$": "object",
+     "id": 0,
+     "v": [
+      [
+       "x",
+       2
+      ]
+     ]
+    }
+   },
+   "notCtor": {
+    "error": {
+     "kind": "JSException",
+     "name": "TypeError",
+     "message": "not a constructor",
+     "stack": ""
+    }
+   }
+  },
+  "interrupt": {
+   "loop": {
+    "error": {
+     "kind": "JSException",
+     "name": "InternalError",
+     "message": "interrupted",
+     "stack": "    at <eval> (<eval>:1:1)\n"
+    }
+   },
+   "callsAtInterrupt": 4,
+   "after": {
+    "ok": 2
+   },
+   "caught": {
+    "ok": 100000
+   }
+  },
+  "stackOverflow": {
+   "recursion": {
+    "error": {
+     "kind": "JSException",
+     "name": "RangeError",
+     "message": "Maximum call stack size exceeded",
+     "stack": "    at f (<eval>:1:29)\n    at f (<eval>:1:29)\n    at f (<eval>:1:29)\n    at f (<eval>:1:29)\n    at f (<eval>:1:29)\n    at f (<eval>:1:29)\n    at f (<eval>:1:29)\n    at f (<eval>:1:29)\n    at f (<eval>:1:29)\n    at f (<eval>:1:29)\n"
+    }
+   },
+   "caught": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      "RangeError",
+      "Maximum call stack size exceeded",
+      true
+     ]
+    }
+   },
+   "after": {
+    "ok": "still alive"
+   },
+   "small": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      "RangeError",
+      "Maximum call stack size exceeded"
+     ]
+    }
+   }
+  },
+  "invalidMaxStackSize": {
+   "524289": {
+    "error": {
+     "kind": "RangeError",
+     "name": "RangeError",
+     "message": "maxStackSize must be an integer between 0 and 524288"
+    }
+   },
+   "-1": {
+    "error": {
+     "kind": "RangeError",
+     "name": "RangeError",
+     "message": "maxStackSize must be an integer between 0 and 524288"
+    }
+   },
+   "1.5": {
+    "error": {
+     "kind": "RangeError",
+     "name": "RangeError",
+     "message": "maxStackSize must be an integer between 0 and 524288"
+    }
+   },
+   "zero": {
+    "ok": 1
+   }
+  },
+  "memoryLimit": {
+   "oom": {
+    "error": {
+     "kind": "JSException",
+     "name": "InternalError",
+     "message": "out of memory",
+     "stack": "    at <eval> (<eval>:1:46)\n"
+    }
+   },
+   "after": {
+    "ok": 2
+   },
+   "stringOom": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      "InternalError",
+      "out of memory"
+     ]
+    }
+   },
+   "limit": 2097152
+  },
+  "timezoneFixed": {
+   "ok": {
+    "$": "array",
+    "id": 0,
+    "v": [
+     8,
+     -480,
+     "Thu Jan 01 1970 08:00:00 GMT+0800",
+     "2024-01-15T02:30:00.000Z",
+     -480,
+     "Wed May 18 2033 11:33:20 GMT+0800",
+     -480,
+     -480
+    ]
+   }
+  },
+  "timezoneFunction": {
+   "r": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      19,
+      300,
+      "Wed Dec 31 1969 19:00:00 GMT-0500",
+      "2024-01-15T09:00:00.000Z",
+      -90,
+      "Wed May 18 2033 05:03:20 GMT+0130",
+      -90,
+      300
+     ]
+    }
+   },
+   "seen": [
+    0,
+    0,
+    0,
+    1705314600,
+    2000000000,
+    2000000000,
+    8640000000000,
+    -8640000000000
+   ]
+  },
+  "timezoneHost": {
+   "ok": {
+    "$": "array",
+    "id": 0,
+    "v": [
+     300,
+     240,
+     "Mon Jul 01 2024 12:00:00 GMT-0400",
+     1704128400000,
+     296,
+     "Mon Dec 07 1874 13:44:00 GMT-0456",
+     296
+    ]
+   }
+  },
+  "moduleLoader": {
+   "ok": {
+    "ok": {
+     "jobs": 0,
+     "value": {
+      "$": "object",
+      "id": 0,
+      "v": [
+       [
+        "y",
+        42
+       ],
+       [
+        "zz",
+        "why"
+       ]
+      ]
+     }
+    }
+   },
+   "missing": {
+    "error": {
+     "kind": "JSException",
+     "name": "TypeError",
+     "message": "not a TypedArray",
+     "stack": ""
+    }
+   },
+   "calls": [
+    [
+     "normalize",
+     "/root/main.js",
+     "./dep.js"
+    ],
+    [
+     "load",
+     "/root/dep.js"
+    ],
+    [
+     "normalize",
+     "/root/dep.js",
+     "./sub/y.js"
+    ],
+    [
+     "load",
+     "/root/sub/y.js"
+    ],
+    [
+     "normalize",
+     "/root/other.js",
+     "./missing.js"
+    ]
+   ]
+  },
+  "moduleLoaderNoNormalize": {
+   "r": {
+    "ok": {
+     "value": {
+      "$": "object",
+      "id": 0,
+      "v": [
+       [
+        "v",
+        "loaded:undefined"
+       ]
+      ]
+     }
+    }
+   },
+   "calls": [
+    "pkg/thing"
+   ]
+  },
+  "moduleNoLoader": {
+   "r": {
+    "error": {
+     "kind": "JSException",
+     "name": "ReferenceError",
+     "message": "could not load module 'pkg'",
+     "stack": ""
+    }
+   },
+   "dynamic": {
+    "ok": {
+     "error": {
+      "$": "Error",
+      "name": "ReferenceError",
+      "message": "could not load module 'dyn'",
+      "stack": ""
+     }
+    }
+   }
+  },
+  "compile": {
+   "bytecode": "1c6688a9710101123c636f6d70696c653e0c000a00a801000100020000000501aa01000000bbbc9cd328e403010102070600",
+   "evalBytecode": {
+    "ok": 3
+   },
+   "stripped": "1c3f78faa8020102660102610c000200a801000100020000011801aa010000000c430200e403010001020000000401e603000100d7bc99283ef200000040c5003ff20000000038f2000000c215f5d328",
+   "debug": "1c6c108d6403010266010261011073747269702e6a730c000a00a801000100020000011801aa010000000c430a00e403010001020000000401e603000100d7bc9928e803010104022e07061e66756e6374696f6e2066286129207b2072657475726e2061202a2032207d3ef200000040c5003ff20000000038f2000000c215f5d328e803010102490000",
+   "module": "1c89649f6a02010c6d6f642e6a7301027a0de40300010000e6030000000c200a01a801000000010001000900e603001e08f00229c209e7062fe40301010000",
+   "moduleEval": {
+    "ok": {
+     "value": {
+      "$": "object",
+      "id": 0,
+      "v": [
+       [
+        "z",
+        9
+       ]
+      ]
+     }
+    }
+   },
+   "syntaxError": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "Compilation error: SyntaxError: 'let' is not a valid lexical identifier"
+    }
+   },
+   "afterError": {
+    "ok": "1c41b7c9240101123c636f6d70696c653e0c000a00a801000100010000000301aa01000000bcd328e40301010000"
+   },
+   "crossVm": {
+    "ok": 3
+   }
+  },
+  "snapshot": {
+   "header": "514a535302000000",
+   "lengthMatches": true,
+   "roundTrip": true,
+   "extensions": 0,
+   "counter": {
+    "ok": 42
+   },
+   "unregistered": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      "Error",
+      "Host callback \"hostAdd\" is not registered: it was unregistered, its ephemeral function handle was disposed, or it was never re-registered after a snapshot restore."
+     ]
+    }
+   },
+   "reregistered": {
+    "ok": 42
+   },
+   "imported": {
+    "ok": {
+     "$": "object",
+     "id": 0,
+     "v": [
+      [
+       "tag",
+       "kept"
+      ]
+     ]
+    }
+   },
+   "originalCounter": {
+    "ok": 41
+   }
+  },
+  "deserializeErrors": {
+   "tooSmall": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "Invalid snapshot: too small"
+    }
+   },
+   "badMagic": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "Invalid snapshot: bad magic (expected 0x514a5353, got 0xdeadbeef)"
+    }
+   },
+   "badVersion": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "Unsupported snapshot version: 3 (expected 2)"
+    }
+   },
+   "v2NoExtCount": {
+    "error": {
+     "kind": "RangeError",
+     "name": "RangeError",
+     "message": "Offset is outside the bounds of the DataView"
+    }
+   },
+   "v1Empty": {
+    "ok": [
+     0,
+     1,
+     2,
+     3,
+     0
+    ]
+   },
+   "v1Memory": {
+    "ok": [
+     [
+      9,
+      8,
+      7
+     ],
+     1
+    ]
+   },
+   "truncated": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "Invalid snapshot: expected 128 bytes, got 28"
+    }
+   },
+   "extSerialized": "514a5353020000000300000004000000050000000600000001000000060000006578742dc3a907000000080000000c000000716a735f6578745f696e6974010203",
+   "extRoundTrip": {
+    "ok": [
+     [
+      1,
+      2,
+      3
+     ],
+     4,
+     5,
+     6,
+     [
+      {
+       "name": "ext-é",
+       "memoryBase": 7,
+       "tableBase": 8,
+       "initFn": "qjs_ext_init"
+      }
+     ]
+    ]
+   },
+   "extTruncated": {
+    "error": {
+     "kind": "RangeError",
+     "name": "RangeError",
+     "message": "Offset is outside the bounds of the DataView"
+    }
+   }
+  },
+  "restoreMissingExtension": {
+   "error": {
+    "kind": "Error",
+    "name": "Error",
+    "message": "Extension \"url\" required by snapshot but not provided"
+   }
+  },
+  "memoryUsage": {
+   "fresh": {
+    "mallocSize": 75128,
+    "mallocLimit": 0,
+    "memoryUsedSize": 64098,
+    "mallocCount": 1077,
+    "memoryUsedCount": 1077,
+    "atomCount": 588,
+    "atomSize": 27314,
+    "strCount": 0,
+    "strSize": 0,
+    "objCount": 187,
+    "objSize": 7480,
+    "propCount": 1026,
+    "propSize": 8912,
+    "shapeCount": 106,
+    "shapeSize": 16856,
+    "jsFuncCount": 0,
+    "jsFuncSize": 0,
+    "jsFuncCodeSize": 0,
+    "jsFuncPc2lineCount": 0,
+    "jsFuncPc2lineSize": 0,
+    "cFuncCount": 121,
+    "arrayCount": 1,
+    "fastArrayCount": 1,
+    "fastArrayElements": 0,
+    "binaryObjectCount": 0,
+    "binaryObjectSize": 0
+   },
+   "after": {
+    "mallocSize": 75264,
+    "mallocLimit": 0,
+    "memoryUsedSize": 64196,
+    "mallocCount": 1081,
+    "memoryUsedCount": 1081,
+    "atomCount": 589,
+    "atomSize": 27340,
+    "strCount": 0,
+    "strSize": 0,
+    "objCount": 188,
+    "objSize": 7520,
+    "propCount": 1028,
+    "propSize": 8920,
+    "shapeCount": 106,
+    "shapeSize": 16856,
+    "jsFuncCount": 0,
+    "jsFuncSize": 0,
+    "jsFuncCodeSize": 0,
+    "jsFuncPc2lineCount": 0,
+    "jsFuncPc2lineSize": 0,
+    "cFuncCount": 121,
+    "arrayCount": 2,
+    "fastArrayCount": 2,
+    "fastArrayElements": 3,
+    "binaryObjectCount": 0,
+    "binaryObjectSize": 0
+   }
+  },
+  "gc": {
+   "initial": 262144,
+   "set": 12345,
+   "zero": 0
+  },
+  "versions": {
+   "quickjs-wasi": "3.6.2",
+   "quickjs": "0.17.0"
+  },
+  "introspection": {
+   "keys": [
+    "3",
+    "b",
+    "a",
+    "nul\u0000key",
+    {
+     "$": "wtf16",
+     "v": [
+      108,
+      111,
+      110,
+      101,
+      55296
+     ]
+    },
+    "acc"
+   ],
+   "names": [
+    "3",
+    "b",
+    "a",
+    "nul\u0000key",
+    {
+     "$": "wtf16",
+     "v": [
+      108,
+      111,
+      110,
+      101,
+      55296
+     ]
+    },
+    "hidden",
+    "acc"
+   ],
+   "allKeys": [
+    "3",
+    "b",
+    "a",
+    "nul\u0000key",
+    {
+     "$": "wtf16",
+     "v": [
+      108,
+      111,
+      110,
+      101,
+      55296
+     ]
+    },
+    "hidden",
+    "acc",
+    {
+     "sym": {
+      "$": "symbol",
+      "v": "sym"
+     }
+    },
+    {
+     "sym": {
+      "$": "undefined"
+     }
+    }
+   ],
+   "descB": {
+    "ok": {
+     "enumerable": true,
+     "configurable": true,
+     "value": 1,
+     "writable": true
+    }
+   },
+   "descHidden": {
+    "ok": {
+     "enumerable": false,
+     "configurable": false,
+     "value": 6,
+     "writable": false
+    }
+   },
+   "descAcc": {
+    "ok": {
+     "enumerable": true,
+     "configurable": false,
+     "get": "function",
+     "set": "function"
+    }
+   },
+   "descMissing": {
+    "ok": null
+   },
+   "descNul": {
+    "ok": {
+     "enumerable": true,
+     "configurable": true,
+     "value": 4,
+     "writable": true
+    }
+   },
+   "descSym": {
+    "ok": {
+     "enumerable": true,
+     "configurable": true,
+     "value": 8,
+     "writable": true
+    }
+   },
+   "hasB": true,
+   "hasNul": true,
+   "hasNulTruncated": false,
+   "hasLone": true,
+   "hasToString": false,
+   "enumB": true,
+   "enumHidden": false,
+   "enumLone": true,
+   "getNul": 4,
+   "getLone": 5,
+   "getAcc": 7,
+   "protoIsObjectProto": true,
+   "nullProto": true,
+   "constructorName": "Object",
+   "length": {
+    "$": "number",
+    "v": "NaN"
+   },
+   "arrayLength": 3,
+   "descNoGetter": {
+    "ok": [
+     "function",
+     "undefined",
+     true,
+     true
+    ]
+   },
+   "descProxyThrows": {
+    "error": {
+     "kind": "JSException",
+     "name": "Error",
+     "message": "trap!",
+     "stack": "    at getOwnPropertyDescriptor (<eval>:1:56)\n"
+    }
+   },
+   "throwingKeys": [
+    [],
+    [],
+    []
+   ]
+  },
+  "proxy": {
+   "isProxy": true,
+   "className": "Object",
+   "target": {
+    "ok": {
+     "$": "object",
+     "id": 0,
+     "v": [
+      [
+       "a",
+       1
+      ]
+     ]
+    }
+   },
+   "handlerTag": {
+    "ok": "handler"
+   },
+   "viaGet": "trap",
+   "notProxyTarget": {
+    "error": {
+     "kind": "JSException",
+     "name": "TypeError",
+     "message": "not a proxy",
+     "stack": ""
+    }
+   },
+   "notProxyHandler": {
+    "error": {
+     "kind": "JSException",
+     "name": "TypeError",
+     "message": "not a proxy",
+     "stack": ""
+    }
+   },
+   "revoked": {
+    "ok": [
+     true,
+     {
+      "error": {
+       "kind": "JSException",
+       "name": "TypeError",
+       "message": "revoked proxy",
+       "stack": ""
+      }
+     }
+    ]
+   }
+  },
+  "newValues": {
+   "loneString": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      2,
+      55296,
+      120
+     ]
+    }
+   },
+   "loneStringBack": {
+    "$": "wtf16",
+    "v": [
+     97,
+     56320
+    ]
+   },
+   "nulString": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      3,
+      0
+     ]
+    }
+   },
+   "emoji": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      2,
+      128512
+     ]
+    }
+   },
+   "bomString": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      2,
+      65279
+     ]
+    }
+   },
+   "negZero": {
+    "ok": true
+   },
+   "nan": {
+    "ok": true
+   },
+   "bigMin": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      {
+       "$": "bigint",
+       "v": "-9223372036854775808"
+      },
+      "bigint"
+     ]
+    }
+   },
+   "bigTop": {
+    "ok": {
+     "$": "bigint",
+     "v": "-9223372036854775808"
+    }
+   },
+   "bigNegOne": {
+    "ok": {
+     "$": "bigint",
+     "v": "-1"
+    }
+   },
+   "bigWrap": {
+    "ok": {
+     "$": "bigint",
+     "v": "5"
+    }
+   },
+   "bigToBigInt": "123456789012",
+   "toBigIntFail": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "Failed to convert value to BigInt"
+    }
+   },
+   "toBigIntNumber": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "Failed to convert value to BigInt"
+    }
+   },
+   "symbol": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      "symbol",
+      "sym",
+      true
+     ]
+    }
+   },
+   "arrayBuffer": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      true,
+      3,
+      {
+       "$": "array",
+       "id": 1,
+       "v": [
+        1,
+        2,
+        3
+       ]
+      }
+     ]
+    }
+   },
+   "uint8": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      true,
+      {
+       "$": "array",
+       "id": 1,
+       "v": [
+        4,
+        5
+       ]
+      }
+     ]
+    }
+   },
+   "emptyBuffer": {
+    "ok": 0
+   },
+   "object": {
+    "ok": true
+   },
+   "array": {
+    "ok": true
+   },
+   "errorString": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      true,
+      "Error",
+      "msg",
+      {
+       "$": "array",
+       "id": 1,
+       "v": [
+        "message"
+       ]
+      }
+     ]
+    }
+   },
+   "errorNamed": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      true,
+      "RangeError",
+      "range msg",
+      "custom stack",
+      {
+       "$": "array",
+       "id": 1,
+       "v": [
+        "message",
+        "name",
+        "stack"
+       ]
+      }
+     ]
+    }
+   },
+   "toArrayBufferTyped": [
+    2,
+    0,
+    3,
+    0
+   ],
+   "toArrayBufferFail": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "Value is not an ArrayBuffer or typed array"
+    }
+   },
+   "toArrayBufferDetached": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "Failed to get ArrayBuffer data"
+    }
+   },
+   "dumpDetached": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "Failed to get ArrayBuffer data"
+    }
+   },
+   "toUint8": [
+    9,
+    8
+   ],
+   "getUndefined": true,
+   "getNull": true,
+   "getTrue": true,
+   "getFalse": false,
+   "getGlobal": true
+  },
+  "hostToHandle": {
+   "inspect": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      {
+       "$": "array",
+       "id": 1,
+       "v": [
+        "n",
+        "number",
+        1.5
+       ]
+      },
+      {
+       "$": "array",
+       "id": 2,
+       "v": [
+        "s",
+        "string",
+        "str"
+       ]
+      },
+      {
+       "$": "array",
+       "id": 3,
+       "v": [
+        "b",
+        "boolean",
+        true
+       ]
+      },
+      {
+       "$": "array",
+       "id": 4,
+       "v": [
+        "nul",
+        "object",
+        "null"
+       ]
+      },
+      {
+       "$": "array",
+       "id": 5,
+       "v": [
+        "u",
+        "undefined",
+        {
+         "$": "undefined"
+        }
+       ]
+      },
+      {
+       "$": "array",
+       "id": 6,
+       "v": [
+        "big",
+        "bigint",
+        "99"
+       ]
+      },
+      {
+       "$": "array",
+       "id": 7,
+       "v": [
+        "sym",
+        "symbol",
+        "hs"
+       ]
+      },
+      {
+       "$": "array",
+       "id": 8,
+       "v": [
+        "arr",
+        "object",
+        "[1,\"two\",[false]]"
+       ]
+      },
+      {
+       "$": "array",
+       "id": 9,
+       "v": [
+        "nested",
+        "object",
+        "{\"z\":1,\"a\":2}"
+       ]
+      },
+      {
+       "$": "array",
+       "id": 10,
+       "v": [
+        "err",
+        "object",
+        {
+         "$": "array",
+         "id": 11,
+         "v": [
+          "TypeError",
+          "host type",
+          "host stack"
+         ]
+        }
+       ]
+      },
+      {
+       "$": "array",
+       "id": 12,
+       "v": [
+        "buf",
+        "object",
+        {
+         "$": "array",
+         "id": 13,
+         "v": [
+          "ab",
+          {
+           "$": "array",
+           "id": 14,
+           "v": [
+            1,
+            2
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "$": "array",
+       "id": 15,
+       "v": [
+        "u8",
+        "object",
+        {
+         "$": "array",
+         "id": 16,
+         "v": [
+          "Uint8Array",
+          {
+           "$": "array",
+           "id": 17,
+           "v": [
+            3,
+            4
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "$": "array",
+       "id": 18,
+       "v": [
+        "u16",
+        "object",
+        {
+         "$": "array",
+         "id": 19,
+         "v": [
+          "ab",
+          {
+           "$": "array",
+           "id": 20,
+           "v": [
+            2,
+            1
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "$": "array",
+       "id": 21,
+       "v": [
+        "f64",
+        "object",
+        {
+         "$": "array",
+         "id": 22,
+         "v": [
+          "ab",
+          {
+           "$": "array",
+           "id": 23,
+           "v": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            240,
+            63
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "dumpBack": {
+    "$": "object",
+    "id": 0,
+    "v": [
+     [
+      "n",
+      1.5
+     ],
+     [
+      "s",
+      "str"
+     ],
+     [
+      "b",
+      true
+     ],
+     [
+      "nul",
+      null
+     ],
+     [
+      "u",
+      {
+       "$": "undefined"
+      }
+     ],
+     [
+      "big",
+      {
+       "$": "bigint",
+       "v": "99"
+      }
+     ],
+     [
+      "sym",
+      {
+       "$": "symbol",
+       "v": "hs"
+      }
+     ],
+     [
+      "arr",
+      {
+       "$": "array",
+       "id": 1,
+       "v": [
+        1,
+        "two",
+        {
+         "$": "array",
+         "id": 2,
+         "v": [
+          false
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      "nested",
+      {
+       "$": "object",
+       "id": 3,
+       "v": [
+        [
+         "z",
+         1
+        ],
+        [
+         "a",
+         2
+        ]
+       ]
+      }
+     ],
+     [
+      "err",
+      {
+       "$": "Error",
+       "name": "TypeError",
+       "message": "host type",
+       "stack": "host stack"
+      }
+     ],
+     [
+      "buf",
+      {
+       "$": "ArrayBuffer",
+       "v": [
+        1,
+        2
+       ]
+      }
+     ],
+     [
+      "u8",
+      {
+       "$": "Uint8Array",
+       "v": [
+        3,
+        4
+       ]
+      }
+     ],
+     [
+      "u16",
+      {
+       "$": "ArrayBuffer",
+       "v": [
+        2,
+        1
+       ]
+      }
+     ],
+     [
+      "f64",
+      {
+       "$": "ArrayBuffer",
+       "v": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        240,
+        63
+       ]
+      }
+     ]
+    ]
+   },
+   "singletons": [
+    true,
+    true,
+    true,
+    true
+   ],
+   "localSymbol": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "Cannot convert local symbol to QuickJS handle. Use Symbol.for() for cross-boundary symbols."
+    }
+   },
+   "fn": true
+  },
+  "props": {
+   "keys": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      {
+       "$": "array",
+       "id": 1,
+       "v": [
+        5,
+        110
+       ]
+      },
+      {
+       "$": "array",
+       "id": 2,
+       "v": [
+        7,
+        121
+       ]
+      },
+      {
+       "$": "array",
+       "id": 3,
+       "v": [
+        5,
+        56320
+       ]
+      },
+      {
+       "$": "array",
+       "id": 4,
+       "v": [
+        5,
+        109
+       ]
+      },
+      {
+       "$": "array",
+       "id": 5,
+       "v": [
+        2,
+        111
+       ]
+      },
+      {
+       "$": "array",
+       "id": 6,
+       "v": [
+        3,
+        108
+       ]
+      },
+      {
+       "$": "array",
+       "id": 7,
+       "v": [
+        4,
+        101
+       ]
+      },
+      {
+       "$": "array",
+       "id": 8,
+       "v": [
+        6,
+        108
+       ]
+      },
+      {
+       "$": "array",
+       "id": 9,
+       "v": [
+        9,
+        100
+       ]
+      },
+      "sym:symkey"
+     ]
+    }
+   },
+   "descriptors": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      {
+       "$": "array",
+       "id": 1,
+       "v": [
+        true,
+        true,
+        true,
+        1
+       ]
+      },
+      {
+       "$": "array",
+       "id": 2,
+       "v": [
+        true,
+        true,
+        true,
+        1
+       ]
+      },
+      {
+       "$": "array",
+       "id": 3,
+       "v": [
+        true,
+        true,
+        true,
+        1
+       ]
+      },
+      {
+       "$": "array",
+       "id": 4,
+       "v": [
+        true,
+        true,
+        true,
+        1
+       ]
+      },
+      {
+       "$": "array",
+       "id": 5,
+       "v": [
+        false,
+        true,
+        false,
+        1
+       ]
+      },
+      {
+       "$": "array",
+       "id": 6,
+       "v": [
+        true,
+        true,
+        true,
+        1
+       ]
+      },
+      {
+       "$": "array",
+       "id": 7,
+       "v": [
+        false,
+        false,
+        false,
+        1
+       ]
+      },
+      {
+       "$": "array",
+       "id": 8,
+       "v": [
+        false,
+        false,
+        true,
+        1
+       ]
+      },
+      {
+       "$": "array",
+       "id": 9,
+       "v": [
+        true,
+        false,
+        false,
+        1
+       ]
+      },
+      {
+       "$": "array",
+       "id": 10,
+       "v": [
+        true,
+        false,
+        false,
+        2
+       ]
+      }
+     ]
+    }
+   },
+   "getSym": 2,
+   "getStrKey": 1
+  },
+  "promises": {
+   "stateBefore": 0,
+   "stateAfterResolve": 1,
+   "jobs": 2,
+   "got": {
+    "ok": 7
+   },
+   "settled": true,
+   "jobs2": 1,
+   "why": {
+    "ok": "nope"
+   },
+   "state2": 2,
+   "jobs3": 1,
+   "late": {
+    "$": "object",
+    "id": 0,
+    "v": [
+     [
+      "late",
+      true
+     ]
+    ]
+   },
+   "lateError": {
+    "error": {
+     "$": "Error",
+     "name": "Error",
+     "message": "later",
+     "stack": "    at <eval> (<eval>:1:17)\n"
+    }
+   },
+   "notPromise": 3,
+   "chainedBefore": 0,
+   "jobs4": 1,
+   "chained": [
+    1,
+    {
+     "$": "undefined"
+    }
+   ],
+   "chainedValue": 20
+  },
+  "unhandledRejection": {
+   "events": [
+    [
+     false,
+     true,
+     {
+      "$": "Error",
+      "name": "Error",
+      "message": "x",
+      "stack": "    at <eval> (<eval>:1:35)\n"
+     }
+    ],
+    [
+     true,
+     true,
+     {
+      "$": "Error",
+      "name": "Error",
+      "message": "x",
+      "stack": "    at <eval> (<eval>:1:35)\n"
+     }
+    ],
+    [
+     false,
+     true,
+     {
+      "$": "Error",
+      "name": "TypeError",
+      "message": "async fail",
+      "stack": "    at <anonymous> (<eval>:1:26)\n    at <eval> (<eval>:1:49)\n"
+     }
+    ]
+   ],
+   "jobs": [
+    0,
+    1,
+    0,
+    0
+   ]
+  },
+  "jobErrors": {
+   "first": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "Job execution error: InternalError: interrupted"
+    }
+   },
+   "second": {
+    "ok": 0
+   },
+   "alive": {
+    "ok": "ok"
+   }
+  },
+  "withScope": {
+   "during": [
+    false,
+    true,
+    false
+   ],
+   "after": [
+    true,
+    false,
+    true,
+    true
+   ],
+   "escapedValue": "escaped",
+   "thrown": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "scope fail"
+    }
+   },
+   "disposedAfterThrow": true,
+   "callbackInScope": "got arg"
+  },
+  "exportImport": {
+   "tokenPositive": true,
+   "imported": {
+    "ok": {
+     "$": "object",
+     "id": 0,
+     "v": [
+      [
+       "t",
+       1
+      ]
+     ]
+    }
+   },
+   "zero": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "importHandle: invalid token 0"
+    }
+   },
+   "negative": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "importHandle: invalid token -5"
+    }
+   },
+   "huge": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "importHandle: invalid token 2147483648"
+    }
+   },
+   "otherVm": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "exportHandle: handle belongs to a different VM"
+    }
+   },
+   "borrowed": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "exportHandle: cannot export a borrowed handle (host-callback this/argument); its box is freed when the callback returns. dup() it and export the duplicate."
+    }
+   },
+   "disposed": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "exportHandle: handle is disposed"
+    }
+   }
+  },
+  "wasiClock": {
+   "ok": {
+    "$": "array",
+    "id": 0,
+    "v": [
+     1234567890123,
+     "2009-02-13T23:31:30.123Z"
+    ]
+   }
+  },
+  "intrinsics": {
+   "minimal": {
+    "error": {
+     "kind": "JSException",
+     "name": "TypeError",
+     "message": "eval is not supported",
+     "stack": ""
+    }
+   },
+   "dateJson": {
+    "error": {
+     "kind": "JSException",
+     "name": "TypeError",
+     "message": "eval is not supported",
+     "stack": ""
+    }
+   },
+   "all": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      "function",
+      "object",
+      "function",
+      "function",
+      "function",
+      "function",
+      "function",
+      "function",
+      "function",
+      "object",
+      "function",
+      "function",
+      "function",
+      "object"
+     ]
+    }
+   },
+   "noEval": {
+    "error": {
+     "kind": "JSException",
+     "name": "TypeError",
+     "message": "eval is not supported",
+     "stack": ""
+    }
+   },
+   "default": {
+    "ok": {
+     "$": "array",
+     "id": 0,
+     "v": [
+      "function",
+      "object",
+      "function",
+      "function",
+      "function",
+      "function",
+      "function",
+      "function",
+      "function",
+      "object",
+      "function",
+      "function",
+      "function",
+      "object"
+     ]
+    }
+   }
+  },
+  "exceptionValue": {
+   "isException": "unknown",
+   "dump": {
+    "$": "Error",
+    "name": "Error",
+    "message": "TypeError: cannot read property 'x' of null",
+    "stack": {
+     "$": "host"
+    }
+   },
+   "pendingCleared": {
+    "ok": 1
+   },
+   "symbolToString": "<null>",
+   "afterSymbol": {
+    "$": "Error",
+    "name": "TypeError",
+    "message": "cannot convert symbol to string",
+    "stack": ""
+   },
+   "throwingToString": "<null>",
+   "afterThrowing": {
+    "$": "Error",
+    "name": "Error",
+    "message": "ts",
+    "stack": "    at toString (<eval>:1:27)\n"
+   },
+   "noPending": {
+    "$": "Error",
+    "name": "TypeError",
+    "message": "not a TypedArray",
+    "stack": ""
+   }
+  },
+  "disposed": {
+   "evalCode": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "QuickJS instance has been disposed"
+    }
+   },
+   "newString": {
+    "error": {
+     "kind": "Error",
+     "name": "Error",
+     "message": "QuickJS instance has been disposed"
+    }
+   },
+   "handleDispose": {
+    "ok": true
+   },
+   "disposeTwice": {
+    "ok": "ok"
+   }
+  }
+ }
+}
