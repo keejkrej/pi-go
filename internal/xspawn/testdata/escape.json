@@ -1,0 +1,334 @@
+{
+  "escape": [
+    {
+      "in": "",
+      "command": "",
+      "argument": "^\"^\"",
+      "argumentDouble": "^^^\"^^^\""
+    },
+    {
+      "in": "a",
+      "command": "a",
+      "argument": "^\"a^\"",
+      "argumentDouble": "^^^\"a^^^\""
+    },
+    {
+      "in": "foo bar",
+      "command": "foo^ bar",
+      "argument": "^\"foo^ bar^\"",
+      "argumentDouble": "^^^\"foo^^^ bar^^^\""
+    },
+    {
+      "in": "a|b",
+      "command": "a^|b",
+      "argument": "^\"a^|b^\"",
+      "argumentDouble": "^^^\"a^^^|b^^^\""
+    },
+    {
+      "in": "a&b",
+      "command": "a^&b",
+      "argument": "^\"a^&b^\"",
+      "argumentDouble": "^^^\"a^^^&b^^^\""
+    },
+    {
+      "in": "a>b",
+      "command": "a^>b",
+      "argument": "^\"a^>b^\"",
+      "argumentDouble": "^^^\"a^^^>b^^^\""
+    },
+    {
+      "in": "a<b",
+      "command": "a^<b",
+      "argument": "^\"a^<b^\"",
+      "argumentDouble": "^^^\"a^^^<b^^^\""
+    },
+    {
+      "in": "()",
+      "command": "^(^)",
+      "argument": "^\"^(^)^\"",
+      "argumentDouble": "^^^\"^^^(^^^)^^^\""
+    },
+    {
+      "in": "[]",
+      "command": "^[^]",
+      "argument": "^\"^[^]^\"",
+      "argumentDouble": "^^^\"^^^[^^^]^^^\""
+    },
+    {
+      "in": "%!",
+      "command": "^%^!",
+      "argument": "^\"^%^!^\"",
+      "argumentDouble": "^^^\"^^^%^^^!^^^\""
+    },
+    {
+      "in": "^<",
+      "command": "^^^<",
+      "argument": "^\"^^^<^\"",
+      "argumentDouble": "^^^\"^^^^^^^<^^^\""
+    },
+    {
+      "in": ">&",
+      "command": "^>^&",
+      "argument": "^\"^>^&^\"",
+      "argumentDouble": "^^^\"^^^>^^^&^^^\""
+    },
+    {
+      "in": "|;",
+      "command": "^|^;",
+      "argument": "^\"^|^;^\"",
+      "argumentDouble": "^^^\"^^^|^^^;^^^\""
+    },
+    {
+      "in": ", ",
+      "command": "^,^ ",
+      "argument": "^\"^,^ ^\"",
+      "argumentDouble": "^^^\"^^^,^^^ ^^^\""
+    },
+    {
+      "in": "!=",
+      "command": "^!=",
+      "argument": "^\"^!=^\"",
+      "argumentDouble": "^^^\"^^^!=^^^\""
+    },
+    {
+      "in": "\\*",
+      "command": "\\^*",
+      "argument": "^\"\\^*^\"",
+      "argumentDouble": "^^^\"\\^^^*^^^\""
+    },
+    {
+      "in": "\"f\"",
+      "command": "^\"f^\"",
+      "argument": "^\"\\^\"f\\^\"^\"",
+      "argumentDouble": "^^^\"\\^^^\"f\\^^^\"^^^\""
+    },
+    {
+      "in": "?.",
+      "command": "^?.",
+      "argument": "^\"^?.^\"",
+      "argumentDouble": "^^^\"^^^?.^^^\""
+    },
+    {
+      "in": "=`",
+      "command": "=^`",
+      "argument": "^\"=^`^\"",
+      "argumentDouble": "^^^\"=^^^`^^^\""
+    },
+    {
+      "in": "'",
+      "command": "'",
+      "argument": "^\"'^\"",
+      "argumentDouble": "^^^\"'^^^\""
+    },
+    {
+      "in": "\\\"",
+      "command": "\\^\"",
+      "argument": "^\"\\\\\\^\"^\"",
+      "argumentDouble": "^^^\"\\\\\\^^^\"^^^\""
+    },
+    {
+      "in": "bar\\",
+      "command": "bar\\",
+      "argument": "^\"bar\\\\^\"",
+      "argumentDouble": "^^^\"bar\\\\^^^\""
+    },
+    {
+      "in": "\"foo|bar>baz\"",
+      "command": "^\"foo^|bar^>baz^\"",
+      "argument": "^\"\\^\"foo^|bar^>baz\\^\"^\"",
+      "argumentDouble": "^^^\"\\^^^\"foo^^^|bar^^^>baz\\^^^\"^^^\""
+    },
+    {
+      "in": "\"(foo|bar>baz|foz)\"",
+      "command": "^\"^(foo^|bar^>baz^|foz^)^\"",
+      "argument": "^\"\\^\"^(foo^|bar^>baz^|foz^)\\^\"^\"",
+      "argumentDouble": "^^^\"\\^^^\"^^^(foo^^^|bar^^^>baz^^^|foz^^^)\\^^^\"^^^\""
+    },
+    {
+      "in": "Andr├⌐ Cruz",
+      "command": "Andr├⌐^ Cruz",
+      "argument": "^\"Andr├⌐^ Cruz^\"",
+      "argumentDouble": "^^^\"Andr├⌐^^^ Cruz^^^\""
+    },
+    {
+      "in": "a\\\"b",
+      "command": "a\\^\"b",
+      "argument": "^\"a\\\\\\^\"b^\"",
+      "argumentDouble": "^^^\"a\\\\\\^^^\"b^^^\""
+    },
+    {
+      "in": "a\\\\\\\"b",
+      "command": "a\\\\\\^\"b",
+      "argument": "^\"a\\\\\\\\\\^\"b^\"",
+      "argumentDouble": "^^^\"a\\\\\\\\\\^^^\"b^^^\""
+    },
+    {
+      "in": "trail\\",
+      "command": "trail\\",
+      "argument": "^\"trail\\\\^\"",
+      "argumentDouble": "^^^\"trail\\\\^^^\""
+    },
+    {
+      "in": "a b c",
+      "command": "a^ b^ c",
+      "argument": "^\"a^ b^ c^\"",
+      "argumentDouble": "^^^\"a^^^ b^^^ c^^^\""
+    },
+    {
+      "in": "%PATH%",
+      "command": "^%PATH^%",
+      "argument": "^\"^%PATH^%^\"",
+      "argumentDouble": "^^^\"^^^%PATH^^^%^^^\""
+    },
+    {
+      "in": "node_modules",
+      "command": "node_modules",
+      "argument": "^\"node_modules^\"",
+      "argumentDouble": "^^^\"node_modules^^^\""
+    },
+    {
+      "in": "C:/foo/bar",
+      "command": "C:/foo/bar",
+      "argument": "^\"C:/foo/bar^\"",
+      "argumentDouble": "^^^\"C:/foo/bar^^^\""
+    },
+    {
+      "in": "C:\\Program Files\\app.exe",
+      "command": "C:\\Program^ Files\\app.exe",
+      "argument": "^\"C:\\Program^ Files\\app.exe^\"",
+      "argumentDouble": "^^^\"C:\\Program^^^ Files\\app.exe^^^\""
+    },
+    {
+      "in": "foo\nbar",
+      "command": "foo\nbar",
+      "argument": "^\"foo\nbar^\"",
+      "argumentDouble": "^^^\"foo\nbar^^^\""
+    },
+    {
+      "in": "emoji ≡ƒÿÇ",
+      "command": "emoji^ ≡ƒÿÇ",
+      "argument": "^\"emoji^ ≡ƒÿÇ^\"",
+      "argumentDouble": "^^^\"emoji^^^ ≡ƒÿÇ^^^\""
+    },
+    {
+      "in": "^",
+      "command": "^^",
+      "argument": "^\"^^^\"",
+      "argumentDouble": "^^^\"^^^^^^^\""
+    },
+    {
+      "in": "\"",
+      "command": "^\"",
+      "argument": "^\"\\^\"^\"",
+      "argumentDouble": "^^^\"\\^^^\"^^^\""
+    },
+    {
+      "in": " ",
+      "command": "^ ",
+      "argument": "^\"^ ^\"",
+      "argumentDouble": "^^^\"^^^ ^^^\""
+    },
+    {
+      "in": "*",
+      "command": "^*",
+      "argument": "^\"^*^\"",
+      "argumentDouble": "^^^\"^^^*^^^\""
+    },
+    {
+      "in": "?",
+      "command": "^?",
+      "argument": "^\"^?^\"",
+      "argumentDouble": "^^^\"^^^?^^^\""
+    },
+    {
+      "in": "(foo)",
+      "command": "^(foo^)",
+      "argument": "^\"^(foo^)^\"",
+      "argumentDouble": "^^^\"^^^(foo^^^)^^^\""
+    },
+    {
+      "in": "a\tb",
+      "command": "a\tb",
+      "argument": "^\"a\tb^\"",
+      "argumentDouble": "^^^\"a\tb^^^\""
+    },
+    {
+      "in": "100%",
+      "command": "100^%",
+      "argument": "^\"100^%^\"",
+      "argumentDouble": "^^^\"100^^^%^^^\""
+    },
+    {
+      "in": "a\\b\\c",
+      "command": "a\\b\\c",
+      "argument": "^\"a\\b\\c^\"",
+      "argumentDouble": "^^^\"a\\b\\c^^^\""
+    },
+    {
+      "in": "say \"hi\"",
+      "command": "say^ ^\"hi^\"",
+      "argument": "^\"say^ \\^\"hi\\^\"^\"",
+      "argumentDouble": "^^^\"say^^^ \\^^^\"hi\\^^^\"^^^\""
+    },
+    {
+      "in": "^^^",
+      "command": "^^^^^^",
+      "argument": "^\"^^^^^^^\"",
+      "argumentDouble": "^^^\"^^^^^^^^^^^^^^^\""
+    },
+    {
+      "in": "foo\\bar\\",
+      "command": "foo\\bar\\",
+      "argument": "^\"foo\\bar\\\\^\"",
+      "argumentDouble": "^^^\"foo\\bar\\\\^^^\""
+    }
+  ],
+  "normalize": {
+    "foo/bar": "foo\\bar",
+    "foo\\bar": "foo\\bar",
+    "foo/": "foo\\",
+    "foo\\": "foo\\",
+    "./foo": "foo",
+    "../foo": "..\\foo",
+    "foo//bar": "foo\\bar",
+    "C:/Program Files/a": "C:\\Program Files\\a",
+    "foo/../../bar": "..\\bar",
+    "node_modules/.bin/tsc.cmd": "node_modules\\.bin\\tsc.cmd",
+    "foo/bar/": "foo\\bar\\",
+    "/foo/bar": "\\foo\\bar",
+    "foo/./bar": "foo\\bar",
+    ".\\foo\\bar": "foo\\bar"
+  },
+  "join": [
+    {
+      "a": "",
+      "b": "foo",
+      "out": "foo"
+    },
+    {
+      "a": "",
+      "b": ".\\foo",
+      "out": "foo"
+    },
+    {
+      "a": "",
+      "b": "./foo",
+      "out": "foo"
+    },
+    {
+      "a": "C:\\dir",
+      "b": "foo",
+      "out": "C:\\dir\\foo"
+    },
+    {
+      "a": "C:\\dir",
+      "b": "foo.cmd",
+      "out": "C:\\dir\\foo.cmd"
+    },
+    {
+      "a": "",
+      "b": "foo\\bar.cmd",
+      "out": "foo\\bar.cmd"
+    }
+  ]
+}

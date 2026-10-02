@@ -277,6 +277,75 @@ func TestDate_NowAndISO(t *testing.T) {
 	}
 }
 
+func TestDate_GapAndOverlapUseOffsetBeforeTransition(t *testing.T) {
+	// Node 24 Date.parse with TZ set to the location. Date-time forms without
+	// an offset are local time.
+	cases := []struct {
+		loc  string
+		when string
+		want float64
+	}{
+		{"America/New_York", "2024-03-10T01:30:00", 1710052200000},
+		{"America/New_York", "2024-03-10T02:00:00", 1710054000000},
+		{"America/New_York", "2024-03-10T02:30:00", 1710055800000},
+		{"America/New_York", "2024-03-10T03:30:00", 1710055800000},
+		{"America/New_York", "2024-11-03T01:30:00", 1730611800000},
+		{"America/New_York", "2010-03-14T02:30:00", 1268551800000},
+		{"Australia/Sydney", "2024-10-06T02:30:00", 1728145800000},
+		{"Australia/Sydney", "2024-04-07T02:00:00", 1712415600000},
+		{"Australia/Sydney", "2024-04-07T02:30:00", 1712417400000},
+		{"Australia/Sydney", "2024-04-07T03:00:00", 1712422800000},
+		{"Australia/Lord_Howe", "2024-10-06T02:15:00", 1728143100000},
+		{"Europe/London", "2024-03-31T01:30:00", 1711848600000},
+		{"Europe/London", "2024-10-27T01:30:00", 1729989000000},
+		{"Pacific/Apia", "2011-12-30T00:00:00", 1325239200000},
+	}
+	saved := time.Local
+	t.Cleanup(func() { time.Local = saved })
+	for _, c := range cases {
+		loc, err := time.LoadLocation(c.loc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.Local = loc
+		if got := js.DateParse(c.when); got != c.want {
+			t.Errorf("DateParse(%s %s) = %.0f, want %.0f", c.loc, c.when, got, c.want)
+		}
+	}
+}
+
+func TestParseInt_LeadingZerosUseV8ChunkBoundary(t *testing.T) {
+	// Node 24 parseInt on x64. Leading zeros change the 32-bit chunk split for
+	// a generic radix; the bits below are the trimmed-digit result.
+	cases := []struct {
+		radix int
+		s     string
+		bits  uint64
+	}{
+		{3, "0" + strings.Repeat("1", 48), 0x44a0e425c56daffb},
+		{3, "00" + "1010101010101010101010101010101010101010", 0x43cfa2a1cf67b5fc},
+		{3, strings.Repeat("0", 8) + strings.Repeat("1", 80), 0x47cbccbc7be2c629},
+		{3, "-" + strings.Repeat("0", 3) + strings.Repeat("1", 40), 0xc3d517168a4523fd},
+		{6, "0" + strings.Repeat("5", 21), 0x43537be29597ffff},
+		{6, "0123450123450123450123450123450", 0x44a674d53220093d},
+		{36, "0" + strings.Repeat("z", 20), 0x466517168a4523fd},
+		{36, "00" + strings.Repeat("z", 12), 0x43d070872e384000},
+		{11, "0" + strings.Repeat("a", 30), 0x466b87c1e83d2037},
+		{16, strings.Repeat("0", 3) + strings.Repeat("f", 20), 0x44f0000000000000},
+		{10, strings.Repeat("0", 3) + strings.Repeat("9", 40), 0x483d6329f1c35ca5},
+		{2, "0001" + strings.Repeat("0", 60), 0x43b0000000000000},
+		{8, strings.Repeat("0", 5) + strings.Repeat("7", 30), 0x4590000000000000},
+		{36, "000", 0},
+		{7, "-000", 0x8000000000000000},
+	}
+	for _, c := range cases {
+		got := js.ParseInt(c.s, c.radix)
+		if math.Float64bits(got) != c.bits {
+			t.Errorf("ParseInt(%q, %d) = %x, want %x", c.s, c.radix, math.Float64bits(got), c.bits)
+		}
+	}
+}
+
 func TestDecoder_DecodeUTF8ValidFastPath(t *testing.T) {
 	in := []byte("plain ascii and ünïcödé")
 	if got := js.DecodeUTF8(in); got != string(in) {

@@ -1,0 +1,289 @@
+package js_test
+
+import (
+	"testing"
+
+	"github.com/keejkrej/pi-go/internal/js"
+)
+
+var unicode17UpperCases = [][2]rune{
+	{0x019B, 0xA7DC},
+	{0x0264, 0xA7CB},
+	{0x1C8A, 0x1C89},
+	{0xA7CD, 0xA7CC},
+	{0xA7CF, 0xA7CE},
+	{0xA7D3, 0xA7D2},
+	{0xA7D5, 0xA7D4},
+	{0xA7DB, 0xA7DA},
+	{0x10D70, 0x10D50},
+	{0x10D71, 0x10D51},
+	{0x10D72, 0x10D52},
+	{0x10D73, 0x10D53},
+	{0x10D74, 0x10D54},
+	{0x10D75, 0x10D55},
+	{0x10D76, 0x10D56},
+	{0x10D77, 0x10D57},
+	{0x10D78, 0x10D58},
+	{0x10D79, 0x10D59},
+	{0x10D7A, 0x10D5A},
+	{0x10D7B, 0x10D5B},
+	{0x10D7C, 0x10D5C},
+	{0x10D7D, 0x10D5D},
+	{0x10D7E, 0x10D5E},
+	{0x10D7F, 0x10D5F},
+	{0x10D80, 0x10D60},
+	{0x10D81, 0x10D61},
+	{0x10D82, 0x10D62},
+	{0x10D83, 0x10D63},
+	{0x10D84, 0x10D64},
+	{0x10D85, 0x10D65},
+	{0x16EBB, 0x16EA0},
+	{0x16EBC, 0x16EA1},
+	{0x16EBD, 0x16EA2},
+	{0x16EBE, 0x16EA3},
+	{0x16EBF, 0x16EA4},
+	{0x16EC0, 0x16EA5},
+	{0x16EC1, 0x16EA6},
+	{0x16EC2, 0x16EA7},
+	{0x16EC3, 0x16EA8},
+	{0x16EC4, 0x16EA9},
+	{0x16EC5, 0x16EAA},
+	{0x16EC6, 0x16EAB},
+	{0x16EC7, 0x16EAC},
+	{0x16EC8, 0x16EAD},
+	{0x16EC9, 0x16EAE},
+	{0x16ECA, 0x16EAF},
+	{0x16ECB, 0x16EB0},
+	{0x16ECC, 0x16EB1},
+	{0x16ECD, 0x16EB2},
+	{0x16ECE, 0x16EB3},
+	{0x16ECF, 0x16EB4},
+	{0x16ED0, 0x16EB5},
+	{0x16ED1, 0x16EB6},
+	{0x16ED2, 0x16EB7},
+	{0x16ED3, 0x16EB8},
+}
+
+var unicode17LowerCases = [][2]rune{
+	{0x1C89, 0x1C8A},
+	{0xA7CB, 0x0264},
+	{0xA7CC, 0xA7CD},
+	{0xA7CE, 0xA7CF},
+	{0xA7D2, 0xA7D3},
+	{0xA7D4, 0xA7D5},
+	{0xA7DA, 0xA7DB},
+	{0xA7DC, 0x019B},
+	{0x10D50, 0x10D70},
+	{0x10D51, 0x10D71},
+	{0x10D52, 0x10D72},
+	{0x10D53, 0x10D73},
+	{0x10D54, 0x10D74},
+	{0x10D55, 0x10D75},
+	{0x10D56, 0x10D76},
+	{0x10D57, 0x10D77},
+	{0x10D58, 0x10D78},
+	{0x10D59, 0x10D79},
+	{0x10D5A, 0x10D7A},
+	{0x10D5B, 0x10D7B},
+	{0x10D5C, 0x10D7C},
+	{0x10D5D, 0x10D7D},
+	{0x10D5E, 0x10D7E},
+	{0x10D5F, 0x10D7F},
+	{0x10D60, 0x10D80},
+	{0x10D61, 0x10D81},
+	{0x10D62, 0x10D82},
+	{0x10D63, 0x10D83},
+	{0x10D64, 0x10D84},
+	{0x10D65, 0x10D85},
+	{0x16EA0, 0x16EBB},
+	{0x16EA1, 0x16EBC},
+	{0x16EA2, 0x16EBD},
+	{0x16EA3, 0x16EBE},
+	{0x16EA4, 0x16EBF},
+	{0x16EA5, 0x16EC0},
+	{0x16EA6, 0x16EC1},
+	{0x16EA7, 0x16EC2},
+	{0x16EA8, 0x16EC3},
+	{0x16EA9, 0x16EC4},
+	{0x16EAA, 0x16EC5},
+	{0x16EAB, 0x16EC6},
+	{0x16EAC, 0x16EC7},
+	{0x16EAD, 0x16EC8},
+	{0x16EAE, 0x16EC9},
+	{0x16EAF, 0x16ECA},
+	{0x16EB0, 0x16ECB},
+	{0x16EB1, 0x16ECC},
+	{0x16EB2, 0x16ECD},
+	{0x16EB3, 0x16ECE},
+	{0x16EB4, 0x16ECF},
+	{0x16EB5, 0x16ED0},
+	{0x16EB6, 0x16ED1},
+	{0x16EB7, 0x16ED2},
+	{0x16EB8, 0x16ED3},
+}
+
+var unicode17NFDCases = []struct {
+	cp   rune
+	want string
+}{
+	{0x105C9, "\U000105d2̇"},
+	{0x105E4, "\U000105dȧ"},
+	{0x11383, "\U00011382\U000113c9"},
+	{0x11385, "\U00011384\U000113bb"},
+	{0x1138E, "\U0001138b\U000113c2"},
+	{0x11391, "\U00011390\U000113c9"},
+	{0x113C5, "\U000113c2\U000113c2"},
+	{0x113C7, "\U000113c2\U000113b8"},
+	{0x113C8, "\U000113c2\U000113c9"},
+	{0x16121, "\U0001611e\U0001611e"},
+	{0x16122, "\U0001611e\U00016129"},
+	{0x16123, "\U0001611e\U0001611f"},
+	{0x16124, "\U00016129\U0001611f"},
+	{0x16125, "\U0001611e\U00016120"},
+	{0x16126, "\U0001611e\U0001611e\U0001611f"},
+	{0x16127, "\U0001611e\U00016129\U0001611f"},
+	{0x16128, "\U0001611e\U0001611e\U00016120"},
+	{0x16D68, "\U00016d67\U00016d67"},
+	{0x16D69, "\U00016d63\U00016d67"},
+	{0x16D6A, "\U00016d63\U00016d67\U00016d67"},
+}
+
+var unicode17NFKCCases = []struct {
+	cp   rune
+	want string
+}{
+	{0xA7F1, "S"},
+	{0x1CCD6, "A"},
+	{0x1CCD7, "B"},
+	{0x1CCD8, "C"},
+	{0x1CCD9, "D"},
+	{0x1CCDA, "E"},
+	{0x1CCDB, "F"},
+	{0x1CCDC, "G"},
+	{0x1CCDD, "H"},
+	{0x1CCDE, "I"},
+	{0x1CCDF, "J"},
+	{0x1CCE0, "K"},
+	{0x1CCE1, "L"},
+	{0x1CCE2, "M"},
+	{0x1CCE3, "N"},
+	{0x1CCE4, "O"},
+	{0x1CCE5, "P"},
+	{0x1CCE6, "Q"},
+	{0x1CCE7, "R"},
+	{0x1CCE8, "S"},
+	{0x1CCE9, "T"},
+	{0x1CCEA, "U"},
+	{0x1CCEB, "V"},
+	{0x1CCEC, "W"},
+	{0x1CCED, "X"},
+	{0x1CCEE, "Y"},
+	{0x1CCEF, "Z"},
+	{0x1CCF0, "0"},
+	{0x1CCF1, "1"},
+	{0x1CCF2, "2"},
+	{0x1CCF3, "3"},
+	{0x1CCF4, "4"},
+	{0x1CCF5, "5"},
+	{0x1CCF6, "6"},
+	{0x1CCF7, "7"},
+	{0x1CCF8, "8"},
+	{0x1CCF9, "9"},
+}
+
+var unicode17NFKDCases = []struct {
+	cp   rune
+	want string
+}{
+	{0xA7F1, "S"},
+	{0x105C9, "\U000105d2̇"},
+	{0x105E4, "\U000105dȧ"},
+	{0x11383, "\U00011382\U000113c9"},
+	{0x11385, "\U00011384\U000113bb"},
+	{0x1138E, "\U0001138b\U000113c2"},
+	{0x11391, "\U00011390\U000113c9"},
+	{0x113C5, "\U000113c2\U000113c2"},
+	{0x113C7, "\U000113c2\U000113b8"},
+	{0x113C8, "\U000113c2\U000113c9"},
+	{0x16121, "\U0001611e\U0001611e"},
+	{0x16122, "\U0001611e\U00016129"},
+	{0x16123, "\U0001611e\U0001611f"},
+	{0x16124, "\U00016129\U0001611f"},
+	{0x16125, "\U0001611e\U00016120"},
+	{0x16126, "\U0001611e\U0001611e\U0001611f"},
+	{0x16127, "\U0001611e\U00016129\U0001611f"},
+	{0x16128, "\U0001611e\U0001611e\U00016120"},
+	{0x16D68, "\U00016d67\U00016d67"},
+	{0x16D69, "\U00016d63\U00016d67"},
+	{0x16D6A, "\U00016d63\U00016d67\U00016d67"},
+	{0x1CCD6, "A"},
+	{0x1CCD7, "B"},
+	{0x1CCD8, "C"},
+	{0x1CCD9, "D"},
+	{0x1CCDA, "E"},
+	{0x1CCDB, "F"},
+	{0x1CCDC, "G"},
+	{0x1CCDD, "H"},
+	{0x1CCDE, "I"},
+	{0x1CCDF, "J"},
+	{0x1CCE0, "K"},
+	{0x1CCE1, "L"},
+	{0x1CCE2, "M"},
+	{0x1CCE3, "N"},
+	{0x1CCE4, "O"},
+	{0x1CCE5, "P"},
+	{0x1CCE6, "Q"},
+	{0x1CCE7, "R"},
+	{0x1CCE8, "S"},
+	{0x1CCE9, "T"},
+	{0x1CCEA, "U"},
+	{0x1CCEB, "V"},
+	{0x1CCEC, "W"},
+	{0x1CCED, "X"},
+	{0x1CCEE, "Y"},
+	{0x1CCEF, "Z"},
+	{0x1CCF0, "0"},
+	{0x1CCF1, "1"},
+	{0x1CCF2, "2"},
+	{0x1CCF3, "3"},
+	{0x1CCF4, "4"},
+	{0x1CCF5, "5"},
+	{0x1CCF6, "6"},
+	{0x1CCF7, "7"},
+	{0x1CCF8, "8"},
+	{0x1CCF9, "9"},
+}
+
+func TestStrings_Unicode17CaseAndNorm(t *testing.T) {
+	for _, c := range unicode17UpperCases {
+		if got, want := js.ToUpper(string(c[0])), string(c[1]); got != want {
+			t.Errorf("ToUpper(U+%04X) = %q, want %q", c[0], got, want)
+		}
+	}
+	for _, c := range unicode17LowerCases {
+		if got, want := js.ToLower(string(c[0])), string(c[1]); got != want {
+			t.Errorf("ToLower(U+%04X) = %q, want %q", c[0], got, want)
+		}
+	}
+	for _, c := range unicode17NFDCases {
+		if got := js.Normalize(string(c.cp), "NFD"); got != c.want {
+			t.Errorf("NFD(U+%04X) = %q, want %q", c.cp, got, c.want)
+		}
+		if got := js.Normalize(string(c.cp), "NFC"); got != string(c.cp) {
+			t.Errorf("NFC(U+%04X) = %q, want the character", c.cp, got)
+		}
+	}
+	for _, c := range unicode17NFKCCases {
+		if got := js.Normalize(string(c.cp), "NFKC"); got != c.want {
+			t.Errorf("NFKC(U+%04X) = %q, want %q", c.cp, got, c.want)
+		}
+		if got := js.Normalize(string(c.cp), ""); got != string(c.cp) {
+			t.Errorf("Normalize default(U+%04X) = %q, want the character", c.cp, got)
+		}
+	}
+	for _, c := range unicode17NFKDCases {
+		if got := js.Normalize(string(c.cp), "NFKD"); got != c.want {
+			t.Errorf("NFKD(U+%04X) = %q, want %q", c.cp, got, c.want)
+		}
+	}
+}

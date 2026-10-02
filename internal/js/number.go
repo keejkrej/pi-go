@@ -342,7 +342,13 @@ func ParseInt(s string, radix int) float64 {
 	if end == 0 {
 		return math.NaN()
 	}
-	z := s[:end]
+	// V8 skips leading zeros before accumulating, which matters for the
+	// generic radices: the 32-bit part boundaries start at the first nonzero
+	// digit.
+	z := strings.TrimLeft(s[:end], "0")
+	if z == "" {
+		return sign * 0
+	}
 	var v float64
 	switch {
 	case radix == 10:

@@ -2,6 +2,7 @@ package omap_test
 
 import (
 	"encoding/json"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -250,6 +251,57 @@ func TestMap_MarshalJSONValues(t *testing.T) {
 	b, _ = json.Marshal(ints)
 	if got := string(b); got != `{"2":"two","10":"ten","-1":"neg"}` {
 		t.Errorf("int-key JSON = %s", got)
+	}
+}
+
+func TestMap_MarshalJSONMatchesJSONStringifySpecials(t *testing.T) {
+	// Node 24 JSON.stringify: U+2028/U+2029 are raw, U+0000 is \u0000,
+	// -0 is 0, NaN and ±Inf are null. A key whose text is \u2028 stays escaped.
+	neg := math.Copysign(0, -1)
+	m := omap.NewMap[string, any]()
+	m.Set("\u2028", 1)
+	m.Set("\u0000", 2)
+	m.Set(`\u2028`, 3)
+	m.Set("\u2029", 4)
+	m.Set("n", math.NaN())
+	m.Set("p", math.Inf(1))
+	m.Set("m", math.Inf(-1))
+	m.Set("z", neg)
+	m.Set("pz", &neg)
+	m.Set("list", []any{math.NaN(), neg, 1.0})
+	m.Set("nest", map[string]any{"q": math.Inf(-1)})
+	m.Set("f32", []float32{float32(math.NaN()), 1})
+	want := `{"` + "\u2028" + `":1,"\u0000":2,"\\u2028":3,"` + "\u2029" + `":4,"n":null,"p":null,"m":null,"z":0,"pz":0,"list":[null,0,1],"nest":{"q":null},"f32":[null,1]}`
+	b, err := m.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != want {
+		t.Errorf("JSON = %s\nwant   %s", b, want)
+	}
+	var buf strings.Builder
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(m); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSuffix(buf.String(), "\n"); got != want {
+		t.Errorf("Encoder JSON = %s\nwant   %s", got, want)
+	}
+
+	type box struct {
+		N float64 `json:"n"`
+	}
+	withZero := omap.NewMap[string, box]()
+	withZero.Set("a", box{N: neg})
+	b, err = withZero.MarshalJSON()
+	if err != nil || string(b) != `{"a":{"n":0}}` {
+		t.Fatalf("struct -0 JSON = %s, %v", b, err)
+	}
+	withNaN := omap.NewMap[string, box]()
+	withNaN.Set("a", box{N: math.NaN()})
+	if _, err := withNaN.MarshalJSON(); err == nil {
+		t.Fatal("struct NaN field encoded; encoding/json rejects it")
 	}
 }
 

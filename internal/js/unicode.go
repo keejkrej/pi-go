@@ -1,6 +1,7 @@
 package js
 
 import (
+	"strings"
 	"sync"
 
 	"golang.org/x/text/cases"
@@ -26,7 +27,7 @@ func ToUpper(s string) string {
 		}
 		return string(b)
 	}
-	return cases.Upper(language.Und).String(s)
+	return applyCase(cases.Upper(language.Und).String(s), unicode17Upper)
 }
 
 // ToLower returns s.toLowerCase(): locale-independent full Unicode case
@@ -46,7 +47,7 @@ func ToLower(s string) string {
 		}
 		return string(b)
 	}
-	return cases.Lower(language.Und).String(s)
+	return applyCase(cases.Lower(language.Und).String(s), unicode17Lower)
 }
 
 // Normalize returns s.normalize(form). form is "NFC", "NFD", "NFKC", or
@@ -57,13 +58,70 @@ func Normalize(s, form string) string {
 	case "", "NFC":
 		return norm.NFC.String(s)
 	case "NFD":
-		return norm.NFD.String(s)
+		return normWithExtra(norm.NFD, s, unicode17NFD)
 	case "NFKC":
-		return norm.NFKC.String(s)
+		return normWithExtra(norm.NFKC, s, unicode17NFKC)
 	case "NFKD":
-		return norm.NFKD.String(s)
+		return normWithExtra(norm.NFKD, s, unicode17NFKD)
 	}
 	panic(NewRangeError("The normalization form should be one of NFC, NFD, NFKC, NFKD."))
+}
+
+// applyCase overlays 1:1 mappings that the linked Unicode tables do not have.
+// extra's keys are source characters; a hit means this Go version left them unchanged.
+func applyCase(s string, extra map[rune]rune) string {
+	for i, r := range s {
+		if _, ok := extra[r]; !ok {
+			continue
+		}
+		var b strings.Builder
+		b.Grow(len(s))
+		b.WriteString(s[:i])
+		for _, r := range s[i:] {
+			if n, ok := extra[r]; ok {
+				b.WriteRune(n)
+			} else {
+				b.WriteRune(r)
+			}
+		}
+		return b.String()
+	}
+	return s
+}
+
+// normWithExtra applies decompositions missing from the linked Unicode tables,
+// then normalizes again so new combining marks join the canonical order.
+// NFC is not given a table: those characters are already their composed form.
+func normWithExtra(f norm.Form, s string, extra map[rune]string) string {
+	s = f.String(s)
+	for range 4 {
+		next := applyDecomp(s, extra)
+		if next == s {
+			return s
+		}
+		s = f.String(next)
+	}
+	return s
+}
+
+func applyDecomp(s string, extra map[rune]string) string {
+	for i, r := range s {
+		if _, ok := extra[r]; !ok {
+			continue
+		}
+		var b strings.Builder
+		b.Grow(len(s) + 8)
+		b.WriteString(s[:i])
+		for _, r := range s[i:] {
+			if sub, ok := extra[r]; ok {
+				b.WriteString(sub)
+			} else {
+				b.WriteRune(r)
+			}
+		}
+		return b.String()
+	}
+	return s
 }
 
 var jsCollators = sync.Pool{New: func() any { return collate.New(language.Und) }}

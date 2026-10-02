@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"math"
 	"reflect"
 	"slices"
 	"strconv"
@@ -379,14 +380,186 @@ func jsonKind(tok json.Token) string {
 }
 
 func encodeJSONValue(buf *bytes.Buffer, v any) error {
+	if cleaned, ok := jsonFinite(v); ok {
+		v = cleaned
+	}
 	var tmp bytes.Buffer
 	enc := json.NewEncoder(&tmp)
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(v); err != nil {
 		return err
 	}
-	buf.Write(bytes.TrimSuffix(tmp.Bytes(), []byte("\n")))
+	buf.Write(jsonStringify(bytes.TrimSuffix(tmp.Bytes(), []byte("\n"))))
 	return nil
+}
+
+// jsonFinite replaces NaN and ±Inf with null and clears -0, including inside
+// []any, map[string]any, and float slices. The bool reports whether v changed.
+// Struct fields are left alone: encoding/json still rejects a NaN or Inf field.
+// -0 in a struct is rewritten later from the "-0" token.
+func jsonFinite(v any) (any, bool) {
+	switch x := v.(type) {
+	case float32:
+		if y, ok := cleanFloat(float64(x), true); ok {
+			return y, true
+		}
+	case float64:
+		if y, ok := cleanFloat(x, false); ok {
+			return y, true
+		}
+	case *float32:
+		if x == nil {
+			return nil, false
+		}
+		if y, ok := cleanFloat(float64(*x), true); ok {
+			return y, true
+		}
+	case *float64:
+		if x == nil {
+			return nil, false
+		}
+		if y, ok := cleanFloat(*x, false); ok {
+			return y, true
+		}
+	case []float32:
+		for _, n := range x {
+			if _, ok := cleanFloat(float64(n), true); ok {
+				out := make([]any, len(x))
+				for i, m := range x {
+					if y, changed := cleanFloat(float64(m), true); changed {
+						out[i] = y
+					} else {
+						out[i] = m
+					}
+				}
+				return out, true
+			}
+		}
+	case []float64:
+		for _, n := range x {
+			if _, ok := cleanFloat(n, false); ok {
+				out := make([]any, len(x))
+				for i, m := range x {
+					if y, changed := cleanFloat(m, false); changed {
+						out[i] = y
+					} else {
+						out[i] = m
+					}
+				}
+				return out, true
+			}
+		}
+	case []any:
+		var out []any
+		for i, e := range x {
+			c, changed := jsonFinite(e)
+			if changed && out == nil {
+				out = make([]any, len(x))
+				copy(out, x)
+			}
+			if out != nil {
+				out[i] = c
+			}
+		}
+		if out != nil {
+			return out, true
+		}
+	case map[string]any:
+		var out map[string]any
+		for k, e := range x {
+			c, changed := jsonFinite(e)
+			if changed && out == nil {
+				out = make(map[string]any, len(x))
+				for k2, e2 := range x {
+					out[k2] = e2
+				}
+			}
+			if out != nil {
+				out[k] = c
+			}
+		}
+		if out != nil {
+			return out, true
+		}
+	}
+	return v, false
+}
+
+func cleanFloat(x float64, bits32 bool) (any, bool) {
+	if math.IsNaN(x) || math.IsInf(x, 0) {
+		return nil, true
+	}
+	if x == 0 && math.Signbit(x) {
+		if bits32 {
+			return float32(0), true
+		}
+		return 0.0, true
+	}
+	return nil, false
+}
+
+// jsonStringify rewrites encoding/json toward JSON.stringify: U+2028 and
+// U+2029 stay raw inside strings (Go escapes them as \u2028 / \u2029), and a
+// numeric -0 is 0. A literal "\\u2028" is left escaped.
+func jsonStringify(src []byte) []byte {
+	if !bytes.Contains(src, []byte(`\u202`)) && !bytes.Contains(src, []byte("-0")) {
+		return src
+	}
+	dst := make([]byte, 0, len(src))
+	for i := 0; i < len(src); {
+		if src[i] != '"' {
+			if src[i] == '-' && i+1 < len(src) && src[i+1] == '0' &&
+				(i == 0 || jsonDelim(src[i-1])) &&
+				(i+2 == len(src) || !jsonNumberCont(src[i+2])) {
+				dst = append(dst, '0')
+				i += 2
+				continue
+			}
+			dst = append(dst, src[i])
+			i++
+			continue
+		}
+		dst = append(dst, '"')
+		i++
+		for i < len(src) {
+			if src[i] == '"' {
+				dst = append(dst, '"')
+				i++
+				break
+			}
+			if src[i] == '\\' && i+5 < len(src) && src[i+1] == 'u' &&
+				src[i+2] == '2' && src[i+3] == '0' && src[i+4] == '2' &&
+				(src[i+5] == '8' || src[i+5] == '9') {
+				if src[i+5] == '8' {
+					dst = append(dst, 0xE2, 0x80, 0xA8)
+				} else {
+					dst = append(dst, 0xE2, 0x80, 0xA9)
+				}
+				i += 6
+				continue
+			}
+			if src[i] == '\\' && i+1 < len(src) {
+				dst = append(dst, '\\', src[i+1])
+				i += 2
+				continue
+			}
+			dst = append(dst, src[i])
+			i++
+		}
+	}
+	return dst
+}
+
+func jsonDelim(c byte) bool {
+	switch c {
+	case '{', '}', '[', ']', ':', ',', ' ', '\t', '\n', '\r':
+		return true
+	}
+	return false
+}
+
+func jsonNumberCont(c byte) bool {
+	return c == '.' || c == 'e' || c == 'E' || (c >= '0' && c <= '9')
 }
 
 // keyString converts a key to its JS property-key string.

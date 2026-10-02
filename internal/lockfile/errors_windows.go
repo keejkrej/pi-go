@@ -4,6 +4,7 @@ package lockfile
 
 import (
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -19,7 +20,13 @@ var lfWindowsErrnoCodes = map[syscall.Errno]string{
 	windows.ERROR_INVALID_DRIVE:         "ENOENT",
 	windows.ERROR_MOD_NOT_FOUND:         "ENOENT",
 	windows.ERROR_BAD_PATHNAME:          "ENOENT",
-	windows.ERROR_DIRECTORY:             "ENOTDIR",
+	windows.ERROR_DIRECTORY:             "ENOENT",
+	windows.ERROR_ENVVAR_NOT_FOUND:      "ENOENT",
+	windows.ERROR_INVALID_REPARSE_DATA:  "ENOENT",
+	windows.ERROR_NOT_ENOUGH_MEMORY:     "ENOMEM",
+	windows.ERROR_OUTOFMEMORY:           "ENOMEM",
+	windows.ERROR_INVALID_HANDLE:        "EBADF",
+	windows.ERROR_PIPE_BUSY:             "EBUSY",
 	windows.ERROR_FILE_EXISTS:           "EEXIST",
 	windows.ERROR_ALREADY_EXISTS:        "EEXIST",
 	windows.ERROR_DIR_NOT_EMPTY:         "ENOTEMPTY",
@@ -69,4 +76,24 @@ func lfRmdir(path string) error {
 		return &fs.PathError{Op: "rmdir", Path: path, Err: err}
 	}
 	return nil
+}
+
+// lfIsSymlink is libuv's S_IFLNK test for lstat on Windows: a reparse point counts as a link when it can be
+// read as one. That covers symlinks and junctions (mount points), which Go's Lstat no longer reports as
+// ModeSymlink.
+func lfIsSymlink(path string, info fs.FileInfo) bool {
+	if info.Mode()&fs.ModeSymlink != 0 {
+		return true
+	}
+	attrs, ok := info.Sys().(*syscall.Win32FileAttributeData)
+	if !ok || attrs.FileAttributes&syscall.FILE_ATTRIBUTE_REPARSE_POINT == 0 {
+		return false
+	}
+	_, err := os.Readlink(path)
+	return err == nil
+}
+
+// lfFileID is empty on Windows: dev/ino always return 0 there, so realpath skips the seenLinks cache.
+func lfFileID(fs.FileInfo) string {
+	return ""
 }

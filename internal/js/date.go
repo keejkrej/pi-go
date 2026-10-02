@@ -98,10 +98,58 @@ func timeClip(t float64) float64 {
 }
 
 // localToUTC interprets ms as local wall-clock time and returns epoch ms.
+// A gap or overlap uses the offset from before the transition, matching V8:
+// the earlier instant when the wall time occurs twice, and the pre-transition
+// offset when it does not occur. time.Date already does that for some zones
+// and the opposite for others; the adjustments below correct only the latter.
 func localToUTC(ms int64) float64 {
 	w := time.UnixMilli(ms).UTC()
 	l := time.Date(w.Year(), w.Month(), w.Day(), w.Hour(), w.Minute(), w.Second(), w.Nanosecond(), time.Local)
-	return float64(l.UnixMilli())
+	b := l.In(time.Local)
+	if !localWallEqual(b, w) {
+		// Displayed wall earlier than requested means time.Date applied the
+		// post-transition offset. Shift forward by that difference.
+		// A later displayed wall means it already used the pre-transition offset.
+		delta := localWallUTC(w).Sub(localWallUTC(b))
+		if delta > 0 {
+			l = l.Add(delta)
+		}
+		return float64(l.UnixMilli())
+	}
+	return float64(localEarlierOverlap(l, w).UnixMilli())
+}
+
+func localWallEqual(a, b time.Time) bool {
+	return a.Year() == b.Year() && a.Month() == b.Month() && a.Day() == b.Day() &&
+		a.Hour() == b.Hour() && a.Minute() == b.Minute() && a.Second() == b.Second() &&
+		a.Nanosecond() == b.Nanosecond()
+}
+
+func localWallUTC(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.UTC)
+}
+
+// localEarlierOverlap returns the earlier instant with the same wall clock
+// when that clock time is repeated. The offset gap is found from nearby zones.
+func localEarlierOverlap(l, w time.Time) time.Time {
+	_, off := l.Zone()
+	best := l
+	for _, probe := range []time.Duration{
+		-26 * time.Hour, -3 * time.Hour, -2 * time.Hour, -90 * time.Minute,
+		-time.Hour, -45 * time.Minute, -30 * time.Minute, -15 * time.Minute,
+		15 * time.Minute, 30 * time.Minute, time.Hour, 90 * time.Minute,
+		2 * time.Hour, 3 * time.Hour, 26 * time.Hour,
+	} {
+		_, o2 := l.Add(probe).Zone()
+		if o2 == off {
+			continue
+		}
+		e := l.Add(time.Duration(off-o2) * time.Second)
+		if e.Before(best) && localWallEqual(e.In(l.Location()), w) {
+			best = e
+		}
+	}
+	return best
 }
 
 // makeDay is V8's MakeDay (month is 0-based).

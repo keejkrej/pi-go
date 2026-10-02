@@ -4,11 +4,9 @@ package lockfile
 
 import (
 	"context"
-	"errors"
 	"io/fs"
 	"math"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 )
@@ -98,20 +96,28 @@ func getLockFile(file string, options *resolvedOptions) string {
 }
 
 func resolveCanonicalPath(file string, realpath bool) (string, error) {
-	abs, err := filepath.Abs(file)
-	if err != nil {
-		return "", toNodeError(err, "realpath", file)
-	}
 	if !realpath {
+		abs, err := lfPathResolve(file)
+		if err != nil {
+			return "", toNodeError(err, "realpath", file)
+		}
 		return abs, nil
 	}
 	// Use realpath to resolve symlinks
 	// It also resolves relative paths
-	resolved, err := filepath.EvalSymlinks(abs)
-	if err != nil {
-		return "", toNodeError(err, "lstat", abs)
-	}
-	return resolved, nil
+	return lfRealpath(file)
+}
+
+// lfCode is the Node error code a Go fs error surfaces as (libuv's errno translation).
+func lfCode(err error) string {
+	return toNodeError(err, "", "").Code
+}
+
+// lfMtimeMs is stat.mtime.getTime(): Node builds the Date from mtimeMs (sec*1e3 + nsec/1e6) rounded to the
+// nearest millisecond, where UnixMilli would truncate.
+func lfMtimeMs(info fs.FileInfo) int64 {
+	t := info.ModTime()
+	return int64(math.Round(float64(t.Unix())*1e3 + float64(t.Nanosecond())/1e6))
 }
 
 func newLockedError(file string) *Error {
@@ -136,7 +142,7 @@ func acquireLock(file string, options *resolvedOptions) (int64, string, error) {
 	}
 
 	// If error is not EEXIST then some other error occurred while locking
-	if !errors.Is(err, fs.ErrExist) {
+	if lfCode(err) != "EEXIST" {
 		return 0, "", toNodeError(err, "mkdir", lockfilePath)
 	}
 
@@ -149,7 +155,7 @@ func acquireLock(file string, options *resolvedOptions) (int64, string, error) {
 	if err != nil {
 		// Retry if the lockfile has been removed (meanwhile)
 		// Skip stale check to avoid recursiveness
-		if errors.Is(err, fs.ErrNotExist) {
+		if lfCode(err) == "ENOENT" {
 			return acquireLock(file, withStale(options, 0))
 		}
 		return 0, "", toNodeError(err, "stat", lockfilePath)
@@ -175,12 +181,12 @@ func withStale(options *resolvedOptions, stale float64) *resolvedOptions {
 }
 
 func isLockStale(stat fs.FileInfo, options *resolvedOptions) bool {
-	return float64(stat.ModTime().UnixMilli()) < float64(lfNow())-options.stale
+	return float64(lfMtimeMs(stat)) < float64(lfNow())-options.stale
 }
 
 func removeLock(file string, options *resolvedOptions) error {
 	// Remove lockfile, ignoring ENOENT errors
-	if err := lfRmdir(getLockFile(file, options)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err := lfRmdir(getLockFile(file, options)); err != nil && lfCode(err) != "ENOENT" {
 		return toNodeError(err, "rmdir", getLockFile(file, options))
 	}
 	return nil
@@ -201,7 +207,7 @@ func probeMtimePrecision(file string, options *resolvedOptions) (int64, string, 
 		if err != nil {
 			return 0, "", toNodeError(err, "stat", file)
 		}
-		return stat.ModTime().UnixMilli(), cachedPrecision, nil
+		return lfMtimeMs(stat), cachedPrecision, nil
 	}
 
 	// Set mtime by ceiling Date.now() to seconds + 5ms so that it's "not on the second"
@@ -217,7 +223,7 @@ func probeMtimePrecision(file string, options *resolvedOptions) (int64, string, 
 		return 0, "", toNodeError(err, "stat", file)
 	}
 
-	statMtime := stat.ModTime().UnixMilli()
+	statMtime := lfMtimeMs(stat)
 	precision := "ms"
 	if statMtime%1000 == 0 {
 		precision = "s"
@@ -275,7 +281,7 @@ func runUpdate(file string, lock *heldLock) {
 	// If it failed to update the lockfile, keep trying unless
 	// the lockfile was deleted or we are over the threshold
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) || isOverThreshold {
+		if lfCode(err) == "ENOENT" || isOverThreshold {
 			compromisedErr := toNodeError(err, "stat", lock.lockfilePath)
 			compromisedErr.Code = "ECOMPROMISED"
 			setLockAsCompromised(file, lock, compromisedErr)
@@ -287,7 +293,7 @@ func runUpdate(file string, lock *heldLock) {
 		return
 	}
 
-	isMtimeOurs := lock.mtime == stat.ModTime().UnixMilli()
+	isMtimeOurs := lock.mtime == lfMtimeMs(stat)
 	if !isMtimeOurs {
 		setLockAsCompromised(file, lock, &Error{Code: "ECOMPROMISED", Message: "Unable to update lock within the stale threshold"})
 		return
@@ -307,7 +313,7 @@ func runUpdate(file string, lock *heldLock) {
 	// If it failed to update the lockfile, keep trying unless
 	// the lockfile was deleted or we are over the threshold
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) || isOverThreshold {
+		if lfCode(err) == "ENOENT" || isOverThreshold {
 			compromisedErr := toNodeError(err, "utime", lock.lockfilePath)
 			compromisedErr.Code = "ECOMPROMISED"
 			setLockAsCompromised(file, lock, compromisedErr)
@@ -572,7 +578,7 @@ func check(file string, options *Options) (bool, error) {
 	stat, err := os.Stat(getLockFile(file, o))
 	if err != nil {
 		// If does not exist, file is not locked. Otherwise, callback with error
-		if errors.Is(err, fs.ErrNotExist) {
+		if lfCode(err) == "ENOENT" {
 			return false, nil
 		}
 		return false, toNodeError(err, "stat", getLockFile(file, o))

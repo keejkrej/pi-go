@@ -1,0 +1,1575 @@
+{
+  "results": [
+    {
+      "name": "basic",
+      "patterns": [
+        "*.log",
+        "!important.log",
+        "dir/",
+        "/root",
+        "foo/**/bar",
+        "# cmt",
+        "",
+        "   ",
+        "\\"
+      ],
+      "raw": null,
+      "paths": [
+        {
+          "path": "a.log",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*.log",
+            "negative": false
+          }
+        },
+        {
+          "path": "dir/a.log",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "dir/",
+            "negative": false
+          }
+        },
+        {
+          "path": "important.log",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": true,
+            "hasRule": false
+          }
+        },
+        {
+          "path": "dir/important.log",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "dir/",
+            "negative": false
+          }
+        },
+        {
+          "path": "dir/x",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "dir/",
+            "negative": false
+          }
+        },
+        {
+          "path": "dir",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": false,
+            "hasRule": false
+          }
+        },
+        {
+          "path": "root",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "/root",
+            "negative": false
+          }
+        },
+        {
+          "path": "a/root",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": false,
+            "hasRule": false
+          }
+        },
+        {
+          "path": "foo/bar",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "foo/**/bar",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo/a/bar",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "foo/**/bar",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo/a/b/bar",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "foo/**/bar",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo/bar/baz",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "foo/**/bar",
+            "negative": false
+          }
+        },
+        {
+          "path": "keep.txt",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": false,
+            "hasRule": false
+          }
+        }
+      ],
+      "filtered": [
+        "important.log",
+        "dir",
+        "a/root",
+        "keep.txt"
+      ]
+    },
+    {
+      "name": "stars",
+      "patterns": [
+        "*",
+        "**",
+        "***",
+        "****",
+        "a***",
+        "***b",
+        "a***b",
+        "foo*",
+        "*foo",
+        "?.log",
+        "foo*bar*baz*",
+        "*x*y*z"
+      ],
+      "raw": null,
+      "paths": [
+        {
+          "path": "",
+          "ignoresError": "path must not be empty",
+          "testError": "path must not be empty"
+        },
+        {
+          "path": "a",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "a.log",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "ab",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "foobar",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "x.log",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "fooXbarYbaz",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "fooXbarYbazZ",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "xyz",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "axbycz",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "xaybz",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "aaab",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "b",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "aXb",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "aXXXb",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo*",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        }
+      ],
+      "filterError": "path must not be empty"
+    },
+    {
+      "name": "globstar",
+      "patterns": [
+        "**/foo",
+        "**/*",
+        "**/*.js",
+        "**/**",
+        "foo/**",
+        "a/**/b",
+        "a/**/",
+        "a/**/**/b",
+        "foo/**/bar",
+        "foo/**/bar/",
+        "a/***/b",
+        "foo/***",
+        "dir/**",
+        "foo/*/bar",
+        "a/**/b/**"
+      ],
+      "raw": null,
+      "paths": [
+        {
+          "path": "foo",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/foo",
+            "negative": false
+          }
+        },
+        {
+          "path": "a/foo",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/*",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo/a",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/foo",
+            "negative": false
+          }
+        },
+        {
+          "path": "a.js",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/*",
+            "negative": false
+          }
+        },
+        {
+          "path": ".js",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/*",
+            "negative": false
+          }
+        },
+        {
+          "path": "a/b.js",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/*",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo/a",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/foo",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo/a/b",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/foo",
+            "negative": false
+          }
+        },
+        {
+          "path": "a/b",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/*",
+            "negative": false
+          }
+        },
+        {
+          "path": "a/x/b",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/*",
+            "negative": false
+          }
+        },
+        {
+          "path": "a/b/c",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/*",
+            "negative": false
+          }
+        },
+        {
+          "path": "a/",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/*",
+            "negative": false
+          }
+        },
+        {
+          "path": "a/b/",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/*",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo/bar",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/foo",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo/a/bar",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/foo",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo/bar/",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/foo",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo/a/bar/",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/foo",
+            "negative": false
+          }
+        },
+        {
+          "path": "a/b/c/d",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/*",
+            "negative": false
+          }
+        },
+        {
+          "path": "dir/a",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/*",
+            "negative": false
+          }
+        },
+        {
+          "path": "dir",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/*",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo/x/bar",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/foo",
+            "negative": false
+          }
+        },
+        {
+          "path": "a/c/b",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/*",
+            "negative": false
+          }
+        },
+        {
+          "path": "a/b/x",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "**/*",
+            "negative": false
+          }
+        }
+      ],
+      "filtered": []
+    },
+    {
+      "name": "negation",
+      "patterns": [
+        "*",
+        "!keep",
+        "dir/*",
+        "!dir/keep",
+        "!dir/sub/keep",
+        "secret/**",
+        "!secret/ok"
+      ],
+      "raw": null,
+      "paths": [
+        {
+          "path": "a",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "keep",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": true,
+            "hasRule": false
+          }
+        },
+        {
+          "path": "dir/a",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "dir/keep",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "dir/sub/keep",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "dir/sub/a",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "secret/a",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "secret/ok",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        },
+        {
+          "path": "secret/ok/no",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*",
+            "negative": false
+          }
+        }
+      ],
+      "filtered": [
+        "keep"
+      ]
+    },
+    {
+      "name": "class",
+      "patterns": [
+        "[a-c]",
+        "[[:alpha:]]",
+        "[c-a]",
+        "[]]",
+        "[]",
+        "[[:digit:]].txt",
+        "[a-c-e]",
+        "[.-0]",
+        "[/]",
+        "[!a]",
+        "[^a]",
+        "[[]",
+        "[a-]",
+        "[-a]",
+        "foo[abc]bar",
+        "[[:blank:]]",
+        "[[:space:]]",
+        "[[:punct:]]",
+        "[[:graph:]]",
+        "[[:print:]]",
+        "[[:alnum:]]",
+        "[[:xdigit:]]",
+        "*[a-c]*"
+      ],
+      "raw": null,
+      "paths": [
+        {
+          "path": "a",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "[a-c]",
+            "negative": false
+          }
+        },
+        {
+          "path": "b",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "[a-c]",
+            "negative": false
+          }
+        },
+        {
+          "path": "c",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "[a-c]",
+            "negative": false
+          }
+        },
+        {
+          "path": "d",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "[[:alpha:]]",
+            "negative": false
+          }
+        },
+        {
+          "path": "e",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "[[:alpha:]]",
+            "negative": false
+          }
+        },
+        {
+          "path": "A",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "[a-c]",
+            "negative": false
+          }
+        },
+        {
+          "path": "1",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "[!a]",
+            "negative": false
+          }
+        },
+        {
+          "path": "]",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "[]]",
+            "negative": false
+          }
+        },
+        {
+          "path": "[",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "[!a]",
+            "negative": false
+          }
+        },
+        {
+          "path": "/",
+          "ignoresError": "path should be a `path.relative()`d string, but got \"/\"",
+          "testError": "path should be a `path.relative()`d string, but got \"/\""
+        },
+        {
+          "path": ".",
+          "ignoresError": "path should be a `path.relative()`d string, but got \".\"",
+          "testError": "path should be a `path.relative()`d string, but got \".\""
+        },
+        {
+          "path": "0",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "[.-0]",
+            "negative": false
+          }
+        },
+        {
+          "path": "fooabar",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "foo[abc]bar",
+            "negative": false
+          }
+        },
+        {
+          "path": "foobbar",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "foo[abc]bar",
+            "negative": false
+          }
+        },
+        {
+          "path": "foodbar",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*[a-c]*",
+            "negative": false
+          }
+        },
+        {
+          "path": "1.txt",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "[[:digit:]].txt",
+            "negative": false
+          }
+        },
+        {
+          "path": "a.txt",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*[a-c]*",
+            "negative": false
+          }
+        },
+        {
+          "path": " ",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "[!a]",
+            "negative": false
+          }
+        },
+        {
+          "path": "\t",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "[!a]",
+            "negative": false
+          }
+        },
+        {
+          "path": "!",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "[!a]",
+            "negative": false
+          }
+        },
+        {
+          "path": "~",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "[!a]",
+            "negative": false
+          }
+        },
+        {
+          "path": "ab",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*[a-c]*",
+            "negative": false
+          }
+        },
+        {
+          "path": "za",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*[a-c]*",
+            "negative": false
+          }
+        }
+      ],
+      "filterError": "path should be a `path.relative()`d string, but got \"/\""
+    },
+    {
+      "name": "escape",
+      "patterns": [
+        "\\*",
+        "foo\\*",
+        "\\#c",
+        "foo\\ ",
+        "foo\\\\ bar",
+        "a b",
+        "\\!",
+        "\\#hash",
+        "foo\\[bar]",
+        "foo\\?",
+        "\\?",
+        "a\\*b",
+        "foo\\ bar",
+        "\\\\\\",
+        "\\\\\\\\",
+        "a\\\\\\"
+      ],
+      "raw": null,
+      "paths": [
+        {
+          "path": "*",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "\\*",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo*",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "foo\\*",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": false,
+            "hasRule": false
+          }
+        },
+        {
+          "path": "#c",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "\\#c",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo ",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "foo\\ ",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": false,
+            "hasRule": false
+          }
+        },
+        {
+          "path": "foo\\ bar",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": false,
+            "hasRule": false
+          }
+        },
+        {
+          "path": "foo bar",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "foo\\ bar",
+            "negative": false
+          }
+        },
+        {
+          "path": "a b",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "a b",
+            "negative": false
+          }
+        },
+        {
+          "path": "!foo",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": false,
+            "hasRule": false
+          }
+        },
+        {
+          "path": "#hash",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "\\#hash",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo[bar]",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "foo\\[bar]",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo?bar",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": false,
+            "hasRule": false
+          }
+        },
+        {
+          "path": "?",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "\\?",
+            "negative": false
+          }
+        },
+        {
+          "path": "a*b",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "a\\*b",
+            "negative": false
+          }
+        },
+        {
+          "path": "ab",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": false,
+            "hasRule": false
+          }
+        },
+        {
+          "path": "undefined",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": false,
+            "hasRule": false
+          }
+        },
+        {
+          "path": "\\undefined",
+          "ignoresError": "path should be a `path.relative()`d string, but got \"\\undefined\"",
+          "testError": "path should be a `path.relative()`d string, but got \"\\undefined\""
+        },
+        {
+          "path": "\\\\",
+          "ignoresError": "path should be a `path.relative()`d string, but got \"\\\\\"",
+          "testError": "path should be a `path.relative()`d string, but got \"\\\\\""
+        }
+      ],
+      "filterError": "path should be a `path.relative()`d string, but got \"\\undefined\""
+    },
+    {
+      "name": "anchor",
+      "patterns": [
+        "foo/",
+        "/foo",
+        "foo/*",
+        "!foo",
+        "!dir/file",
+        "foo/bar",
+        "foo/bar/",
+        "f[o]o"
+      ],
+      "raw": null,
+      "paths": [
+        {
+          "path": "foo",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "f[o]o",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo/",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "f[o]o",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo/a",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "f[o]o",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo/a/b",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "f[o]o",
+            "negative": false
+          }
+        },
+        {
+          "path": "a/foo",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "f[o]o",
+            "negative": false
+          }
+        },
+        {
+          "path": "dir/file",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": true,
+            "hasRule": false
+          }
+        },
+        {
+          "path": "dir/file/x",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": false,
+            "hasRule": false
+          }
+        },
+        {
+          "path": "foo/bar",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "f[o]o",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo/bar/",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "f[o]o",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo/bar/baz",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "f[o]o",
+            "negative": false
+          }
+        },
+        {
+          "path": "fo",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": false,
+            "hasRule": false
+          }
+        }
+      ],
+      "filtered": [
+        "dir/file",
+        "dir/file/x",
+        "fo"
+      ]
+    },
+    {
+      "name": "multiline",
+      "patterns": null,
+      "raw": "*.o\n*.a\n!keep.o\r\n#c\n\n  \nfoo\\\nbar",
+      "paths": [
+        {
+          "path": "a.o",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*.o",
+            "negative": false
+          }
+        },
+        {
+          "path": "b.a",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*.a",
+            "negative": false
+          }
+        },
+        {
+          "path": "keep.o",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": true,
+            "hasRule": false
+          }
+        },
+        {
+          "path": "dir/a.o",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "*.o",
+            "negative": false
+          }
+        },
+        {
+          "path": "bar",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "bar",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": false,
+            "hasRule": false
+          }
+        }
+      ],
+      "filtered": [
+        "keep.o",
+        "foo"
+      ]
+    },
+    {
+      "name": "tabs",
+      "patterns": [
+        "\t",
+        "foo\t",
+        "foo \t"
+      ],
+      "raw": null,
+      "paths": [
+        {
+          "path": "\t",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "\t",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo\t",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "foo\t",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": false,
+            "hasRule": false
+          }
+        },
+        {
+          "path": "foo \t",
+          "ignores": true,
+          "test": {
+            "ignored": true,
+            "unignored": false,
+            "hasRule": true,
+            "pattern": "foo \t",
+            "negative": false
+          }
+        },
+        {
+          "path": "foo ",
+          "ignores": false,
+          "test": {
+            "ignored": false,
+            "unignored": false,
+            "hasRule": false
+          }
+        }
+      ],
+      "filtered": [
+        "foo",
+        "foo "
+      ]
+    }
+  ],
+  "panicResults": [
+    {
+      "path": "",
+      "ok": false,
+      "message": "path must not be empty"
+    },
+    {
+      "path": "/",
+      "ok": false,
+      "message": "path should be a `path.relative()`d string, but got \"/\""
+    },
+    {
+      "path": "/foo",
+      "ok": false,
+      "message": "path should be a `path.relative()`d string, but got \"/foo\""
+    },
+    {
+      "path": ".",
+      "ok": false,
+      "message": "path should be a `path.relative()`d string, but got \".\""
+    },
+    {
+      "path": "..",
+      "ok": false,
+      "message": "path should be a `path.relative()`d string, but got \"..\""
+    },
+    {
+      "path": "./a",
+      "ok": false,
+      "message": "path should be a `path.relative()`d string, but got \"./a\""
+    },
+    {
+      "path": "../a",
+      "ok": false,
+      "message": "path should be a `path.relative()`d string, but got \"../a\""
+    },
+    {
+      "path": "./",
+      "ok": false,
+      "message": "path should be a `path.relative()`d string, but got \"./\""
+    },
+    {
+      "path": "../",
+      "ok": false,
+      "message": "path should be a `path.relative()`d string, but got \"../\""
+    },
+    {
+      "path": ".foo",
+      "ok": true
+    },
+    {
+      "path": "..a",
+      "ok": true
+    },
+    {
+      "path": "foo/bar",
+      "ok": true
+    },
+    {
+      "path": "foo//bar",
+      "ok": true
+    }
+  ]
+}

@@ -5,6 +5,7 @@
 package lockfile
 
 import (
+	"fmt"
 	"io/fs"
 	"syscall"
 )
@@ -59,4 +60,18 @@ func lfRmdir(path string) error {
 		}
 		return nil
 	}
+}
+
+// lfIsSymlink reports whether lstat saw a symbolic link (stats.isSymbolicLink()).
+func lfIsSymlink(_ string, info fs.FileInfo) bool {
+	return info.Mode()&fs.ModeSymlink != 0
+}
+
+// lfFileID is realpath's seenLinks key `${dev}:${ino}` (any stable encoding works; it is only a cache key).
+func lfFileID(info fs.FileInfo) string {
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return ""
+	}
+	return fmt.Sprint(st.Dev, ":", st.Ino)
 }

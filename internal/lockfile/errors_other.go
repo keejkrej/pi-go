@@ -25,3 +25,13 @@ func lfRmdir(path string) error {
 	}
 	return os.Remove(path)
 }
+
+// lfIsSymlink reports whether lstat saw a symbolic link (stats.isSymbolicLink()).
+func lfIsSymlink(_ string, info fs.FileInfo) bool {
+	return info.Mode()&fs.ModeSymlink != 0
+}
+
+// lfFileID is realpath's seenLinks key; dev/ino are unavailable here, so links are always re-read.
+func lfFileID(fs.FileInfo) string {
+	return ""
+}
