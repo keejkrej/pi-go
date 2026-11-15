@@ -269,11 +269,11 @@ func TestScrollViewFollowEndScrollLockAndJumpToBottom(t *testing.T) {
 	if !sv.AtEnd() {
 		t.Fatal("expected ScrollView with FollowEnd to start at end")
 	}
-	if tt.HasText("↓ Jump to bottom") {
-		t.Fatal("did not expect jump button while at bottom")
+	if tt.HasText("Scroll to bottom") {
+		t.Fatal("did not expect scroll-to-bottom button while at bottom")
 	}
 
-	// Scroll upward away from bottom -> pauses follow-end & reveals jump pill
+	// Scroll upward away from bottom -> pauses follow-end & reveals centered 32x32 icon button
 	tt.Move(240, 160)
 	tt.Wheel(240, 160, 0, -400)
 	tt.Advance(400 * time.Millisecond)
@@ -281,13 +281,20 @@ func TestScrollViewFollowEndScrollLockAndJumpToBottom(t *testing.T) {
 	if sv.AtEnd() || !sv.Locked() {
 		t.Fatalf("expected scroll-up lock (atEnd=%v locked=%v)", sv.AtEnd(), sv.Locked())
 	}
-	if !tt.HasText("↓ Jump to bottom") {
-		t.Fatalf("expected floating Jump to bottom pill when scrolled up, texts=%v", tt.Texts())
+	if tt.HasText("↓") {
+		t.Fatalf("did not expect duplicate arrow text on scroll-to-bottom button, texts=%v", tt.Texts())
+	}
+	rect, ok := tt.Find("Scroll to bottom")
+	if !ok {
+		t.Fatalf("expected floating Scroll to bottom button when scrolled up, texts=%v", tt.Texts())
+	}
+	if rect.W != 32 || rect.H != 32 || rect.X != 224 {
+		t.Fatalf("Scroll to bottom rect = %+v, want centered 32x32 at X=224", rect)
 	}
 
-	// Clicking Jump to bottom returns to end & hides pill
-	if err := tt.Click("↓ Jump to bottom"); err != nil {
-		t.Fatalf("click Jump to bottom failed: %v", err)
+	// Clicking Scroll to bottom returns to end & hides button
+	if err := tt.Click("Scroll to bottom"); err != nil {
+		t.Fatalf("click Scroll to bottom failed: %v", err)
 	}
 	tt.Advance(400 * time.Millisecond)
 	tt.Frame()
