@@ -22,10 +22,21 @@ type GuiTheme struct {
 	SurfacePressed  ui.Color
 	OverlayBackdrop ui.Color
 
+	// Waku surface & chrome hierarchy tokens
+	SidebarBg     ui.Color
+	SidebarItemBg ui.Color
+	SidebarBorder ui.Color
+	Raised        ui.Color
+	ComposerBg    ui.Color
+	Inset         ui.Color
+	Overlay       ui.Color
+	OverlayStrong ui.Color
+
 	// Borders
 	Border       ui.Color
 	BorderAccent ui.Color
 	BorderMuted  ui.Color
+	BorderStrong ui.Color
 
 	// Foreground and interactive accents
 	Accent        ui.Color
@@ -33,12 +44,21 @@ type GuiTheme struct {
 	AccentPressed ui.Color
 	AccentText    ui.Color
 	Text          ui.Color
+	TextSecondary ui.Color
+	TextTertiary  ui.Color
+	TextGhost     ui.Color
 	Muted         ui.Color
 	Dim           ui.Color
 	SelectedBg    ui.Color
 	SelectedText  ui.Color
 	FocusRing     ui.Color
 	Selection     ui.Color
+	Inverse       ui.Color
+	OnInverse     ui.Color
+	Gauge         ui.Color
+	ResizeHandle  ui.Color
+	CodeText      ui.Color
+	CodeWash      ui.Color
 
 	// Status colors
 	Success ui.Color
@@ -121,29 +141,33 @@ type GuiTheme struct {
 	Spacing      float32
 }
 
-func mustOKHSL(spec string) ui.Color {
-	c, ok := ParseOKHSL(spec)
-	if !ok {
-		panic("gui: invalid builtin okhsl color " + spec)
-	}
-	return c
-}
-
-// DarkGuiTheme returns the default dark theme matching pi's dark.json tokens
-// adapted for native desktop surfaces.
+// DarkGuiTheme returns the default Waku-aligned dark theme.
 func DarkGuiTheme() *GuiTheme {
-	text := mustOKHSL("okhsl(234 3% 89%)")
-	muted := mustOKHSL("okhsl(229 6% 67%)")
-	violet := mustOKHSL("okhsl(295 50% 67%)")
-	blue := mustOKHSL("okhsl(232 54% 67%)")
-	green := mustOKHSL("okhsl(159 59% 67%)")
-	red := mustOKHSL("okhsl(20 72% 67%)")
-	yellow := mustOKHSL("okhsl(83 88% 67%)")
-	blueBg := mustOKHSL("okhsl(233 41% 24%)")
+	bg := ui.Hex("#1A1A1A")
+	surface := ui.Hex("#1A1A1A")
+	sidebarBg := ui.Hex("#181818")
+	raised := ui.Hex("#232323")
+	composerBg := ui.Hex("#212121")
+	inset := ui.Hex("#151515")
 
-	bg := mustOKHSL("okhsl(262 14% 14%)")
-	surface := mustOKHSL("okhsl(262 14% 17%)")
-	elevated := mustOKHSL("okhsl(264 13% 21%)")
+	text := ui.Hex("#E2E2E2")
+	textSecondary := ui.Hex("#A3A3A3")
+	textTertiary := ui.Hex("#7D7D7D")
+	textGhost := ui.Hex("#575757")
+
+	accent := ui.Hex("#E2795B")
+	gauge := ui.Hex("#3B82F6")
+	codeText := ui.Hex("#E0A882")
+	codeWash := ui.RGBA(227, 229, 232, 0.08)
+
+	green := ui.Hex("#62C987")
+	yellow := ui.Hex("#E0B36A")
+	red := ui.Hex("#E2726A")
+
+	border := ui.RGBA(227, 229, 232, 0.07)
+	borderStrong := ui.RGBA(227, 229, 232, 0.14)
+	overlay := ui.RGBA(227, 229, 232, 0.05)
+	overlayStrong := ui.RGBA(227, 229, 232, 0.09)
 
 	return &GuiTheme{
 		Name: "dark",
@@ -151,114 +175,146 @@ func DarkGuiTheme() *GuiTheme {
 
 		Background:      bg,
 		Surface:         surface,
-		SurfaceElevated: elevated,
-		SurfaceHover:    surface.MixOklab(text, 0.08),
-		SurfacePressed:  surface.MixOklab(text, 0.14),
-		OverlayBackdrop: ui.RGBA(0, 0, 0, 0.55),
+		SurfaceElevated: raised,
+		SurfaceHover:    overlay,
+		SurfacePressed:  overlayStrong,
+		OverlayBackdrop: ui.RGBA(0, 0, 0, 0.48),
 
-		Border:       mustOKHSL("okhsl(231 57% 65%)").Alpha(0.35),
-		BorderAccent: mustOKHSL("okhsl(295 53% 64%)"),
-		BorderMuted:  mustOKHSL("okhsl(229 8% 53%)").Alpha(0.45),
+		SidebarBg:     sidebarBg,
+		SidebarItemBg: ui.RGBA(240, 240, 240, 0.06),
+		SidebarBorder: ui.Hex("#292929"),
+		Raised:        raised,
+		ComposerBg:    composerBg,
+		Inset:         inset,
+		Overlay:       overlay,
+		OverlayStrong: overlayStrong,
 
-		Accent:        violet,
-		AccentHover:   violet.MixOklab(text, 0.12),
-		AccentPressed: violet.MixOklab(bg, 0.15),
-		AccentText:    ui.RGB(18, 16, 24),
+		Border:       border,
+		BorderAccent: accent,
+		BorderMuted:  ui.RGBA(227, 229, 232, 0.05),
+		BorderStrong: borderStrong,
+
+		Accent:        accent,
+		AccentHover:   accent.MixOklab(text, 0.12),
+		AccentPressed: accent.MixOklab(bg, 0.15),
+		AccentText:    ui.RGB(255, 255, 255),
 		Text:          text,
-		Muted:         muted,
-		Dim:           mustOKHSL("okhsl(229 8% 56%)"),
-		SelectedBg:    blueBg,
+		TextSecondary: textSecondary,
+		TextTertiary:  textTertiary,
+		TextGhost:     textGhost,
+		Muted:         textSecondary,
+		Dim:           textTertiary,
+		SelectedBg:    ui.RGBA(240, 240, 240, 0.08),
 		SelectedText:  text,
-		FocusRing:     violet,
-		Selection:     blueBg.MixOklab(violet, 0.25).Alpha(0.75),
+		FocusRing:     gauge.Alpha(0.75),
+		Selection:     gauge.Alpha(0.28),
+		Inverse:       ui.Hex("#E7E9EC"),
+		OnInverse:     ui.Hex("#17181C"),
+		Gauge:         gauge,
+		ResizeHandle:  gauge,
+		CodeText:      codeText,
+		CodeWash:      codeWash,
 
 		Success: green,
 		Warning: yellow,
 		Error:   red,
 
-		ScrollbarTrack:  mustOKHSL("okhsl(237 7% 33%)"),
-		ScrollbarThumb:  mustOKHSL("okhsl(232 7% 65%)"),
-		SearchMatchBg:   mustOKHSL("okhsl(53 51% 24%)"),
-		SearchMatchText: muted,
+		ScrollbarTrack:  ui.Transparent,
+		ScrollbarThumb:  ui.RGBA(227, 229, 232, 0.18),
+		SearchMatchBg:   ui.RGBA(224, 179, 106, 0.25),
+		SearchMatchText: text,
 
-		UserMessageBg:      blueBg,
+		UserMessageBg:      raised,
 		UserMessageText:    text,
-		CustomMessageBg:    mustOKHSL("okhsl(295 42% 24%)"),
-		CustomMessageText:  muted,
-		CustomMessageLabel: violet,
+		CustomMessageBg:    raised,
+		CustomMessageText:  textSecondary,
+		CustomMessageLabel: accent,
 
-		ToolPendingBg: mustOKHSL("okhsl(229 5% 24%)"),
-		ToolSuccessBg: mustOKHSL("okhsl(158 46% 25%)"),
-		ToolErrorBg:   mustOKHSL("okhsl(19 54% 25%)"),
+		ToolPendingBg: ui.RGBA(227, 229, 232, 0.03),
+		ToolSuccessBg: ui.RGBA(227, 229, 232, 0.025),
+		ToolErrorBg:   ui.RGBA(226, 114, 106, 0.08),
 		ToolTitle:     text,
-		ToolOutput:    muted,
+		ToolOutput:    textSecondary,
 
-		BashMode:     mustOKHSL("okhsl(159 64% 65%)"),
-		ThinkingText: mustOKHSL("okhsl(226 7% 65%)"),
+		BashMode:     accent,
+		ThinkingText: textSecondary,
 
-		ThinkingOff:     mustOKHSL("okhsl(229 8% 49%)"),
-		ThinkingMinimal: mustOKHSL("okhsl(232 20% 52%)"),
-		ThinkingLow:     mustOKHSL("okhsl(232 45% 54%)"),
-		ThinkingMedium:  mustOKHSL("okhsl(263 59% 56%)"),
-		ThinkingHigh:    mustOKHSL("okhsl(295 73% 59%)"),
-		ThinkingXHigh:   mustOKHSL("okhsl(337 81% 61%)"),
-		ThinkingMax:     mustOKHSL("okhsl(20 99% 63%)"),
+		ThinkingOff:     textGhost,
+		ThinkingMinimal: textTertiary,
+		ThinkingLow:     ui.Hex("#60A5FA"),
+		ThinkingMedium:  ui.Hex("#A78BFA"),
+		ThinkingHigh:    accent,
+		ThinkingXHigh:   yellow,
+		ThinkingMax:     red,
 
-		MdHeading:         yellow,
-		MdLink:            blue,
-		MdLinkUrl:         muted,
-		MdCode:            violet,
-		MdCodeBg:          elevated,
-		MdCodeBlockBg:     mustOKHSL("okhsl(262 14% 12%)"),
-		MdCodeBlockBorder: mustOKHSL("okhsl(229 8% 53%)").Alpha(0.4),
-		MdQuote:           muted,
-		MdQuoteBorder:     muted,
-		MdHr:              muted,
-		MdListBullet:      violet,
+		MdHeading:         text,
+		MdLink:            ui.Hex("#60A5FA"),
+		MdLinkUrl:         textTertiary,
+		MdCode:            codeText,
+		MdCodeBg:          codeWash,
+		MdCodeBlockBg:     inset,
+		MdCodeBlockBorder: borderStrong,
+		MdQuote:           textSecondary,
+		MdQuoteBorder:     borderStrong,
+		MdHr:              border,
+		MdListBullet:      textTertiary,
 
 		DiffAdded:     green,
 		DiffRemoved:   red,
-		DiffModified:  blue,
-		DiffContext:   muted,
-		DiffAddedBg:   mustOKHSL("okhsl(158 46% 22%)"),
-		DiffRemovedBg: mustOKHSL("okhsl(19 54% 22%)"),
+		DiffModified:  gauge,
+		DiffContext:   textSecondary,
+		DiffAddedBg:   ui.RGBA(98, 201, 135, 0.13),
+		DiffRemovedBg: ui.RGBA(226, 114, 106, 0.13),
 
-		SyntaxComment:     muted,
-		SyntaxKeyword:     blue,
-		SyntaxFunction:    yellow,
-		SyntaxVariable:    mustOKHSL("okhsl(202 58% 67%)"),
-		SyntaxString:      mustOKHSL("okhsl(52 67% 67%)"),
+		SyntaxComment:     textTertiary,
+		SyntaxKeyword:     ui.Hex("#E2795B"),
+		SyntaxFunction:    ui.Hex("#E0B36A"),
+		SyntaxVariable:    ui.Hex("#93C5FD"),
+		SyntaxString:      ui.Hex("#A3E635"),
 		SyntaxNumber:      green,
-		SyntaxType:        violet,
-		SyntaxOperator:    muted,
-		SyntaxPunctuation: muted,
+		SyntaxType:        ui.Hex("#C4B5FD"),
+		SyntaxOperator:    textSecondary,
+		SyntaxPunctuation: textSecondary,
 		SyntaxConstant:    green,
-		SyntaxProperty:    mustOKHSL("okhsl(202 58% 67%)"),
-		SyntaxTag:         violet,
+		SyntaxProperty:    ui.Hex("#93C5FD"),
+		SyntaxTag:         accent,
 		SyntaxAttribute:   yellow,
 
-		FontSize:     14,
-		MonoFontSize: 13,
+		FontSize:     13.5,
+		MonoFontSize: 12.5,
 		Radius:       8,
 		Spacing:      4,
 	}
 }
 
-// LightGuiTheme returns the default light theme matching pi's light.json tokens
-// adapted for native desktop surfaces.
+// LightGuiTheme returns the default Waku-aligned light theme.
 func LightGuiTheme() *GuiTheme {
-	text := mustOKHSL("okhsl(225 5% 27%)")
-	muted := mustOKHSL("okhsl(229 8% 47%)")
-	violet := mustOKHSL("okhsl(295 60% 46%)")
-	blue := mustOKHSL("okhsl(231 68% 47%)")
-	green := mustOKHSL("okhsl(159 75% 46%)")
-	red := mustOKHSL("okhsl(20 91% 47%)")
-	yellow := mustOKHSL("okhsl(83 99% 47%)")
-	blueBg := mustOKHSL("okhsl(235 19% 91%)")
+	bg := ui.Hex("#F6F5F6")
+	surface := ui.Hex("#F6F5F6")
+	sidebarBg := ui.Hex("#F3F3F3")
+	raised := ui.Hex("#ECECEC")
+	composerBg := ui.Hex("#FFFFFF")
+	inset := ui.Hex("#EFEFEF")
+	codeBlockBg := ui.Hex("#FFFFFF")
 
-	bg := mustOKHSL("okhsl(17 3% 96%)")
-	surface := mustOKHSL("okhsl(17 5% 98%)")
-	elevated := mustOKHSL("okhsl(17 5% 100%)")
+	text := ui.Hex("#242424")
+	textSecondary := ui.Hex("#666666")
+	textTertiary := ui.Hex("#858585")
+	textGhost := ui.Hex("#A4A4A4")
+
+	accent := ui.Hex("#C85F44")
+	gauge := ui.Hex("#2563EB")
+	codeText := ui.Hex("#9A5528")
+	codeWash := ui.RGBA(28, 30, 34, 0.07)
+
+	green := ui.Hex("#2F8F52")
+	yellow := ui.Hex("#A66B20")
+	red := ui.Hex("#C64A42")
+
+	border := ui.RGBA(28, 30, 34, 0.08)
+	borderStrong := ui.RGBA(28, 30, 34, 0.15)
+	overlay := ui.RGBA(28, 30, 34, 0.04)
+	overlayStrong := ui.RGBA(28, 30, 34, 0.08)
 
 	return &GuiTheme{
 		Name: "light",
@@ -266,94 +322,113 @@ func LightGuiTheme() *GuiTheme {
 
 		Background:      bg,
 		Surface:         surface,
-		SurfaceElevated: elevated,
-		SurfaceHover:    surface.MixOklab(text, 0.05),
-		SurfacePressed:  surface.MixOklab(text, 0.10),
-		OverlayBackdrop: ui.RGBA(18, 20, 28, 0.35),
+		SurfaceElevated: composerBg,
+		SurfaceHover:    overlay,
+		SurfacePressed:  overlayStrong,
+		OverlayBackdrop: ui.RGBA(18, 20, 28, 0.28),
 
-		Border:       mustOKHSL("okhsl(235 7% 66%)").Alpha(0.55),
-		BorderAccent: mustOKHSL("okhsl(295 59% 55%)"),
-		BorderMuted:  mustOKHSL("okhsl(235 7% 66%)").Alpha(0.35),
+		SidebarBg:     sidebarBg,
+		SidebarItemBg: ui.RGBA(20, 20, 20, 0.06),
+		SidebarBorder: ui.RGBA(20, 20, 20, 0.12),
+		Raised:        raised,
+		ComposerBg:    composerBg,
+		Inset:         inset,
+		Overlay:       overlay,
+		OverlayStrong: overlayStrong,
 
-		Accent:        violet,
-		AccentHover:   violet.MixOklab(text, 0.10),
-		AccentPressed: violet.MixOklab(text, 0.20),
+		Border:       border,
+		BorderAccent: accent,
+		BorderMuted:  ui.RGBA(28, 30, 34, 0.05),
+		BorderStrong: borderStrong,
+
+		Accent:        accent,
+		AccentHover:   accent.MixOklab(text, 0.10),
+		AccentPressed: accent.MixOklab(text, 0.20),
 		AccentText:    ui.RGB(255, 255, 255),
 		Text:          text,
-		Muted:         muted,
-		Dim:           mustOKHSL("okhsl(229 7% 59%)"),
-		SelectedBg:    blueBg,
+		TextSecondary: textSecondary,
+		TextTertiary:  textTertiary,
+		TextGhost:     textGhost,
+		Muted:         textSecondary,
+		Dim:           textTertiary,
+		SelectedBg:    ui.RGBA(20, 20, 20, 0.07),
 		SelectedText:  text,
-		FocusRing:     violet,
-		Selection:     blueBg.MixOklab(violet, 0.2).Alpha(0.85),
+		FocusRing:     gauge.Alpha(0.70),
+		Selection:     gauge.Alpha(0.18),
+		Inverse:       ui.Hex("#202227"),
+		OnInverse:     ui.Hex("#F8F8F9"),
+		Gauge:         gauge,
+		ResizeHandle:  gauge,
+		CodeText:      codeText,
+		CodeWash:      codeWash,
 
 		Success: green,
 		Warning: yellow,
 		Error:   red,
 
-		ScrollbarTrack:  mustOKHSL("okhsl(248 3% 90%)"),
-		ScrollbarThumb:  mustOKHSL("okhsl(226 7% 65%)"),
-		SearchMatchBg:   mustOKHSL("okhsl(56 22% 91%)"),
-		SearchMatchText: muted,
+		ScrollbarTrack:  ui.Transparent,
+		ScrollbarThumb:  ui.RGBA(28, 30, 34, 0.20),
+		SearchMatchBg:   ui.RGBA(166, 107, 32, 0.20),
+		SearchMatchText: text,
 
-		UserMessageBg:      blueBg,
+		UserMessageBg:      raised,
 		UserMessageText:    text,
-		CustomMessageBg:    mustOKHSL("okhsl(295 25% 91%)"),
-		CustomMessageText:  muted,
-		CustomMessageLabel: violet,
+		CustomMessageBg:    composerBg,
+		CustomMessageText:  textSecondary,
+		CustomMessageLabel: accent,
 
-		ToolPendingBg: mustOKHSL("okhsl(248 3% 91%)"),
-		ToolSuccessBg: mustOKHSL("okhsl(156 21% 91%)"),
-		ToolErrorBg:   mustOKHSL("okhsl(24 23% 91%)"),
+		ToolPendingBg: ui.RGBA(28, 30, 34, 0.03),
+		ToolSuccessBg: composerBg,
+		ToolErrorBg:   ui.RGBA(198, 74, 66, 0.08),
 		ToolTitle:     text,
-		ToolOutput:    muted,
+		ToolOutput:    textSecondary,
 
-		BashMode:     mustOKHSL("okhsl(159 74% 40%)"),
-		ThinkingText: mustOKHSL("okhsl(234 8% 55%)"),
+		BashMode:     accent,
+		ThinkingText: textSecondary,
 
-		ThinkingOff:     mustOKHSL("okhsl(223 5% 80%)"),
-		ThinkingMinimal: mustOKHSL("okhsl(229 14% 78%)"),
-		ThinkingLow:     mustOKHSL("okhsl(232 33% 76%)"),
-		ThinkingMedium:  mustOKHSL("okhsl(264 48% 74%)"),
-		ThinkingHigh:    mustOKHSL("okhsl(295 62% 72%)"),
-		ThinkingXHigh:   mustOKHSL("okhsl(337 74% 70%)"),
-		ThinkingMax:     mustOKHSL("okhsl(20 98% 68%)"),
+		ThinkingOff:     textGhost,
+		ThinkingMinimal: textTertiary,
+		ThinkingLow:     gauge,
+		ThinkingMedium:  ui.Hex("#7C3AED"),
+		ThinkingHigh:    accent,
+		ThinkingXHigh:   yellow,
+		ThinkingMax:     red,
 
-		MdHeading:         blue,
-		MdLink:            blue,
-		MdLinkUrl:         muted,
-		MdCode:            violet,
-		MdCodeBg:          mustOKHSL("okhsl(248 3% 93%)"),
-		MdCodeBlockBg:     mustOKHSL("okhsl(248 3% 94%)"),
-		MdCodeBlockBorder: mustOKHSL("okhsl(235 7% 66%)").Alpha(0.5),
-		MdQuote:           muted,
-		MdQuoteBorder:     muted,
-		MdHr:              muted,
-		MdListBullet:      violet,
+		MdHeading:         text,
+		MdLink:            gauge,
+		MdLinkUrl:         textTertiary,
+		MdCode:            codeText,
+		MdCodeBg:          codeWash,
+		MdCodeBlockBg:     codeBlockBg,
+		MdCodeBlockBorder: borderStrong,
+		MdQuote:           textSecondary,
+		MdQuoteBorder:     borderStrong,
+		MdHr:              border,
+		MdListBullet:      textTertiary,
 
 		DiffAdded:     green,
 		DiffRemoved:   red,
-		DiffModified:  blue,
-		DiffContext:   muted,
-		DiffAddedBg:   mustOKHSL("okhsl(156 21% 91%)"),
-		DiffRemovedBg: mustOKHSL("okhsl(24 23% 91%)"),
+		DiffModified:  gauge,
+		DiffContext:   textSecondary,
+		DiffAddedBg:   ui.RGBA(47, 143, 82, 0.12),
+		DiffRemovedBg: ui.RGBA(198, 74, 66, 0.12),
 
-		SyntaxComment:     muted,
-		SyntaxKeyword:     blue,
-		SyntaxFunction:    mustOKHSL("okhsl(42 85% 36%)"),
-		SyntaxVariable:    mustOKHSL("okhsl(203 73% 42%)"),
-		SyntaxString:      mustOKHSL("okhsl(52 84% 36%)"),
-		SyntaxNumber:      green,
-		SyntaxType:        violet,
-		SyntaxOperator:    muted,
-		SyntaxPunctuation: muted,
+		SyntaxComment:     textTertiary,
+		SyntaxKeyword:     accent,
+		SyntaxFunction:    ui.Hex("#9A5528"),
+		SyntaxVariable:    gauge,
+		SyntaxString:      green,
+		SyntaxNumber:      ui.Hex("#0F766E"),
+		SyntaxType:        ui.Hex("#7C3AED"),
+		SyntaxOperator:    textSecondary,
+		SyntaxPunctuation: textSecondary,
 		SyntaxConstant:    green,
-		SyntaxProperty:    mustOKHSL("okhsl(203 73% 42%)"),
-		SyntaxTag:         violet,
-		SyntaxAttribute:   mustOKHSL("okhsl(42 85% 36%)"),
+		SyntaxProperty:    gauge,
+		SyntaxTag:         accent,
+		SyntaxAttribute:   yellow,
 
-		FontSize:     14,
-		MonoFontSize: 13,
+		FontSize:     13.5,
+		MonoFontSize: 12.5,
 		Radius:       8,
 		Spacing:      4,
 	}
@@ -510,26 +585,34 @@ func (t *GuiTheme) MarkdownTheme() *markdown.Theme {
 	uiTheme := t.UITheme()
 	def := markdown.DefaultTheme(uiTheme)
 	cp := *def
-	if t.FontSize > 0 {
-		cp.FontSize = t.FontSize
-	}
+	cp.FontSize = 14
 	if t.Font != "" {
 		cp.Font = t.Font
 	}
 	if t.MonoFont != "" {
 		cp.CodeFont = t.MonoFont
 	}
+	cp.LineHeight = 1.58
+	cp.CodeLineHeight = 1.45
 	cp.Text = t.Text
 	cp.Muted = t.Muted
 	cp.Link = t.MdLink
 	cp.Strong = t.Text
 	cp.Code = t.MdCode
+	if t.CodeText.A > 0 && t.MdCode == t.CodeText {
+		cp.Code = t.CodeText
+	}
 	cp.CodeBackground = t.MdCodeBg
+	if t.CodeWash.A > 0 && t.MdCodeBg == t.CodeWash {
+		cp.CodeBackground = t.CodeWash
+	}
+	cp.CodeSize = 0.875
 	cp.QuoteBar = t.MdQuoteBorder
 	cp.QuoteText = t.MdQuote
 	cp.Rule = t.MdHr
 	cp.CodeBlockBackground = t.MdCodeBlockBg
 	cp.CodeBlockBorder = t.MdCodeBlockBorder
+	cp.CodeBlockRadius = 10
 	cp.CodeColors = t.EditorTheme()
 	cp.Checkbox = t.Accent
 	cp.TableBorder = t.Border

@@ -147,6 +147,7 @@ type Editor struct {
 	disableSubmit bool
 	disabled      bool
 	autoFocus     bool
+	chromeless    bool
 
 	// Selection & pending mutations synced across build passes.
 	lastText       string
@@ -328,6 +329,21 @@ func (e *Editor) SetPlaceholder(placeholder string) {
 	e.mu.Lock()
 	e.placeholder = placeholder
 	e.mu.Unlock()
+}
+
+// SetChromeless toggles borderless/fill-less embedded mode used inside the Waku
+// Composer Card where the parent container owns card framing and bash badges.
+func (e *Editor) SetChromeless(chromeless bool) {
+	e.mu.Lock()
+	e.chromeless = chromeless
+	e.mu.Unlock()
+}
+
+// Chromeless reports whether the editor renders without its own outer card frame.
+func (e *Editor) Chromeless() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.chromeless
 }
 
 // SetTheme sets an optional GuiTheme override.
@@ -724,6 +740,7 @@ func (e *Editor) View(c *ui.Context) ui.Element {
 	disabled := e.disabled
 	disableSubmit := e.disableSubmit
 	autoFocus := e.autoFocus
+	chromeless := e.chromeless
 	attachments := append([]EditorAttachment(nil), e.attachments...)
 	pendingSel := e.pendingSel
 	e.pendingSel = nil
@@ -752,20 +769,24 @@ func (e *Editor) View(c *ui.Context) ui.Element {
 	var inputEl ui.Element
 	var removeID string
 
-	card = ui.Column(c).
-		FillWidth().
-		Background(theme.Surface).
-		Border(1.5, borderColor).
-		Radius(theme.Radius).
-		Padding(8, 12).
-		Gap(6)
+	if chromeless {
+		card = ui.Column(c).FillWidth().Gap(6)
+	} else {
+		card = ui.Column(c).
+			FillWidth().
+			Background(theme.ComposerBg).
+			Border(1.5, borderColor).
+			Radius(theme.Radius).
+			Padding(8, 12).
+			Gap(6)
 
-	if card.FileDragOver() {
-		card.Border(2, theme.Accent)
+		if card.FileDragOver() {
+			card.Border(2, theme.Accent)
+		}
 	}
 
 	card.Children(func() {
-		if isBash {
+		if isBash && !chromeless {
 			ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
 				badgeText := "BASH"
 				badgeColor := theme.BashMode
@@ -786,9 +807,9 @@ func (e *Editor) View(c *ui.Context) ui.Element {
 					a := att
 					chip := ui.Row(c).
 						Key(a.ID).
-						Background(theme.SurfaceElevated).
+						Background(theme.Raised).
 						Border(1, theme.Border).
-						Radius(theme.Radius-2).
+						Radius(7).
 						Padding(3, 8).
 						Gap(6).
 						AlignItems(ui.Center)
@@ -803,7 +824,7 @@ func (e *Editor) View(c *ui.Context) ui.Element {
 							SingleLine()
 						if a.SizeBytes > 0 {
 							ui.Text(c, formatByteSize(a.SizeBytes)).
-								TextColor(theme.Muted).
+								TextColor(theme.TextTertiary).
 								FontSize(11)
 						}
 						rem := ui.Button(c, "×").
@@ -821,6 +842,8 @@ func (e *Editor) View(c *ui.Context) ui.Element {
 			Bind(&e.inputHandle).
 			FillWidth().
 			Lines(minL, maxL).
+			FontSize(13.5).
+			TextColor(theme.Text).
 			Placeholder(placeholder).
 			Label(label).
 			Disabled(disabled)

@@ -235,16 +235,34 @@ func (s *ScrollView) View(c *ui.Context, count int, renderRow func(c *ui.Context
 		}).Fill()
 
 		if showJump && ((laidOut && !s.list.AtEnd()) || (manualLocked && !follow)) {
-			pill := ui.Button(c, jumpLabel).
+			bg := theme.Raised
+			if bg.A == 0 {
+				bg = theme.SurfaceElevated
+			}
+			bdr := theme.BorderStrong
+			if bdr.A == 0 {
+				bdr = theme.Border
+			}
+			pill := ui.ButtonBase(c).
+				Label(jumpLabel).
 				Absolute().
-				Bottom(12).
-				Right(16).
-				Background(theme.SurfaceElevated).
-				TextColor(theme.Accent).
-				Border(1, theme.BorderAccent).
-				Radius(16).
+				Bottom(14).
+				Right(18).
+				Background(bg).
+				Border(1, bdr).
+				Radius(999).
+				Shadow(0, 4, 14, 0, ui.RGBA(0, 0, 0, 0.25)).
 				Padding(6, 12).
 				Cursor(ui.CursorPointer)
+			if pill.Hovered() {
+				pill.Background(theme.OverlayStrong)
+			}
+			pill.Children(func() {
+				ui.Row(c).AlignItems(ui.Center).Gap(5).Children(func() {
+					IconView(c, IconArrowDown, 12, theme.Text)
+					ui.Text(c, jumpLabel).TextColor(theme.Text).FontSize(12).FontWeight(500)
+				})
+			})
 			if pill.Clicked() {
 				s.JumpToBottom()
 				c.Invalidate()

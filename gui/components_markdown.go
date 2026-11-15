@@ -166,7 +166,11 @@ func (m *MarkdownView) View(c *ui.Context) ui.Element {
 	m.opts.Theme = theme.MarkdownTheme()
 	m.opts.WrapCode = wrapCode
 	m.opts.ShareSelection = shareSelection
-	m.opts.Reveal = reveal
+	if done && reveal == nil {
+		m.opts.Reveal = &markdown.Reveal{Unit: markdown.AtOnce}
+	} else {
+		m.opts.Reveal = reveal
+	}
 	m.opts.OnLink = onLink
 	m.opts.LoadImage = loadImg
 
@@ -200,39 +204,59 @@ func renderCopyableCodeBlock(
 	theme *GuiTheme,
 	onCopy func(language, code string),
 ) {
-	radius := theme.Radius
-	if radius <= 0 {
-		radius = 6
-	}
 	box := ui.Column(c).
 		FillWidth().
 		Background(theme.MdCodeBlockBg).
 		Border(1, theme.MdCodeBlockBorder).
-		Radius(radius).
-		Padding(8, 12).
-		Gap(6)
+		Radius(10)
 
 	box.Children(func() {
-		ui.Row(c).FillWidth().Justify(ui.SpaceBetween).AlignItems(ui.Center).Children(func() {
-			lang := b.Language
-			if lang == "" {
-				lang = "code"
-			}
-			ui.Text(c, lang).
-				TextColor(theme.Muted).
-				FontSize(11).
-				FontWeight(600)
-
-			copyBtn := ui.Button(c, "Copy").Cursor(ui.CursorPointer)
-			if copyBtn.Clicked() {
-				code := b.Code()
-				c.WriteClipboard(code)
-				if onCopy != nil {
-					onCopy(b.Language, code)
+		ui.Row(c).
+			FillWidth().
+			Height(30).
+			Padding(0, 12).
+			Justify(ui.SpaceBetween).
+			AlignItems(ui.Center).
+			Children(func() {
+				lang := b.Language
+				if lang == "" {
+					lang = "text"
 				}
-			}
+				langCol := theme.TextTertiary
+				if langCol.A == 0 {
+					langCol = theme.Muted
+				}
+				ui.Text(c, lang).
+					TextColor(langCol).
+					FontSize(11.5).
+					FontWeight(500)
+
+				copyBtn := ui.ButtonBase(c).
+					Label("Copy").
+					Radius(6).
+					Padding(3, 8).
+					Cursor(ui.CursorPointer)
+				if copyBtn.Hovered() {
+					copyBtn.Background(theme.Overlay)
+				}
+				copyBtn.Children(func() {
+					ui.Row(c).AlignItems(ui.Center).Gap(5).Children(func() {
+						IconView(c, IconCopy, 12, langCol)
+						ui.Text(c, "Copy").TextColor(langCol).FontSize(11.5)
+					})
+				})
+				if copyBtn.Clicked() {
+					code := b.Code()
+					c.WriteClipboard(code)
+					if onCopy != nil {
+						onCopy(b.Language, code)
+					}
+				}
+			})
+		ui.Box(c).FillWidth().Height(1).Background(theme.Border)
+		ui.Box(c).FillWidth().Padding(10, 12).Children(func() {
+			b.Body(c)
 		})
-		b.Body(c)
 	})
 }
 
