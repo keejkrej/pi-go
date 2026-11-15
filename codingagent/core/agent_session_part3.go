@@ -858,7 +858,7 @@ func (s *AgentSession) Reload(ctx context.Context, options ...*ReloadOptions) er
 	activeBefore := s.GetActiveToolNames()
 	s.mu.Lock()
 	for _, name := range activeBefore {
-		s.pendingToolNames[name] = struct{}{}
+		s.as3AddPendingToolLocked(name)
 	}
 	s.restoredToolNames = make(map[string]struct{}, len(activeBefore))
 	for _, name := range activeBefore {
@@ -985,12 +985,28 @@ func (s *AgentSession) SetActiveToolsByName(toolNames []string) {
 	for _, name := range previous {
 		if _, active := activeSet[name]; !active {
 			if _, restored := s.restoredToolNames[name]; restored {
-				clear(s.pendingToolNames)
+				s.as3ClearPendingToolsLocked()
 				break
 			}
 		}
 	}
 	s.mu.Unlock()
+}
+
+func (s *AgentSession) as3ClearPendingToolsLocked() {
+	clear(s.pendingToolNames)
+	s.pendingToolOrder = nil
+}
+
+func (s *AgentSession) as3AddPendingToolLocked(name string) {
+	if s.pendingToolNames == nil {
+		s.pendingToolNames = make(map[string]struct{})
+	}
+	if _, exists := s.pendingToolNames[name]; exists {
+		return
+	}
+	s.pendingToolNames[name] = struct{}{}
+	s.pendingToolOrder = append(s.pendingToolOrder, name)
 }
 
 func (s *AgentSession) as3SetActiveTools(toolNames []string) {
@@ -1356,8 +1372,7 @@ func (s *AgentSession) as3PreparePromptAndToolLoadout(
 
 func (s *AgentSession) as3RestoreToolsFromTranscript(modifiers []string) {
 	s.mu.Lock()
-	clear(s.pendingToolNames)
-	s.pendingToolOrder = nil
+	s.as3ClearPendingToolsLocked()
 	clear(s.restoredToolNames)
 	s.mu.Unlock()
 
@@ -1424,12 +1439,10 @@ func (s *AgentSession) as3RestoreToolsFromTranscript(modifiers []string) {
 	restored := sdkApplyToolModifiers(currentNames, modifiers)
 
 	s.mu.Lock()
-	s.pendingToolNames = make(map[string]struct{})
-	s.pendingToolOrder = nil
+	s.as3ClearPendingToolsLocked()
 	for _, name := range names {
 		if s.as3IsAllowedToolLocked(name) {
-			s.pendingToolNames[name] = struct{}{}
-			s.pendingToolOrder = append(s.pendingToolOrder, name)
+			s.as3AddPendingToolLocked(name)
 		}
 	}
 	s.restoredToolNames = make(map[string]struct{}, len(restored))

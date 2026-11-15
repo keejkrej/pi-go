@@ -1455,22 +1455,31 @@ func (a *elExtensionAPI) RegisterMcpServer(name string, config McpServerConfig) 
 	if err := elValidateMcpServerConfig(name, config); err != nil {
 		panic(err.Error())
 	}
-	ns := elMcpNamespace(name)
-	for _, existing := range a.state.runtime.McpServers.List() {
-		if existing.Name != name && elMcpNamespace(existing.Name) == ns {
-			panic(fmt.Sprintf("MCP server %q conflicts with registered server %q", name, existing.Name))
+	a.state.mu.Lock()
+	extPath := a.state.ext.Path
+	rt := a.state.runtime
+	a.state.mu.Unlock()
+	if rt != nil && rt.McpServers != nil {
+		if existing := rt.McpServers.Get(name); existing != nil && existing.ExtensionPath != extPath {
+			panic(fmt.Sprintf("MCP server %q is already registered by extension %q", name, existing.ExtensionPath))
+		}
+		ns := elMcpNamespace(name)
+		for _, existing := range rt.McpServers.List() {
+			if existing.Name != name && elMcpNamespace(existing.Name) == ns {
+				panic(fmt.Sprintf("MCP server %q conflicts with registered server %q", name, existing.Name))
+			}
 		}
 	}
 	a.state.mu.Lock()
 	a.state.registeredMcpNames = append(a.state.registeredMcpNames, name)
-	extPath := a.state.ext.Path
-	rt := a.state.runtime
 	a.state.mu.Unlock()
-	rt.McpServers.Register(RegisteredMcpServer{
-		Name:          name,
-		Config:        config,
-		ExtensionPath: extPath,
-	})
+	if rt != nil && rt.McpServers != nil {
+		rt.McpServers.Register(RegisteredMcpServer{
+			Name:          name,
+			Config:        config,
+			ExtensionPath: extPath,
+		})
+	}
 }
 
 func (a *elExtensionAPI) UnregisterMcpServer(name string) {

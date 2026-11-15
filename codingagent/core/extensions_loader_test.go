@@ -497,4 +497,31 @@ func TestExtensionsLoaderMcpValidationAndCollision(t *testing.T) {
 	}, cwd, rt); err == nil {
 		t.Fatalf("expected MCP namespace collision error")
 	}
+
+	// Same extension may replace its own exact-name registration, while another extension cannot.
+	url2 := "https://mcp2.example.com/sse"
+	if _, err := LoadExtensionFromFactoryWithRuntime(ctx, InlineExtension{
+		Name: "mcp-valid",
+		Factory: func(pi ExtensionAPI) error {
+			pi.RegisterMcpServer("my-server", McpServerConfig{Url: &url2})
+			return nil
+		},
+	}, cwd, rt); err != nil {
+		t.Fatalf("same extension updating its own MCP server should succeed, got: %v", err)
+	}
+	if reg := rt.McpServers.Get("my-server"); reg == nil || reg.Config.Url == nil || *reg.Config.Url != url2 {
+		t.Fatalf("expected same extension update to replace URL with %q, got %+v", url2, reg)
+	}
+	if _, err := LoadExtensionFromFactoryWithRuntime(ctx, InlineExtension{
+		Name: "mcp-steal",
+		Factory: func(pi ExtensionAPI) error {
+			pi.RegisterMcpServer("my-server", McpServerConfig{Command: &cmd})
+			return nil
+		},
+	}, cwd, rt); err == nil || !strings.Contains(err.Error(), `MCP server "my-server" is already registered by extension`) {
+		t.Fatalf("expected cross-extension exact-name MCP error, got: %v", err)
+	}
+	if reg := rt.McpServers.Get("my-server"); reg == nil || reg.ExtensionPath != "mcp-valid" {
+		t.Fatalf("expected failed registration not to overwrite original owner, got %+v", reg)
+	}
 }

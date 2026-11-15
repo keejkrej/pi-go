@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/keejkrej/pi-go/codingagent/core"
 	"github.com/keejkrej/pi-go/codingagent/internal/testkit"
 	"github.com/keejkrej/pi-go/internal/jsonx"
+	"github.com/keejkrej/pi-go/internal/omap"
 	"github.com/keejkrej/pi-go/internal/typebox"
 )
 
@@ -636,6 +638,171 @@ func TestAgentSessionSystemPromptUpdates(t *testing.T) {
 		}
 		if tastpJoinNames(toolSets[0]) != "first,second" || tastpJoinNames(toolSets[1]) != "second" {
 			t.Fatalf("expected tool sets [first,second] then [second], got %v", toolSets)
+		}
+	})
+}
+
+func TestAgentSessionBeforeAgentStartSectionsAndReloadPendingTools(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("preserves before_agent_start Sections and PromptGuidelines in prompts and across turns", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		extResult := testkit.CreateTestExtensionsResult()
+		extResult.Extensions = []core.Extension{
+			{
+				Path: "mem:sections",
+				Handlers: map[string][]any{
+					"before_agent_start": {
+						core.ExtensionHandler[core.BeforeAgentStartEvent, core.BeforeAgentStartEventResult](func(_ context.Context, ev *core.BeforeAgentStartEvent, _ core.ExtensionContext) (*core.BeforeAgentStartEventResult, error) {
+							if ev.SystemPromptOptions.Sections == nil {
+								ev.SystemPromptOptions.Sections = omap.NewMap[string, string]()
+							}
+							ev.SystemPromptOptions.Sections.Set("mcp_servers", "- fake (codemode)")
+							ev.SystemPromptOptions.PromptGuidelines = append(ev.SystemPromptOptions.PromptGuidelines, "Always obey test MCP guideline.")
+							return nil, nil
+						}),
+					},
+				},
+			},
+		}
+		loader := testkit.CreateTestResourceLoader(&testkit.CreateTestResourceLoaderOptions{
+			ExtensionsResult: &extResult,
+		})
+		s, faux, cleanup := tastpCreateSession(t, &core.CreateAgentSessionOptions{
+			Cwd:            tmpDir,
+			AgentDir:       tmpDir,
+			NoTools:        core.NoToolsBuiltin,
+			ResourceLoader: loader,
+			CustomTools:    []core.ToolDefinition{tastpCustomToolDef("echo")},
+		})
+		defer cleanup()
+
+		var turnPrompts []string
+		var liveSysPrompts []string
+		faux.SetResponses([]providers.FauxResponseStep{
+			providers.FauxResponseFactory(func(_ context.Context, tc *ai.TranscriptContext, _ *ai.SimpleStreamOptions, _ *providers.FauxProviderState, _ *ai.Model) (*ai.AssistantMessage, error) {
+				turnPrompts = append(turnPrompts, ai.GetCurrentSystemPrompt(tc.Messages))
+				liveSysPrompts = append(liveSysPrompts, s.SystemPrompt())
+				return providers.FauxAssistantMessage(providers.FauxAssistantBlock{
+					Block: providers.FauxToolCall("echo", jsonx.NewObject(), nil),
+				}, nil), nil
+			}),
+			providers.FauxResponseFactory(func(_ context.Context, tc *ai.TranscriptContext, _ *ai.SimpleStreamOptions, _ *providers.FauxProviderState, _ *ai.Model) (*ai.AssistantMessage, error) {
+				turnPrompts = append(turnPrompts, ai.GetCurrentSystemPrompt(tc.Messages))
+				liveSysPrompts = append(liveSysPrompts, s.SystemPrompt())
+				return providers.FauxAssistantMessage(providers.FauxAssistantText("done"), nil), nil
+			}),
+		})
+
+		if err := s.Prompt(ctx, "hello"); err != nil {
+			t.Fatalf("Prompt failed: %v", err)
+		}
+		if len(turnPrompts) != 2 || len(liveSysPrompts) != 2 {
+			t.Fatalf("expected 2 turns, got turnPrompts=%d liveSysPrompts=%d", len(turnPrompts), len(liveSysPrompts))
+		}
+		for i, p := range turnPrompts {
+			if !strings.Contains(p, "<mcp_servers>\n- fake (codemode)\n</mcp_servers>") {
+				t.Fatalf("turn %d projected system prompt missing <mcp_servers> section:\n%s", i, p)
+			}
+			if !strings.Contains(p, "Always obey test MCP guideline.") {
+				t.Fatalf("turn %d projected system prompt missing PromptGuidelines:\n%s", i, p)
+			}
+		}
+		for i, p := range liveSysPrompts {
+			if !strings.Contains(p, "<mcp_servers>\n- fake (codemode)\n</mcp_servers>") ||
+				!strings.Contains(p, "Always obey test MCP guideline.") {
+				t.Fatalf("turn %d Session.SystemPrompt() missing Sections or PromptGuidelines:\n%s", i, p)
+			}
+		}
+	})
+
+	t.Run("reload preserves pendingToolOrder so deferred tools re-activate even when another extension hides its own tool", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		var stage int
+		var deferredAPI core.ExtensionAPI
+
+		loader := core.NewDefaultResourceLoader(core.DefaultResourceLoaderOptions{
+			Cwd:               tmpDir,
+			AgentDir:          tmpDir,
+			NoExtensions:      true,
+			NoSkills:          true,
+			NoPromptTemplates: true,
+			NoThemes:          true,
+			NoContextFiles:    true,
+			ExtensionFactories: []core.InlineExtension{
+				{
+					Name: "inline:mcp-deferred",
+					Factory: func(pi core.ExtensionAPI) error {
+						deferredAPI = pi
+						if stage == 0 {
+							def := tastpCustomToolDef("mcp__docs__search", func(d *core.ToolDefinition) {
+								d.DefaultActive = tastpBoolPtr(false)
+							})
+							pi.RegisterTool(def)
+						}
+						return nil
+					},
+				},
+				{
+					Name: "inline:drop-loader",
+					Factory: func(pi core.ExtensionAPI) error {
+						pi.RegisterTool(tastpCustomToolDef("loader"))
+						pi.OnSessionStart(func(_ context.Context, _ *core.SessionStartEvent, _ core.ExtensionContext) (*core.NoResult, error) {
+							var next []string
+							for _, name := range pi.GetActiveTools() {
+								if name != "loader" {
+									next = append(next, name)
+								}
+							}
+							pi.SetActiveTools(next)
+							return nil, nil
+						})
+						return nil
+					},
+				},
+			},
+		})
+		defer loader.Close()
+		if err := loader.Reload(ctx); err != nil {
+			t.Fatalf("initial resource loader Reload failed: %v", err)
+		}
+
+		s, _, cleanup := tastpCreateSession(t, &core.CreateAgentSessionOptions{
+			Cwd:            tmpDir,
+			AgentDir:       tmpDir,
+			ResourceLoader: loader,
+		})
+		defer cleanup()
+
+		// Activate the defaultActive=false tool during the session before reload.
+		s.SetActiveToolsByName([]string{"read", "bash", "mcp__docs__search"})
+		if !slices.Contains(s.GetActiveToolNames(), "mcp__docs__search") {
+			t.Fatalf("expected mcp__docs__search active before reload, got %v", s.GetActiveToolNames())
+		}
+
+		// Simulate reload where session_start hides "loader" and the MCP server connects asynchronously afterwards.
+		stage = 1
+		if err := s.BindExtensions(ctx, core.ExtensionBindings{OnError: func(core.ExtensionError) {}}); err != nil {
+			t.Fatalf("BindExtensions failed: %v", err)
+		}
+		if err := s.Reload(ctx); err != nil {
+			t.Fatalf("AgentSession.Reload failed: %v", err)
+		}
+		if slices.Contains(s.GetActiveToolNames(), "loader") {
+			t.Fatalf("expected drop-loader extension to hide loader on reload session_start, got %v", s.GetActiveToolNames())
+		}
+
+		// Asynchronous post-reload registration of the defaultActive=false tool must restore it to active.
+		deferredAPI.RegisterTool(tastpCustomToolDef("mcp__docs__search", func(d *core.ToolDefinition) {
+			d.DefaultActive = tastpBoolPtr(false)
+		}))
+
+		activeAfter := s.GetActiveToolNames()
+		if !slices.Contains(activeAfter, "mcp__docs__search") {
+			t.Fatalf("expected mcp__docs__search to re-activate after post-reload registration, got %v", activeAfter)
+		}
+		if slices.Contains(activeAfter, "loader") {
+			t.Fatalf("expected loader to stay inactive after mcp__docs__search re-activates, got %v", activeAfter)
 		}
 	})
 }

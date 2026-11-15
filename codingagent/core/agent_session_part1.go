@@ -1003,15 +1003,6 @@ func (s *AgentSession) Messages() agent.AgentMessageList {
 	return s.Agent.Messages()
 }
 
-// SystemPrompt returns the effective system prompt including pending loadout/section changes.
-func as1AppendPromptPtr(s string) *string {
-	if s == "" {
-		return nil
-	}
-	cp := s
-	return &cp
-}
-
 // SystemPrompt returns the effective system prompt for the current session or active run.
 func (s *AgentSession) SystemPrompt() string {
 	s.mu.Lock()
@@ -1020,18 +1011,7 @@ func (s *AgentSession) SystemPrompt() string {
 		opts = *s.runSystemPromptOpts
 	}
 	s.mu.Unlock()
-	prompt, _ := BuildSystemPrompt(BuildSystemPromptOptions{
-		Cwd:                opts.Cwd,
-		Skills:             opts.Skills,
-		ContextFiles:       opts.ContextFiles,
-		CustomPrompt:       opts.CustomPrompt,
-		AppendSystemPrompt: as1AppendPromptPtr(opts.AppendSystemPrompt),
-		SelectedTools:      opts.SelectedTools,
-		HiddenTools:        opts.HiddenTools,
-		ToolSnippets:       opts.ToolSnippets,
-		ToolGuidelines:     opts.ToolGuidelines,
-		ForceSystemPrompt:  opts.ForceSystemPrompt,
-	})
+	prompt, _ := BuildSystemPrompt(as1NormalizedToBuildSystemPromptOptions(opts))
 	return prompt
 }
 
@@ -1911,18 +1891,11 @@ func (s *AgentSession) as1InstallAgentNextTurnRefresh() {
 			mergedGuidelines[k] = slices.Clone(v)
 		}
 
-		normOpts := NormalizeBuildSystemPromptOptions(BuildSystemPromptOptions{
-			Cwd:                runOpts.Cwd,
-			Skills:             runOpts.Skills,
-			ContextFiles:       runOpts.ContextFiles,
-			CustomPrompt:       runOpts.CustomPrompt,
-			AppendSystemPrompt: as1AppendPromptPtr(runOpts.AppendSystemPrompt),
-			SelectedTools:      s.GetActiveToolNames(),
-			HiddenTools:        runOpts.HiddenTools,
-			ToolSnippets:       mergedSnippets,
-			ToolGuidelines:     mergedGuidelines,
-			ForceSystemPrompt:  runOpts.ForceSystemPrompt,
-		})
+		turnInput := as1NormalizedToBuildSystemPromptOptions(runOpts)
+		turnInput.SelectedTools = s.GetActiveToolNames()
+		turnInput.ToolSnippets = mergedSnippets
+		turnInput.ToolGuidelines = mergedGuidelines
+		normOpts := NormalizeBuildSystemPromptOptions(turnInput)
 		var msgs agent.AgentMessageList
 		if nextCtx != nil {
 			msgs = nextCtx.Messages
@@ -3871,18 +3844,7 @@ func (s *AgentSession) emitShutdown(reason string, targetSessionFile *string) {
 }
 
 func as1NormalizedToBuildSystemPromptOptions(opts NormalizedBuildSystemPromptOptions) BuildSystemPromptOptions {
-	return BuildSystemPromptOptions{
-		Cwd:                opts.Cwd,
-		Skills:             opts.Skills,
-		ContextFiles:       opts.ContextFiles,
-		CustomPrompt:       opts.CustomPrompt,
-		AppendSystemPrompt: as1AppendPromptPtr(opts.AppendSystemPrompt),
-		SelectedTools:      opts.SelectedTools,
-		HiddenTools:        opts.HiddenTools,
-		ToolSnippets:       opts.ToolSnippets,
-		ToolGuidelines:     opts.ToolGuidelines,
-		ForceSystemPrompt:  opts.ForceSystemPrompt,
-	}
+	return erNormalizedToBuildSystemPromptOptions(opts)
 }
 
 func (s *AgentSession) settleForReplacement(ctx context.Context) {
