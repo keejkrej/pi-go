@@ -180,7 +180,7 @@ type tcaHoldToolContext struct {
 	releaseAll  []chan struct{}
 }
 
-func newTCAHoldToolContext() *tcaHoldToolContext {
+func tcaNewHoldToolContext() *tcaHoldToolContext {
 	var active atomic.Int32
 	var maxAct atomic.Int32
 	h := &tcaHoldToolContext{
@@ -295,7 +295,7 @@ func tcaRunAsync(ctx context.Context, code string, ectx core.ExtensionToolContex
 
 func TestCodemodeWorkerAdmission(t *testing.T) {
 	t.Run("bounds workers, queues waiters, aborts and times out unstarted scripts", func(t *testing.T) {
-		ctx := newTCAHoldToolContext()
+		ctx := tcaNewHoldToolContext()
 		var wg sync.WaitGroup
 		defer func() {
 			ctx.cleanup()
@@ -421,7 +421,7 @@ func TestCodemodeWorkerAdmission(t *testing.T) {
 	})
 
 	t.Run("queues concurrent burst behind two workers and respects PI_CODEMODE_MAX_WORKERS", func(t *testing.T) {
-		ctx := newTCAHoldToolContext()
+		ctx := tcaNewHoldToolContext()
 		var wg sync.WaitGroup
 		defer func() {
 			ctx.cleanup()
@@ -456,7 +456,7 @@ func TestCodemodeWorkerAdmission(t *testing.T) {
 
 		// Raise limit via PI_CODEMODE_MAX_WORKERS=3.
 		t.Setenv("PI_CODEMODE_MAX_WORKERS", "3")
-		ctx3 := newTCAHoldToolContext()
+		ctx3 := tcaNewHoldToolContext()
 		defer ctx3.cleanup()
 		for i := 0; i < 4; i++ {
 			wg.Add(1)
@@ -484,7 +484,7 @@ func TestCodemodeWorkerAdmission(t *testing.T) {
 
 		// Invalid PI_CODEMODE_MAX_WORKERS falls back to default 2.
 		t.Setenv("PI_CODEMODE_MAX_WORKERS", "0")
-		ctxInv := newTCAHoldToolContext()
+		ctxInv := tcaNewHoldToolContext()
 		defer ctxInv.cleanup()
 		for i := 0; i < 3; i++ {
 			wg.Add(1)

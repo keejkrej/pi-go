@@ -1372,4 +1372,50 @@ func TestAgentSessionCodemode(t *testing.T) {
 			t.Fatalf("expected tool_search active: %v", h.Session.GetActiveToolNames())
 		}
 	})
+
+	t.Run("emits null when script returns null and omits undefined return values", func(t *testing.T) {
+		h := tascCreateHarness(t, nil)
+		h.Session.SetActiveToolsByName([]string{"codemode"})
+
+		nullRes := tascRunCodemode(t, h, `return null;`)
+		if nullRes.IsError {
+			t.Fatalf("unexpected error for return null: %s", tascResultText(nullRes))
+		}
+		if len(nullRes.Content) != 2 {
+			t.Fatalf("expected header + output item for return null, got %d items: %q", len(nullRes.Content), tascResultText(nullRes))
+		}
+		if got := nullRes.Content[1].(*ai.TextContent).Text; got != "null" {
+			t.Fatalf("expected return null output item %q, got %q", "null", got)
+		}
+
+		consoleAndNullRes := tascRunCodemode(t, h, `console.log("before"); return null;`)
+		if consoleAndNullRes.IsError {
+			t.Fatalf("unexpected error for console + return null: %s", tascResultText(consoleAndNullRes))
+		}
+		if len(consoleAndNullRes.Content) != 2 {
+			t.Fatalf("expected 2 content items, got %d: %q", len(consoleAndNullRes.Content), tascResultText(consoleAndNullRes))
+		}
+		if got := consoleAndNullRes.Content[1].(*ai.TextContent).Text; got != "==> text 1/2 <==\nbefore\n==> text 2/2 <==\nnull" {
+			t.Fatalf("expected %q, got %q", "==> text 1/2 <==\nbefore\n==> text 2/2 <==\nnull", got)
+		}
+
+		undefRes := tascRunCodemode(t, h, `console.log("only console"); return undefined;`)
+		if undefRes.IsError {
+			t.Fatalf("unexpected error for return undefined: %s", tascResultText(undefRes))
+		}
+		if len(undefRes.Content) != 2 {
+			t.Fatalf("expected 2 content items, got %d: %q", len(undefRes.Content), tascResultText(undefRes))
+		}
+		if got := undefRes.Content[1].(*ai.TextContent).Text; got != "only console" {
+			t.Fatalf("expected undefined return to be omitted and yield %q, got %q", "only console", got)
+		}
+
+		bareUndefRes := tascRunCodemode(t, h, `return undefined;`)
+		if bareUndefRes.IsError {
+			t.Fatalf("unexpected error for bare return undefined: %s", tascResultText(bareUndefRes))
+		}
+		if len(bareUndefRes.Content) != 1 {
+			t.Fatalf("expected only header item when script returns undefined with no output, got %d items: %q", len(bareUndefRes.Content), tascResultText(bareUndefRes))
+		}
+	})
 }

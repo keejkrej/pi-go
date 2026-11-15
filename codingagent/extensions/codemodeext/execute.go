@@ -73,7 +73,7 @@ type execGate struct {
 	waiters []*execWaiter
 }
 
-func newExecGate(limitFn func() int) *execGate {
+func execNewGate(limitFn func() int) *execGate {
 	return &execGate{limitFn: limitFn}
 }
 
@@ -171,7 +171,7 @@ func execMaxCodemodeWorkers() int {
 	return n
 }
 
-var execWorkerGate = newExecGate(execMaxCodemodeWorkers)
+var execWorkerGate = execNewGate(execMaxCodemodeWorkers)
 
 func execTruncateText(text string, maxChars int) string {
 	if js.Len(text) > maxChars {
@@ -1183,7 +1183,8 @@ func ExecuteCodemode(
 				Delete: delCopy,
 			})
 		}
-		if val, hasVal := r.Value.Get(); hasVal {
+		if !r.Value.IsZero() {
+			val := r.Value.OrElse(nil)
 			scriptOutput = append(scriptOutput, &codemode.CodemodeTextOutput{
 				Type: "text",
 				Text: execValueText(val),
@@ -1472,7 +1473,7 @@ func execCreateModelGlobals(
 	toolCallId string,
 	state *execRunState,
 ) []*codemode.CodemodeTool {
-	modelGate := newExecGate(func() int { return execMaxConcurrentModels })
+	modelGate := execNewGate(func() int { return execMaxConcurrentModels })
 	spreadTrue := true
 
 	resolveRef := func(name string, typ ai.ModelType, modelArg any) (ai.AnyModel, execModelRef, error) {
