@@ -20,10 +20,10 @@ type WriteToolInput struct {
 	Content string `json:"content"`
 }
 
-func twrtWriteSchema() *typebox.Schema {
-	return tidxObjectSchema(
-		tidxProp{"path", typebox.String(jsonx.ObjectOf("description", "Path to the file to write (relative or absolute)"))},
-		tidxProp{"content", typebox.String(jsonx.ObjectOf("description", "Content to write to the file"))},
+func writeWriteSchema() *typebox.Schema {
+	return indexObjectSchema(
+		indexProp{"path", typebox.String(jsonx.ObjectOf("description", "Path to the file to write (relative or absolute)"))},
+		indexProp{"content", typebox.String(jsonx.ObjectOf("description", "Content to write to the file"))},
 	)
 }
 
@@ -32,9 +32,9 @@ func CreateWriteTool() *durable.ToolRegistration {
 	return durable.DefineTool(&durable.ToolRegistration{
 		Name:        "write",
 		Description: "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.",
-		Parameters:  twrtWriteSchema(),
+		Parameters:  writeWriteSchema(),
 		Execute: func(args any, api durable.ToolExecutionApi, ctx chord.Context) (*durable.ToolExecutionResult, error) {
-			input, err := tidxDecodeArgs[WriteToolInput](args)
+			input, err := indexDecodeArgs[WriteToolInput](args)
 			if err != nil {
 				return nil, err
 			}
@@ -47,13 +47,13 @@ func CreateWriteTool() *durable.ToolRegistration {
 				return nil, err
 			}
 			return WithFileMutationQueue(executionEnv, absolutePath, func() (*durable.ToolExecutionResult, error) {
-				if tidxIsAborted(ctx) {
+				if indexIsAborted(ctx) {
 					return nil, errors.New("Operation aborted")
 				}
 				if _, err := env.GetOrThrow(executionEnv.WriteFile(absolutePath, []byte(input.Content), ctx)); err != nil {
 					return nil, err
 				}
-				if tidxIsAborted(ctx) {
+				if indexIsAborted(ctx) {
 					return nil, errors.New("Operation aborted")
 				}
 				return &durable.ToolExecutionResult{

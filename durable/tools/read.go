@@ -41,15 +41,15 @@ type ReadToolDetails struct {
 	Truncation *ReadTruncationDetails `json:"truncation,omitzero"`
 }
 
-func tredReadSchema() *typebox.Schema {
-	return tidxObjectSchema(
-		tidxProp{"path", typebox.String(jsonx.ObjectOf("description", "Path to the file to read (relative or absolute)"))},
-		tidxProp{"offset", typebox.Optional(typebox.Number(jsonx.ObjectOf("description", "Line number to start reading from (1-indexed)")))},
-		tidxProp{"limit", typebox.Optional(typebox.Number(jsonx.ObjectOf("description", "Maximum number of lines to read")))},
+func readReadSchema() *typebox.Schema {
+	return indexObjectSchema(
+		indexProp{"path", typebox.String(jsonx.ObjectOf("description", "Path to the file to read (relative or absolute)"))},
+		indexProp{"offset", typebox.Optional(typebox.Number(jsonx.ObjectOf("description", "Line number to start reading from (1-indexed)")))},
+		indexProp{"limit", typebox.Optional(typebox.Number(jsonx.ObjectOf("description", "Maximum number of lines to read")))},
 	)
 }
 
-func tredTruncationDetails(res durable.TruncationResult) ReadTruncationDetails {
+func readTruncationDetails(res durable.TruncationResult) ReadTruncationDetails {
 	return ReadTruncationDetails{
 		Truncated:             res.Truncated,
 		TruncatedBy:           res.TruncatedBy,
@@ -73,9 +73,9 @@ func CreateReadTool() *durable.ToolRegistration {
 			durable.DefaultMaxLines,
 			durable.DefaultMaxBytes/1024,
 		),
-		Parameters: tredReadSchema(),
+		Parameters: readReadSchema(),
 		Execute: func(args any, api durable.ToolExecutionApi, ctx chord.Context) (*durable.ToolExecutionResult, error) {
-			input, err := tidxDecodeArgs[ReadToolInput](args)
+			input, err := indexDecodeArgs[ReadToolInput](args)
 			if err != nil {
 				return nil, err
 			}
@@ -169,7 +169,7 @@ func CreateReadTool() *durable.ToolRegistration {
 						end+1,
 					),
 				})
-				truncDetails := tredTruncationDetails(truncation)
+				truncDetails := readTruncationDetails(truncation)
 				truncDetails.OutputBytes = end
 				truncDetails.OutputLines = 1
 				details = &ReadToolDetails{Truncation: &truncDetails}
@@ -194,7 +194,7 @@ func CreateReadTool() *durable.ToolRegistration {
 						nextOffset,
 					),
 				})
-				truncDetails := tredTruncationDetails(truncation)
+				truncDetails := readTruncationDetails(truncation)
 				details = &ReadToolDetails{Truncation: &truncDetails}
 			} else if userLimitedLines != nil && startLine+*userLimitedLines < len(allLines) {
 				remaining := len(allLines) - (startLine + *userLimitedLines)

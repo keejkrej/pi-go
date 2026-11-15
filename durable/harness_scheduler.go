@@ -227,6 +227,13 @@ type hsTaskSchedulerOptions struct {
 	ctx            chord.Context
 }
 
+type hsPostCommitWork struct {
+	settledToResolve []TaskRecord
+	toAbort          []*hsInvocation
+	needReconcile    bool
+	changed          bool
+}
+
 type hsTaskScheduler struct {
 	opts        hsTaskSchedulerOptions
 	taskWaiters *hutWaiters[TaskId, *SettledTask]
@@ -244,6 +251,8 @@ type hsTaskScheduler struct {
 	conversationOwners map[TaskId]struct{}
 	settled            map[TaskId]hsTaskNode
 	failFastChecks     map[TaskId]struct{}
+	postCommitPending  []hsPostCommitWork
+	publishing         bool
 	reconcileScheduled bool
 	cascadePending     bool
 	unsubRegistry      func()
@@ -276,6 +285,9 @@ func hsNewTaskScheduler(opts hsTaskSchedulerOptions) *hsTaskScheduler {
 func (s *hsTaskScheduler) Open(ctx chord.Context) error {
 	s.opts.session.SubscribeCommits(func(pub CommitPublication, _ chord.Context) {
 		s.observe(pub)
+	})
+	s.opts.session.subscribePostCommits(func(_ CommitPublication, _ chord.Context) {
+		s.postObserve()
 	})
 	s.opts.session.SubscribeClose(func() {
 		s.seal()
@@ -619,6 +631,7 @@ func (s *hsTaskScheduler) observe(pub CommitPublication) {
 	)
 
 	s.mu.Lock()
+	s.publishing = true
 	for _, ch := range pub.Changes {
 		switch c := ch.(type) {
 		case StorageWriteTask:
@@ -689,23 +702,47 @@ func (s *hsTaskScheduler) observe(pub CommitPublication) {
 	if s.cascadePending {
 		needReconcile = true
 	}
+	s.postCommitPending = append(s.postCommitPending, hsPostCommitWork{
+		settledToResolve: settledToResolve,
+		toAbort:          toAbort,
+		needReconcile:    needReconcile,
+		changed:          changed,
+	})
+	s.mu.Unlock()
+}
+
+func (s *hsTaskScheduler) postObserve() {
+	s.mu.Lock()
+	s.publishing = false
+	works := s.postCommitPending
+	s.postCommitPending = nil
 	s.mu.Unlock()
 
-	for _, inv := range toAbort {
-		inv.cancel(errors.New("Task abort requested"))
-	}
-	for _, rec := range settledToResolve {
-		copyRec := rec
-		s.taskWaiters.Resolve(rec.Id, &copyRec)
+	needReconcile := false
+	changed := false
+	for _, work := range works {
+		for _, inv := range work.toAbort {
+			inv.cancel(errors.New("Task abort requested"))
+		}
+		for _, rec := range work.settledToResolve {
+			copyRec := rec
+			s.taskWaiters.Resolve(rec.Id, &copyRec)
+		}
+		if work.needReconcile {
+			needReconcile = true
+		}
+		if work.changed {
+			changed = true
+		}
 	}
 	if needReconcile {
 		s.scheduleReconcile()
 	}
-	if !changed {
-		return
-	}
+	// Always re-check idleWaiters now that s.publishing is cleared and all commitListeners have run.
 	s.resolveIdleWaiters()
-	s.kick()
+	if changed {
+		s.kick()
+	}
 }
 
 func hsValueSubmission(c *StorageWriteSubmission) *SubmissionRecord {
@@ -1264,6 +1301,8 @@ func (s *hsTaskScheduler) belowCancelledLocked(start hsUp) bool {
 func (s *hsTaskScheduler) seal() {
 	s.mu.Lock()
 	s.closing = true
+	s.publishing = false
+	s.postCommitPending = nil
 	unsub := s.unsubRegistry
 	s.unsubRegistry = func() {}
 	invs := make([]*hsInvocation, 0, len(s.invocations))
@@ -1867,6 +1906,9 @@ func (s *hsTaskScheduler) end(inv *hsInvocation) {
 }
 
 func (s *hsTaskScheduler) idleLocked(conversationId *ConversationId) bool {
+	if s.publishing {
+		return false
+	}
 	scope := hsScope{roots: conversationId == nil}
 	if conversationId != nil {
 		scope.conversationId = *conversationId

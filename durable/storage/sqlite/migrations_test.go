@@ -13,12 +13,12 @@ import (
 	"github.com/keejkrej/pi-go/internal/jsonx"
 )
 
-func smtDatabasePath(t *testing.T) string {
+func tsmtDatabasePath(t *testing.T) string {
 	t.Helper()
 	return filepath.Join(t.TempDir(), "storage.sqlite")
 }
 
-func smtQueryVersion(t *testing.T, db sqlite.SqliteDatabase) int {
+func tsmtQueryVersion(t *testing.T, db sqlite.SqliteDatabase) int {
 	t.Helper()
 	rows, err := db.Query("SELECT version FROM durable_schema WHERE singleton = 1")
 	if err != nil {
@@ -35,7 +35,7 @@ func smtQueryVersion(t *testing.T, db sqlite.SqliteDatabase) int {
 	return v
 }
 
-func smtQueryInt(t *testing.T, db sqlite.SqliteDatabase, sqlText string) int64 {
+func tsmtQueryInt(t *testing.T, db sqlite.SqliteDatabase, sqlText string) int64 {
 	t.Helper()
 	rows, err := db.Query(sqlText)
 	if err != nil {
@@ -52,7 +52,7 @@ func smtQueryInt(t *testing.T, db sqlite.SqliteDatabase, sqlText string) int64 {
 	return v
 }
 
-func smtQueryString(t *testing.T, db sqlite.SqliteDatabase, sqlText string) string {
+func tsmtQueryString(t *testing.T, db sqlite.SqliteDatabase, sqlText string) string {
 	t.Helper()
 	rows, err := db.Query(sqlText)
 	if err != nil {
@@ -73,7 +73,7 @@ func TestSqliteMigrations(t *testing.T) {
 	ctx := chord.BackgroundContext
 
 	t.Run("creates the current schema and can be applied repeatedly", func(t *testing.T) {
-		db, err := sqlite.OpenNodeSqliteDatabase(smtDatabasePath(t))
+		db, err := sqlite.OpenNodeSqliteDatabase(tsmtDatabasePath(t))
 		if err != nil {
 			t.Fatalf("open db failed: %v", err)
 		}
@@ -85,7 +85,7 @@ func TestSqliteMigrations(t *testing.T) {
 		if err := sqlite.ApplySqliteMigrations(db); err != nil {
 			t.Fatalf("repeat migration failed: %v", err)
 		}
-		if got := smtQueryVersion(t, db); got != sqlite.CurrentSqliteSchemaVersion {
+		if got := tsmtQueryVersion(t, db); got != sqlite.CurrentSqliteSchemaVersion {
 			t.Fatalf("expected version %d, got %d", sqlite.CurrentSqliteSchemaVersion, got)
 		}
 		rows, err := db.Query("SELECT next_id, next_seq FROM durable_metadata WHERE singleton = 1")
@@ -107,7 +107,7 @@ func TestSqliteMigrations(t *testing.T) {
 	})
 
 	t.Run("rejects a database newer than the portable core", func(t *testing.T) {
-		path := smtDatabasePath(t)
+		path := tsmtDatabasePath(t)
 		db, err := sqlite.OpenNodeSqliteDatabase(path)
 		if err != nil {
 			t.Fatalf("open db failed: %v", err)
@@ -129,7 +129,7 @@ func TestSqliteMigrations(t *testing.T) {
 	})
 
 	t.Run("rolls initial bootstrap and every pending migration back together", func(t *testing.T) {
-		db, err := sqlite.OpenNodeSqliteDatabase(smtDatabasePath(t))
+		db, err := sqlite.OpenNodeSqliteDatabase(tsmtDatabasePath(t))
 		if err != nil {
 			t.Fatalf("open db failed: %v", err)
 		}
@@ -151,7 +151,7 @@ func TestSqliteMigrations(t *testing.T) {
 		if err := sqlite.ApplySqliteMigrations(db, failed); err == nil {
 			t.Fatalf("expected invalid SQL migration to fail")
 		}
-		if got := smtQueryInt(t, db, "SELECT count(*) FROM sqlite_schema WHERE name IN ('durable_schema', 'migration_first', 'migration_second')"); got != 0 {
+		if got := tsmtQueryInt(t, db, "SELECT count(*) FROM sqlite_schema WHERE name IN ('durable_schema', 'migration_first', 'migration_second')"); got != 0 {
 			t.Fatalf("expected rollback of all schema changes, count=%d", got)
 		}
 
@@ -162,16 +162,16 @@ func TestSqliteMigrations(t *testing.T) {
 		if err := sqlite.ApplySqliteMigrations(db, fixed); err != nil {
 			t.Fatalf("fixed migration failed: %v", err)
 		}
-		if got := smtQueryVersion(t, db); got != 2 {
+		if got := tsmtQueryVersion(t, db); got != 2 {
 			t.Fatalf("expected version 2, got %d", got)
 		}
-		if got := smtQueryString(t, db, "SELECT value FROM migration_first"); got != "retained" {
+		if got := tsmtQueryString(t, db, "SELECT value FROM migration_first"); got != "retained" {
 			t.Fatalf("expected 'retained', got %q", got)
 		}
 	})
 
 	t.Run("rolls a failed migration back and preserves stored data for a successful retry", func(t *testing.T) {
-		path := smtDatabasePath(t)
+		path := tsmtDatabasePath(t)
 		storage, err := sqlite.OpenNodeSqliteStorage(path)
 		if err != nil {
 			t.Fatalf("open storage failed: %v", err)
@@ -211,10 +211,10 @@ func TestSqliteMigrations(t *testing.T) {
 		if err := sqlite.ApplySqliteMigrations(db, failedMigrations); err == nil {
 			t.Fatalf("expected failed migration error")
 		}
-		if got := smtQueryVersion(t, db); got != sqlite.CurrentSqliteSchemaVersion {
+		if got := tsmtQueryVersion(t, db); got != sqlite.CurrentSqliteSchemaVersion {
 			t.Fatalf("expected version %d, got %d", sqlite.CurrentSqliteSchemaVersion, got)
 		}
-		if got := smtQueryInt(t, db, "SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name = 'migration_probe'"); got != 0 {
+		if got := tsmtQueryInt(t, db, "SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name = 'migration_probe'"); got != 0 {
 			t.Fatalf("expected migration_probe rolled back, count=%d", got)
 		}
 
@@ -225,7 +225,7 @@ func TestSqliteMigrations(t *testing.T) {
 		if err := sqlite.ApplySqliteMigrations(db, successMigrations); err != nil {
 			t.Fatalf("successful retry failed: %v", err)
 		}
-		if got := smtQueryVersion(t, db); got != nextVersion {
+		if got := tsmtQueryVersion(t, db); got != nextVersion {
 			t.Fatalf("expected version %d, got %d", nextVersion, got)
 		}
 

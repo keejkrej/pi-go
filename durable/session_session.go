@@ -34,17 +34,22 @@ func NewSession(storage Storage) Session {
 // NewSessionWithHooks opens a SessionImpl with internal Harness hooks.
 func NewSessionWithHooks(storage Storage, hooks SessionHooks) *SessionImpl {
 	s := &SessionImpl{
-		storage:         storage,
-		hooks:           hooks,
-		documents:       make(map[string]*stLoadedDocument),
-		commitListeners: omap.NewSet[*ssCommitSubscription](),
-		closeListeners:  omap.NewSet[*ssCloseSubscription](),
+		storage:             storage,
+		hooks:               hooks,
+		documents:           make(map[string]*stLoadedDocument),
+		commitListeners:     omap.NewSet[*ssCommitSubscription](),
+		postCommitListeners: omap.NewSet[*ssPostCommitSubscription](),
+		closeListeners:      omap.NewSet[*ssCloseSubscription](),
 	}
 	s.host = &ssTransactionHost{session: s}
 	return s
 }
 
 type ssCommitSubscription struct {
+	fn func(publication CommitPublication, ctx chord.Context)
+}
+
+type ssPostCommitSubscription struct {
 	fn func(publication CommitPublication, ctx chord.Context)
 }
 
@@ -68,14 +73,15 @@ type SessionImpl struct {
 	documents map[string]*stLoadedDocument
 
 	// State/listeners mutex; always released before calling external listeners.
-	stateMu         sync.Mutex
-	closingStarted  bool
-	closeNotifyDone chan struct{}
-	closeDone       chan struct{}
-	closeErr        error
-	poison          error
-	commitListeners *omap.Set[*ssCommitSubscription]
-	closeListeners  *omap.Set[*ssCloseSubscription]
+	stateMu             sync.Mutex
+	closingStarted      bool
+	closeNotifyDone     chan struct{}
+	closeDone           chan struct{}
+	closeErr            error
+	poison              error
+	commitListeners     *omap.Set[*ssCommitSubscription]
+	postCommitListeners *omap.Set[*ssPostCommitSubscription]
+	closeListeners      *omap.Set[*ssCloseSubscription]
 }
 
 var _ Session = (*SessionImpl)(nil)
@@ -495,6 +501,7 @@ func (s *SessionImpl) Close(ctx chord.Context) error {
 			s.acquireLine()
 			s.stateMu.Lock()
 			s.commitListeners.Clear()
+			s.postCommitListeners.Clear()
 			s.stateMu.Unlock()
 
 			s.docsMu.Lock()
@@ -542,6 +549,25 @@ func (s *SessionImpl) SubscribeCommits(listener func(publication CommitPublicati
 	return func() {
 		s.stateMu.Lock()
 		s.commitListeners.Delete(sub)
+		s.stateMu.Unlock()
+	}
+}
+
+func (s *SessionImpl) subscribePostCommits(listener func(publication CommitPublication, ctx chord.Context)) func() {
+	if listener == nil {
+		return func() {}
+	}
+	s.stateMu.Lock()
+	if s.closingStarted || s.poison != nil {
+		s.stateMu.Unlock()
+		return func() {}
+	}
+	sub := &ssPostCommitSubscription{fn: listener}
+	s.postCommitListeners.Add(sub)
+	s.stateMu.Unlock()
+	return func() {
+		s.stateMu.Lock()
+		s.postCommitListeners.Delete(sub)
 		s.stateMu.Unlock()
 	}
 }
@@ -633,11 +659,12 @@ func (s *SessionImpl) publish(
 	}
 
 	s.stateMu.Lock()
-	if s.commitListeners.Len() == 0 {
+	if s.commitListeners.Len() == 0 && s.postCommitListeners.Len() == 0 {
 		s.stateMu.Unlock()
 		return
 	}
 	listeners := s.commitListeners.Values()
+	postListeners := s.postCommitListeners.Values()
 	s.stateMu.Unlock()
 
 	var changes []CommitChange
@@ -651,6 +678,9 @@ func (s *SessionImpl) publish(
 	}
 	publication := CommitPublication{Seq: seq, Changes: changes}
 	for _, sub := range listeners {
+		sub.fn(publication, ctx)
+	}
+	for _, sub := range postListeners {
 		sub.fn(publication, ctx)
 	}
 }

@@ -38,7 +38,8 @@ func hsubNewSubmissions(
 		resume:     resume,
 		waiters:    hutNewWaiters[SubmissionId, *SettledSubmissionRecord](),
 	}
-	session.SubscribeCommits(func(pub CommitPublication, _ chord.Context) {
+	// Resolve submission waiters in the post-commit phase so external SubscribeCommits listeners observe the commit first.
+	session.subscribePostCommits(func(pub CommitPublication, _ chord.Context) {
 		s.observe(pub)
 	})
 	session.SubscribeClose(func() {

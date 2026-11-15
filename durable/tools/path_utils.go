@@ -11,21 +11,21 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-const tpthNarrowNoBreakSpace = "\u202F"
+const puNarrowNoBreakSpace = "\u202F"
 
 var (
-	tpthUnicodeSpacesRe = regexp.MustCompile("[\u00A0\u2000-\u200A\u202F\u205F\u3000]")
-	tpthAmPmRe          = regexp.MustCompile(`(?i) (AM|PM)\.`)
+	puUnicodeSpacesRe = regexp.MustCompile("[\u00A0\u2000-\u200A\u202F\u205F\u3000]")
+	puAmPmRe          = regexp.MustCompile(`(?i) (AM|PM)\.`)
 )
 
-func tpthNormalizeToolPath(path string) string {
-	normalized := tpthUnicodeSpacesRe.ReplaceAllString(path, " ")
+func puNormalizeToolPath(path string) string {
+	normalized := puUnicodeSpacesRe.ReplaceAllString(path, " ")
 	return strings.TrimPrefix(normalized, "@")
 }
 
 // ResolveToolPath normalizes and resolves a tool path to an absolute path in executionEnv.
 func ResolveToolPath(executionEnv env.ExecutionEnv, path string, ctx chord.Context) (string, error) {
-	return env.GetOrThrow(executionEnv.AbsolutePath(tpthNormalizeToolPath(path), ctx))
+	return env.GetOrThrow(executionEnv.AbsolutePath(puNormalizeToolPath(path), ctx))
 }
 
 // ResolveReadToolPath resolves a tool path and checks macOS filename normalization variants if needed.
@@ -38,7 +38,7 @@ func ResolveReadToolPath(executionEnv env.ExecutionEnv, path string, ctx chord.C
 	nfd := norm.NFD.String(resolved)
 	variants := []string{
 		resolved,
-		tpthAmPmRe.ReplaceAllString(resolved, tpthNarrowNoBreakSpace+"$1."),
+		puAmPmRe.ReplaceAllString(resolved, puNarrowNoBreakSpace+"$1."),
 		nfd,
 		strings.ReplaceAll(resolved, "'", "\u2019"),
 		strings.ReplaceAll(nfd, "'", "\u2019"),

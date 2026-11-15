@@ -16,10 +16,10 @@ import (
 )
 
 var (
-	tedfSmartSingleQuotesRe = regexp.MustCompile("[\u2018\u2019\u201A\u201B]")
-	tedfSmartDoubleQuotesRe = regexp.MustCompile("[\u201C\u201D\u201E\u201F]")
-	tedfDashesRe            = regexp.MustCompile("[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]")
-	tedfSpecialSpacesRe     = regexp.MustCompile("[\u00A0\u2002-\u200A\u202F\u205F\u3000]")
+	edSmartSingleQuotesRe = regexp.MustCompile("[\u2018\u2019\u201A\u201B]")
+	edSmartDoubleQuotesRe = regexp.MustCompile("[\u201C\u201D\u201E\u201F]")
+	edDashesRe            = regexp.MustCompile("[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]")
+	edSpecialSpacesRe     = regexp.MustCompile("[\u00A0\u2002-\u200A\u202F\u205F\u3000]")
 )
 
 // Edit represents one targeted oldText -> newText replacement.
@@ -56,19 +56,19 @@ type DiffStringResult struct {
 	FirstChangedLine *int
 }
 
-type tedfLineSpan struct {
+type edLineSpan struct {
 	start int
 	end   int
 }
 
-type tedfMatchedEdit struct {
+type edMatchedEdit struct {
 	editIndex   int
 	matchIndex  int
 	matchLength int
 	newText     string
 }
 
-type tedfReplacementGroup struct {
+type edReplacementGroup struct {
 	startLine    int
 	endLine      int
 	replacements []TextReplacement
@@ -110,14 +110,14 @@ func NormalizeForFuzzyMatch(text string) string {
 		})
 	}
 	joined := strings.Join(lines, "\n")
-	joined = tedfSmartSingleQuotesRe.ReplaceAllString(joined, "'")
-	joined = tedfSmartDoubleQuotesRe.ReplaceAllString(joined, "\"")
-	joined = tedfDashesRe.ReplaceAllString(joined, "-")
-	joined = tedfSpecialSpacesRe.ReplaceAllString(joined, " ")
+	joined = edSmartSingleQuotesRe.ReplaceAllString(joined, "'")
+	joined = edSmartDoubleQuotesRe.ReplaceAllString(joined, "\"")
+	joined = edDashesRe.ReplaceAllString(joined, "-")
+	joined = edSpecialSpacesRe.ReplaceAllString(joined, " ")
 	return joined
 }
 
-func tedfSplitLinesWithEndings(content string) []string {
+func edSplitLinesWithEndings(content string) []string {
 	if content == "" {
 		return nil
 	}
@@ -135,18 +135,18 @@ func tedfSplitLinesWithEndings(content string) []string {
 	return lines
 }
 
-func tedfGetLineSpans(content string) []tedfLineSpan {
-	lines := tedfSplitLinesWithEndings(content)
-	spans := make([]tedfLineSpan, len(lines))
+func edGetLineSpans(content string) []edLineSpan {
+	lines := edSplitLinesWithEndings(content)
+	spans := make([]edLineSpan, len(lines))
 	offset := 0
 	for i, line := range lines {
-		spans[i] = tedfLineSpan{start: offset, end: offset + len(line)}
+		spans[i] = edLineSpan{start: offset, end: offset + len(line)}
 		offset += len(line)
 	}
 	return spans
 }
 
-func tedfGetReplacementLineRange(lines []tedfLineSpan, replacement TextReplacement) (int, int, error) {
+func edGetReplacementLineRange(lines []edLineSpan, replacement TextReplacement) (int, int, error) {
 	replacementStart := replacement.MatchIndex
 	replacementEnd := replacement.MatchIndex + replacement.MatchLength
 
@@ -171,7 +171,7 @@ func tedfGetReplacementLineRange(lines []tedfLineSpan, replacement TextReplaceme
 	return startLine, endLine + 1, nil
 }
 
-func tedfApplyReplacements(content string, replacements []TextReplacement, offset int) string {
+func edApplyReplacements(content string, replacements []TextReplacement, offset int) string {
 	result := content
 	for i := len(replacements) - 1; i >= 0; i-- {
 		replacement := replacements[i]
@@ -187,8 +187,8 @@ func ApplyReplacementsPreservingUnchangedLines(
 	baseContent string,
 	replacements []TextReplacement,
 ) (string, error) {
-	originalLines := tedfSplitLinesWithEndings(originalContent)
-	baseLines := tedfGetLineSpans(baseContent)
+	originalLines := edSplitLinesWithEndings(originalContent)
+	baseLines := edGetLineSpans(baseContent)
 	if len(originalLines) != len(baseLines) {
 		return "", errors.New("Cannot preserve unchanged lines because the base content has a different line count.")
 	}
@@ -199,9 +199,9 @@ func ApplyReplacementsPreservingUnchangedLines(
 		return sortedReplacements[i].MatchIndex < sortedReplacements[j].MatchIndex
 	})
 
-	var groups []tedfReplacementGroup
+	var groups []edReplacementGroup
 	for _, replacement := range sortedReplacements {
-		startLine, endLine, err := tedfGetReplacementLineRange(baseLines, replacement)
+		startLine, endLine, err := edGetReplacementLineRange(baseLines, replacement)
 		if err != nil {
 			return "", err
 		}
@@ -213,7 +213,7 @@ func ApplyReplacementsPreservingUnchangedLines(
 			last.replacements = append(last.replacements, replacement)
 			continue
 		}
-		groups = append(groups, tedfReplacementGroup{
+		groups = append(groups, edReplacementGroup{
 			startLine:    startLine,
 			endLine:      endLine,
 			replacements: []TextReplacement{replacement},
@@ -228,7 +228,7 @@ func ApplyReplacementsPreservingUnchangedLines(
 		}
 		groupStartOffset := baseLines[group.startLine].start
 		groupEndOffset := baseLines[group.endLine-1].end
-		out.WriteString(tedfApplyReplacements(
+		out.WriteString(edApplyReplacements(
 			baseContent[groupStartOffset:groupEndOffset],
 			group.replacements,
 			groupStartOffset,
@@ -284,34 +284,34 @@ func StripBom(content string) (string, string) {
 	return "", content
 }
 
-func tedfCountOccurrences(content string, oldText string) int {
+func edCountOccurrences(content string, oldText string) int {
 	fuzzyContent := NormalizeForFuzzyMatch(content)
 	fuzzyOldText := NormalizeForFuzzyMatch(oldText)
 	return strings.Count(fuzzyContent, fuzzyOldText)
 }
 
-func tedfNotFoundError(path string, editIndex int, totalEdits int) error {
+func edNotFoundError(path string, editIndex int, totalEdits int) error {
 	if totalEdits == 1 {
 		return fmt.Errorf("Could not find the exact text in %s. The old text must match exactly including all whitespace and newlines.", path)
 	}
 	return fmt.Errorf("Could not find edits[%d] in %s. The oldText must match exactly including all whitespace and newlines.", editIndex, path)
 }
 
-func tedfDuplicateError(path string, editIndex int, totalEdits int, occurrences int) error {
+func edDuplicateError(path string, editIndex int, totalEdits int, occurrences int) error {
 	if totalEdits == 1 {
 		return fmt.Errorf("Found %d occurrences of the text in %s. The text must be unique. Please provide more context to make it unique.", occurrences, path)
 	}
 	return fmt.Errorf("Found %d occurrences of edits[%d] in %s. Each oldText must be unique. Please provide more context to make it unique.", occurrences, editIndex, path)
 }
 
-func tedfEmptyOldTextError(path string, editIndex int, totalEdits int) error {
+func edEmptyOldTextError(path string, editIndex int, totalEdits int) error {
 	if totalEdits == 1 {
 		return fmt.Errorf("oldText must not be empty in %s.", path)
 	}
 	return fmt.Errorf("edits[%d].oldText must not be empty in %s.", editIndex, path)
 }
 
-func tedfNoChangeError(path string, totalEdits int) error {
+func edNoChangeError(path string, totalEdits int) error {
 	if totalEdits == 1 {
 		return fmt.Errorf("No changes made to %s. The replacement produced identical content. This might indicate an issue with special characters or the text not existing as expected.", path)
 	}
@@ -334,7 +334,7 @@ func ApplyEditsToNormalizedContent(
 
 	for i, edit := range normalizedEdits {
 		if len(edit.OldText) == 0 {
-			return AppliedEditsResult{}, tedfEmptyOldTextError(path, i, len(normalizedEdits))
+			return AppliedEditsResult{}, edEmptyOldTextError(path, i, len(normalizedEdits))
 		}
 	}
 
@@ -350,17 +350,17 @@ func ApplyEditsToNormalizedContent(
 		replacementBaseContent = NormalizeForFuzzyMatch(normalizedContent)
 	}
 
-	matchedEdits := make([]tedfMatchedEdit, 0, len(normalizedEdits))
+	matchedEdits := make([]edMatchedEdit, 0, len(normalizedEdits))
 	for i, edit := range normalizedEdits {
 		matchResult := FuzzyFindText(replacementBaseContent, edit.OldText)
 		if !matchResult.Found {
-			return AppliedEditsResult{}, tedfNotFoundError(path, i, len(normalizedEdits))
+			return AppliedEditsResult{}, edNotFoundError(path, i, len(normalizedEdits))
 		}
-		occurrences := tedfCountOccurrences(replacementBaseContent, edit.OldText)
+		occurrences := edCountOccurrences(replacementBaseContent, edit.OldText)
 		if occurrences > 1 {
-			return AppliedEditsResult{}, tedfDuplicateError(path, i, len(normalizedEdits), occurrences)
+			return AppliedEditsResult{}, edDuplicateError(path, i, len(normalizedEdits), occurrences)
 		}
-		matchedEdits = append(matchedEdits, tedfMatchedEdit{
+		matchedEdits = append(matchedEdits, edMatchedEdit{
 			editIndex:   i,
 			matchIndex:  matchResult.Index,
 			matchLength: matchResult.MatchLength,
@@ -402,11 +402,11 @@ func ApplyEditsToNormalizedContent(
 			return AppliedEditsResult{}, err
 		}
 	} else {
-		newContent = tedfApplyReplacements(replacementBaseContent, replacements, 0)
+		newContent = edApplyReplacements(replacementBaseContent, replacements, 0)
 	}
 
 	if baseContent == newContent {
-		return AppliedEditsResult{}, tedfNoChangeError(path, len(normalizedEdits))
+		return AppliedEditsResult{}, edNoChangeError(path, len(normalizedEdits))
 	}
 
 	return AppliedEditsResult{BaseContent: baseContent, NewContent: newContent}, nil
@@ -432,7 +432,7 @@ func GenerateUnifiedPatch(path string, oldContent string, newContent string, con
 	)
 }
 
-func tedfPadLeft(s string, width int) string {
+func edPadLeft(s string, width int) string {
 	if len(s) >= width {
 		return s
 	}
@@ -475,11 +475,11 @@ func GenerateDiffString(oldContent string, newContent string, contextLines ...in
 			}
 			for _, line := range raw {
 				if part.Added {
-					lineNum := tedfPadLeft(strconv.Itoa(newLineNum), lineNumWidth)
+					lineNum := edPadLeft(strconv.Itoa(newLineNum), lineNumWidth)
 					output = append(output, fmt.Sprintf("+%s %s", lineNum, line))
 					newLineNum++
 				} else {
-					lineNum := tedfPadLeft(strconv.Itoa(oldLineNum), lineNumWidth)
+					lineNum := edPadLeft(strconv.Itoa(oldLineNum), lineNumWidth)
 					output = append(output, fmt.Sprintf("-%s %s", lineNum, line))
 					oldLineNum++
 				}
@@ -496,7 +496,7 @@ func GenerateDiffString(oldContent string, newContent string, contextLines ...in
 		case hasLeadingChange && hasTrailingChange:
 			if len(raw) <= ctxLines*2 {
 				for _, line := range raw {
-					lineNum := tedfPadLeft(strconv.Itoa(oldLineNum), lineNumWidth)
+					lineNum := edPadLeft(strconv.Itoa(oldLineNum), lineNumWidth)
 					output = append(output, fmt.Sprintf(" %s %s", lineNum, line))
 					oldLineNum++
 					newLineNum++
@@ -507,18 +507,18 @@ func GenerateDiffString(oldContent string, newContent string, contextLines ...in
 				skippedLines := len(raw) - len(leadingLines) - len(trailingLines)
 
 				for _, line := range leadingLines {
-					lineNum := tedfPadLeft(strconv.Itoa(oldLineNum), lineNumWidth)
+					lineNum := edPadLeft(strconv.Itoa(oldLineNum), lineNumWidth)
 					output = append(output, fmt.Sprintf(" %s %s", lineNum, line))
 					oldLineNum++
 					newLineNum++
 				}
 
-				output = append(output, fmt.Sprintf(" %s ...", tedfPadLeft("", lineNumWidth)))
+				output = append(output, fmt.Sprintf(" %s ...", edPadLeft("", lineNumWidth)))
 				oldLineNum += skippedLines
 				newLineNum += skippedLines
 
 				for _, line := range trailingLines {
-					lineNum := tedfPadLeft(strconv.Itoa(oldLineNum), lineNumWidth)
+					lineNum := edPadLeft(strconv.Itoa(oldLineNum), lineNumWidth)
 					output = append(output, fmt.Sprintf(" %s %s", lineNum, line))
 					oldLineNum++
 					newLineNum++
@@ -533,13 +533,13 @@ func GenerateDiffString(oldContent string, newContent string, contextLines ...in
 			skippedLines := len(raw) - len(shownLines)
 
 			for _, line := range shownLines {
-				lineNum := tedfPadLeft(strconv.Itoa(oldLineNum), lineNumWidth)
+				lineNum := edPadLeft(strconv.Itoa(oldLineNum), lineNumWidth)
 				output = append(output, fmt.Sprintf(" %s %s", lineNum, line))
 				oldLineNum++
 				newLineNum++
 			}
 			if skippedLines > 0 {
-				output = append(output, fmt.Sprintf(" %s ...", tedfPadLeft("", lineNumWidth)))
+				output = append(output, fmt.Sprintf(" %s ...", edPadLeft("", lineNumWidth)))
 				oldLineNum += skippedLines
 				newLineNum += skippedLines
 			}
@@ -549,12 +549,12 @@ func GenerateDiffString(oldContent string, newContent string, contextLines ...in
 				skippedLines = 0
 			}
 			if skippedLines > 0 {
-				output = append(output, fmt.Sprintf(" %s ...", tedfPadLeft("", lineNumWidth)))
+				output = append(output, fmt.Sprintf(" %s ...", edPadLeft("", lineNumWidth)))
 				oldLineNum += skippedLines
 				newLineNum += skippedLines
 			}
 			for _, line := range raw[skippedLines:] {
-				lineNum := tedfPadLeft(strconv.Itoa(oldLineNum), lineNumWidth)
+				lineNum := edPadLeft(strconv.Itoa(oldLineNum), lineNumWidth)
 				output = append(output, fmt.Sprintf(" %s %s", lineNum, line))
 				oldLineNum++
 				newLineNum++

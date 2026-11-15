@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func srbPackageImports(t *testing.T, dir string, excludePrefix ...string) map[string][]string {
+func tsrbPackageImports(t *testing.T, dir string, excludePrefix ...string) map[string][]string {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -48,7 +48,7 @@ func srbPackageImports(t *testing.T, dir string, excludePrefix ...string) map[st
 	return result
 }
 
-func srbAssertNoImports(t *testing.T, importsByFile map[string][]string, forbidden ...string) {
+func tsrbAssertNoImports(t *testing.T, importsByFile map[string][]string, forbidden ...string) {
 	t.Helper()
 	for file, imps := range importsByFile {
 		for _, imp := range imps {
@@ -62,8 +62,8 @@ func srbAssertNoImports(t *testing.T, importsByFile map[string][]string, forbidd
 }
 
 func TestDurableStorageRuntimeBoundaries(t *testing.T) {
-	rootImports := srbPackageImports(t, ".")
-	srbAssertNoImports(t, rootImports,
+	rootImports := tsrbPackageImports(t, ".")
+	tsrbAssertNoImports(t, rootImports,
 		"github.com/keejkrej/pi-go/durable/storage",
 		"github.com/keejkrej/pi-go/durable/storage/jsonl",
 		"github.com/keejkrej/pi-go/durable/storage/sqlite",
@@ -74,8 +74,8 @@ func TestDurableStorageRuntimeBoundaries(t *testing.T) {
 		"C",
 	)
 
-	memImports := srbPackageImports(t, "storage")
-	srbAssertNoImports(t, memImports,
+	memImports := tsrbPackageImports(t, "storage")
+	tsrbAssertNoImports(t, memImports,
 		"github.com/keejkrej/pi-go/durable/env",
 		"github.com/keejkrej/pi-go/durable/storage/jsonl",
 		"github.com/keejkrej/pi-go/durable/storage/sqlite",
@@ -86,8 +86,8 @@ func TestDurableStorageRuntimeBoundaries(t *testing.T) {
 		"C",
 	)
 
-	portableSqliteImports := srbPackageImports(t, filepath.Join("storage", "sqlite"), "node")
-	srbAssertNoImports(t, portableSqliteImports,
+	portableSqliteImports := tsrbPackageImports(t, filepath.Join("storage", "sqlite"), "node")
+	tsrbAssertNoImports(t, portableSqliteImports,
 		"os",
 		"os/exec",
 		"modernc.org/sqlite",
@@ -95,8 +95,8 @@ func TestDurableStorageRuntimeBoundaries(t *testing.T) {
 		"C",
 	)
 
-	portableEnvImports := srbPackageImports(t, "env", "node")
-	srbAssertNoImports(t, portableEnvImports,
+	portableEnvImports := tsrbPackageImports(t, "env", "node")
+	tsrbAssertNoImports(t, portableEnvImports,
 		"os",
 		"os/exec",
 		"syscall",
@@ -104,8 +104,8 @@ func TestDurableStorageRuntimeBoundaries(t *testing.T) {
 		"C",
 	)
 
-	portableJsonlImports := srbPackageImports(t, filepath.Join("storage", "jsonl"), "node")
-	srbAssertNoImports(t, portableJsonlImports,
+	portableJsonlImports := tsrbPackageImports(t, filepath.Join("storage", "jsonl"), "node")
+	tsrbAssertNoImports(t, portableJsonlImports,
 		"os",
 		"os/exec",
 		"database/sql",

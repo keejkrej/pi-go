@@ -19,7 +19,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-type sstReopeningStorage struct {
+type tsstReopeningStorage struct {
 	mu      sync.Mutex
 	current *sqlite.SqliteStorage
 	path    string
@@ -27,15 +27,15 @@ type sstReopeningStorage struct {
 	closed  bool
 }
 
-func sstNewReopeningStorage(path string, options ...sqlite.NodeSqliteStorageOptions) (*sstReopeningStorage, error) {
+func tsstNewReopeningStorage(path string, options ...sqlite.NodeSqliteStorageOptions) (*tsstReopeningStorage, error) {
 	cur, err := sqlite.OpenNodeSqliteStorage(path, options...)
 	if err != nil {
 		return nil, err
 	}
-	return &sstReopeningStorage{current: cur, path: path, options: options}, nil
+	return &tsstReopeningStorage{current: cur, path: path, options: options}, nil
 }
 
-func (r *sstReopeningStorage) Commit(ctx chord.Context, writes []durable.StorageWrite) (durable.Seq, error) {
+func (r *tsstReopeningStorage) Commit(ctx chord.Context, writes []durable.StorageWrite) (durable.Seq, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
@@ -54,82 +54,82 @@ func (r *sstReopeningStorage) Commit(ctx chord.Context, writes []durable.Storage
 	return seq, err
 }
 
-func (r *sstReopeningStorage) MintId() (int64, error) {
+func (r *tsstReopeningStorage) MintId() (int64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.current.MintId()
 }
-func (r *sstReopeningStorage) Conversation(ctx chord.Context, id durable.ConversationId) (*durable.ConversationRecord, error) {
+func (r *tsstReopeningStorage) Conversation(ctx chord.Context, id durable.ConversationId) (*durable.ConversationRecord, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.current.Conversation(ctx, id)
 }
-func (r *sstReopeningStorage) ScanConversations(ctx chord.Context, query durable.ConversationQuery, limit int, cursor durable.Cursor) (durable.Page[durable.ConversationRecord, durable.Cursor], error) {
+func (r *tsstReopeningStorage) ScanConversations(ctx chord.Context, query durable.ConversationQuery, limit int, cursor durable.Cursor) (durable.Page[durable.ConversationRecord, durable.Cursor], error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.current.ScanConversations(ctx, query, limit, cursor)
 }
-func (r *sstReopeningStorage) Entry(ctx chord.Context, id durable.EntryId) (*durable.StoredEntry, error) {
+func (r *tsstReopeningStorage) Entry(ctx chord.Context, id durable.EntryId) (*durable.StoredEntry, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.current.Entry(ctx, id)
 }
-func (r *sstReopeningStorage) EntryInConversation(ctx chord.Context, conversationId durable.ConversationId, id durable.EntryId) (*durable.StoredEntry, error) {
+func (r *tsstReopeningStorage) EntryInConversation(ctx chord.Context, conversationId durable.ConversationId, id durable.EntryId) (*durable.StoredEntry, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.current.EntryInConversation(ctx, conversationId, id)
 }
-func (r *sstReopeningStorage) FindLatestHeadMarker(ctx chord.Context, conversationId durable.ConversationId, atOrBeforeEntryId *durable.EntryId) (*durable.EntryRecord, error) {
+func (r *tsstReopeningStorage) FindLatestHeadMarker(ctx chord.Context, conversationId durable.ConversationId, atOrBeforeEntryId *durable.EntryId) (*durable.EntryRecord, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.current.FindLatestHeadMarker(ctx, conversationId, atOrBeforeEntryId)
 }
-func (r *sstReopeningStorage) ScanEntries(ctx chord.Context, query durable.EntryQuery, limit int, cursor durable.Cursor) (durable.Page[durable.EntryRecord, durable.Cursor], error) {
+func (r *tsstReopeningStorage) ScanEntries(ctx chord.Context, query durable.EntryQuery, limit int, cursor durable.Cursor) (durable.Page[durable.EntryRecord, durable.Cursor], error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.current.ScanEntries(ctx, query, limit, cursor)
 }
-func (r *sstReopeningStorage) Task(ctx chord.Context, id durable.TaskId) (*durable.TaskRecord, error) {
+func (r *tsstReopeningStorage) Task(ctx chord.Context, id durable.TaskId) (*durable.TaskRecord, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.current.Task(ctx, id)
 }
-func (r *sstReopeningStorage) ScanTasks(ctx chord.Context, query durable.TaskQuery, limit int, cursor durable.Cursor) (durable.Page[durable.TaskRecord, durable.Cursor], error) {
+func (r *tsstReopeningStorage) ScanTasks(ctx chord.Context, query durable.TaskQuery, limit int, cursor durable.Cursor) (durable.Page[durable.TaskRecord, durable.Cursor], error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.current.ScanTasks(ctx, query, limit, cursor)
 }
-func (r *sstReopeningStorage) Submission(ctx chord.Context, id durable.SubmissionId) (*durable.SubmissionRecord, error) {
+func (r *tsstReopeningStorage) Submission(ctx chord.Context, id durable.SubmissionId) (*durable.SubmissionRecord, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.current.Submission(ctx, id)
 }
-func (r *sstReopeningStorage) ScanSubmissions(ctx chord.Context, query durable.SubmissionQuery, limit int, cursor durable.Cursor) (durable.Page[durable.SubmissionRecord, durable.Cursor], error) {
+func (r *tsstReopeningStorage) ScanSubmissions(ctx chord.Context, query durable.SubmissionQuery, limit int, cursor durable.Cursor) (durable.Page[durable.SubmissionRecord, durable.Cursor], error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.current.ScanSubmissions(ctx, query, limit, cursor)
 }
-func (r *sstReopeningStorage) SubmissionByRequest(ctx chord.Context, conversationId durable.ConversationId, requestId string) (*durable.SubmissionRecord, error) {
+func (r *tsstReopeningStorage) SubmissionByRequest(ctx chord.Context, conversationId durable.ConversationId, requestId string) (*durable.SubmissionRecord, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.current.SubmissionByRequest(ctx, conversationId, requestId)
 }
-func (r *sstReopeningStorage) FindDocument(ctx chord.Context, address durable.DocumentAddress, at durable.DocumentPoint) (*durable.DocumentRecord, error) {
+func (r *tsstReopeningStorage) FindDocument(ctx chord.Context, address durable.DocumentAddress, at durable.DocumentPoint) (*durable.DocumentRecord, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.current.FindDocument(ctx, address, at)
 }
-func (r *sstReopeningStorage) Document(ctx chord.Context, id durable.DocumentId, at durable.DocumentPoint) (*durable.StoredDocument, error) {
+func (r *tsstReopeningStorage) Document(ctx chord.Context, id durable.DocumentId, at durable.DocumentPoint) (*durable.StoredDocument, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.current.Document(ctx, id, at)
 }
-func (r *sstReopeningStorage) ScanDocuments(ctx chord.Context, query durable.DocumentQuery, limit int, cursor durable.Cursor) (durable.Page[durable.DocumentRecord, durable.Cursor], error) {
+func (r *tsstReopeningStorage) ScanDocuments(ctx chord.Context, query durable.DocumentQuery, limit int, cursor durable.Cursor) (durable.Page[durable.DocumentRecord, durable.Cursor], error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.current.ScanDocuments(ctx, query, limit, cursor)
 }
-func (r *sstReopeningStorage) Close(ctx chord.Context) error {
+func (r *tsstReopeningStorage) Close(ctx chord.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
@@ -139,7 +139,7 @@ func (r *sstReopeningStorage) Close(ctx chord.Context) error {
 	return r.current.Close(ctx)
 }
 
-func sstCreateStorage(t *testing.T, opts ...sqlite.NodeSqliteStorageOptions) (*sqlite.SqliteStorage, string) {
+func tsstCreateStorage(t *testing.T, opts ...sqlite.NodeSqliteStorageOptions) (*sqlite.SqliteStorage, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "storage.sqlite")
 	store, err := sqlite.OpenNodeSqliteStorage(path, opts...)
@@ -150,7 +150,7 @@ func sstCreateStorage(t *testing.T, opts ...sqlite.NodeSqliteStorageOptions) (*s
 	return store, path
 }
 
-func sstOpenRawDB(t *testing.T, path string, readOnly bool) *sql.DB {
+func tsstOpenRawDB(t *testing.T, path string, readOnly bool) *sql.DB {
 	t.Helper()
 	dsn := path
 	if readOnly {
@@ -166,7 +166,7 @@ func sstOpenRawDB(t *testing.T, path string, readOnly bool) *sql.DB {
 	return db
 }
 
-func sstScalarInt(t *testing.T, db *sql.DB, sqlText string, args ...any) int64 {
+func tsstScalarInt(t *testing.T, db *sql.DB, sqlText string, args ...any) int64 {
 	t.Helper()
 	var val int64
 	if err := db.QueryRow(sqlText, args...).Scan(&val); err != nil {
@@ -175,14 +175,14 @@ func sstScalarInt(t *testing.T, db *sql.DB, sqlText string, args ...any) int64 {
 	return val
 }
 
-func sstRevisionCount(t *testing.T, path string, docId durable.DocumentId) int64 {
+func tsstRevisionCount(t *testing.T, path string, docId durable.DocumentId) int64 {
 	t.Helper()
-	db := sstOpenRawDB(t, path, true)
+	db := tsstOpenRawDB(t, path, true)
 	defer func() { _ = db.Close() }()
-	return sstScalarInt(t, db, "SELECT count(*) FROM document_revisions WHERE document_id = ?", int64(docId))
+	return tsstScalarInt(t, db, "SELECT count(*) FROM document_revisions WHERE document_id = ?", int64(docId))
 }
 
-func sstEntry(id durable.EntryId, convId durable.ConversationId, data durable.JsonValue) durable.EntryRecord {
+func tsstEntry(id durable.EntryId, convId durable.ConversationId, data durable.JsonValue) durable.EntryRecord {
 	return durable.EntryRecord{
 		Id:             id,
 		ConversationId: convId,
@@ -191,7 +191,7 @@ func sstEntry(id durable.EntryId, convId durable.ConversationId, data durable.Js
 	}
 }
 
-func sstPendingTask(id durable.TaskId) durable.TaskRecord {
+func tsstPendingTask(id durable.TaskId) durable.TaskRecord {
 	return durable.TaskRecord{
 		Id:             id,
 		ConversationId: durable.RootConversationId,
@@ -205,7 +205,7 @@ func sstPendingTask(id durable.TaskId) durable.TaskRecord {
 	}
 }
 
-func sstCreateRoot(t *testing.T, store durable.Storage) durable.Seq {
+func tsstCreateRoot(t *testing.T, store durable.Storage) durable.Seq {
 	t.Helper()
 	seq, err := store.Commit(chord.BackgroundContext, []durable.StorageWrite{
 		durable.StorageWriteConversation{
@@ -250,7 +250,7 @@ func TestSqliteStorageConformance(t *testing.T) {
 		if err := created.Close(ctx); err != nil {
 			return err
 		}
-		reopening, err := sstNewReopeningStorage(path)
+		reopening, err := tsstNewReopeningStorage(path)
 		if err != nil {
 			return err
 		}
@@ -263,8 +263,8 @@ func TestSqliteStorage(t *testing.T) {
 	ctx := chord.BackgroundContext
 
 	t.Run("persists records, sequence allocation, and global ID allocation across reopen", func(t *testing.T) {
-		storage, path := sstCreateStorage(t)
-		if seq := sstCreateRoot(t, storage); seq != 1 {
+		storage, path := tsstCreateStorage(t)
+		if seq := tsstCreateRoot(t, storage); seq != 1 {
 			t.Fatalf("expected seq 1, got %d", seq)
 		}
 		rawEntryId, err := storage.MintId()
@@ -273,7 +273,7 @@ func TestSqliteStorage(t *testing.T) {
 		}
 		entryId := durable.IdFromNumber[durable.EntryId](rawEntryId)
 		seq2, err := storage.Commit(ctx, []durable.StorageWrite{
-			durable.StorageWriteEntry{Type: durable.StorageWriteTypeEntry, Value: sstEntry(entryId, durable.RootConversationId, nil)},
+			durable.StorageWriteEntry{Type: durable.StorageWriteTypeEntry, Value: tsstEntry(entryId, durable.RootConversationId, nil)},
 		})
 		if err != nil || seq2 != 2 {
 			t.Fatalf("commit failed: seq=%d err=%v", seq2, err)
@@ -292,7 +292,7 @@ func TestSqliteStorage(t *testing.T) {
 		if err != nil || stored == nil {
 			t.Fatalf("Entry failed: stored=%v err=%v", stored, err)
 		}
-		if stored.CommitSeq != 2 || !jsonx.DeepEqual(stored.Entry, sstEntry(entryId, durable.RootConversationId, nil)) {
+		if stored.CommitSeq != 2 || !jsonx.DeepEqual(stored.Entry, tsstEntry(entryId, durable.RootConversationId, nil)) {
 			t.Fatalf("unexpected stored entry: %+v", stored)
 		}
 		nextId, err := reopened.MintId()
@@ -306,7 +306,7 @@ func TestSqliteStorage(t *testing.T) {
 		seq3, err := reopened.Commit(ctx, []durable.StorageWrite{
 			durable.StorageWriteTask{
 				Type:  durable.StorageWriteTypeTask,
-				Value: sstPendingTask(durable.IdFromNumber[durable.TaskId](taskRaw)),
+				Value: tsstPendingTask(durable.IdFromNumber[durable.TaskId](taskRaw)),
 			},
 		})
 		if err != nil || seq3 != 3 {
@@ -315,11 +315,11 @@ func TestSqliteStorage(t *testing.T) {
 	})
 
 	t.Run("rejects persisted metadata corruption on reopen", func(t *testing.T) {
-		storage, path := sstCreateStorage(t)
+		storage, path := tsstCreateStorage(t)
 		if err := storage.Close(ctx); err != nil {
 			t.Fatalf("close failed: %v", err)
 		}
-		raw := sstOpenRawDB(t, path, false)
+		raw := tsstOpenRawDB(t, path, false)
 		_, err := raw.Exec("DELETE FROM durable_metadata")
 		_ = raw.Close()
 		if err != nil {
@@ -333,8 +333,8 @@ func TestSqliteStorage(t *testing.T) {
 	})
 
 	t.Run("rejects a document whose required base is missing", func(t *testing.T) {
-		storage, path := sstCreateStorage(t)
-		sstCreateRoot(t, storage)
+		storage, path := tsstCreateStorage(t)
+		tsstCreateRoot(t, storage)
 		rawDocId, err := storage.MintId()
 		if err != nil {
 			t.Fatalf("MintId failed: %v", err)
@@ -358,7 +358,7 @@ func TestSqliteStorage(t *testing.T) {
 			t.Fatalf("commit failed: %v", err)
 		}
 
-		raw := sstOpenRawDB(t, path, false)
+		raw := tsstOpenRawDB(t, path, false)
 		_, delErr := raw.Exec("DELETE FROM document_revisions WHERE document_id = ?", int64(docId))
 		_ = raw.Close()
 		if delErr != nil {
@@ -373,8 +373,8 @@ func TestSqliteStorage(t *testing.T) {
 	})
 
 	t.Run("replays detached root replacements and follow-up edits while rejecting corrupt operations", func(t *testing.T) {
-		storage, path := sstCreateStorage(t)
-		sstCreateRoot(t, storage)
+		storage, path := tsstCreateStorage(t)
+		tsstCreateRoot(t, storage)
 		rawDocId, err := storage.MintId()
 		if err != nil {
 			t.Fatalf("MintId failed: %v", err)
@@ -470,7 +470,7 @@ func TestSqliteStorage(t *testing.T) {
 			t.Fatalf("expected uncorrupted %#v, got %+v err=%v", expected, second, err)
 		}
 
-		raw := sstOpenRawDB(t, path, false)
+		raw := tsstOpenRawDB(t, path, false)
 		_, upErr := raw.Exec(
 			`UPDATE document_revisions SET content = ? WHERE document_id = ? AND seq = (SELECT max(seq) FROM document_revisions WHERE document_id = ?)`,
 			`[["unknown"]]`, int64(docId), int64(docId),
@@ -486,8 +486,8 @@ func TestSqliteStorage(t *testing.T) {
 	})
 
 	t.Run("rolls SQL rows and sequence allocation back as one transaction", func(t *testing.T) {
-		storage, path := sstCreateStorage(t)
-		sstCreateRoot(t, storage)
+		storage, path := tsstCreateStorage(t)
+		tsstCreateRoot(t, storage)
 		rawTransientEntry, _ := storage.MintId()
 		transientEntryId := durable.IdFromNumber[durable.EntryId](rawTransientEntry)
 		rawTransientTask, _ := storage.MintId()
@@ -495,11 +495,11 @@ func TestSqliteStorage(t *testing.T) {
 
 		circular := jsonx.NewObject()
 		circular.Set("self", circular)
-		badTask := sstPendingTask(transientTaskId)
+		badTask := tsstPendingTask(transientTaskId)
 		badTask.Input = circular
 
 		_, err := storage.Commit(ctx, []durable.StorageWrite{
-			durable.StorageWriteEntry{Type: durable.StorageWriteTypeEntry, Value: sstEntry(transientEntryId, durable.RootConversationId, nil)},
+			durable.StorageWriteEntry{Type: durable.StorageWriteTypeEntry, Value: tsstEntry(transientEntryId, durable.RootConversationId, nil)},
 			durable.StorageWriteTask{Type: durable.StorageWriteTypeTask, Value: badTask},
 		})
 		if err == nil || !strings.Contains(err.Error(), "circular structure") {
@@ -515,25 +515,25 @@ func TestSqliteStorage(t *testing.T) {
 		rawCommittedId, _ := storage.MintId()
 		committedId := durable.IdFromNumber[durable.EntryId](rawCommittedId)
 		seq, err := storage.Commit(ctx, []durable.StorageWrite{
-			durable.StorageWriteEntry{Type: durable.StorageWriteTypeEntry, Value: sstEntry(committedId, durable.RootConversationId, nil)},
+			durable.StorageWriteEntry{Type: durable.StorageWriteTypeEntry, Value: tsstEntry(committedId, durable.RootConversationId, nil)},
 		})
 		if err != nil || seq != 2 {
 			t.Fatalf("expected seq 2, got %d err=%v", seq, err)
 		}
 
-		raw := sstOpenRawDB(t, path, true)
+		raw := tsstOpenRawDB(t, path, true)
 		defer func() { _ = raw.Close() }()
-		if got := sstScalarInt(t, raw, "SELECT count(*) FROM entries"); got != 1 {
+		if got := tsstScalarInt(t, raw, "SELECT count(*) FROM entries"); got != 1 {
 			t.Fatalf("expected 1 entry row, got %d", got)
 		}
-		if got := sstScalarInt(t, raw, "SELECT next_seq FROM durable_metadata WHERE singleton = 1"); got != 3 {
+		if got := tsstScalarInt(t, raw, "SELECT next_seq FROM durable_metadata WHERE singleton = 1"); got != 3 {
 			t.Fatalf("expected next_seq=3, got %d", got)
 		}
 	})
 
 	t.Run("reconstructs recent and ancient rewindable points after reopen", func(t *testing.T) {
-		storage, path := sstCreateStorage(t)
-		sstCreateRoot(t, storage)
+		storage, path := tsstCreateStorage(t)
+		tsstCreateRoot(t, storage)
 		rawDocId, _ := storage.MintId()
 		docId := durable.IdFromNumber[durable.DocumentId](rawDocId)
 
@@ -610,11 +610,11 @@ func TestSqliteStorage(t *testing.T) {
 	})
 
 	t.Run("uses indexes for exact addresses, exact scopes, entry history, and document revision tails", func(t *testing.T) {
-		storage, path := sstCreateStorage(t)
+		storage, path := tsstCreateStorage(t)
 		if err := storage.Close(ctx); err != nil {
 			t.Fatalf("close failed: %v", err)
 		}
-		db := sstOpenRawDB(t, path, true)
+		db := tsstOpenRawDB(t, path, true)
 		defer func() { _ = db.Close() }()
 
 		explain := func(query string, args ...any) string {
@@ -667,8 +667,8 @@ func TestSqliteStorage(t *testing.T) {
 	})
 
 	t.Run("reclaims current-only revisions only after a base or retirement", func(t *testing.T) {
-		storage, path := sstCreateStorage(t)
-		sstCreateRoot(t, storage)
+		storage, path := tsstCreateStorage(t)
+		tsstCreateRoot(t, storage)
 		rawDocId, _ := storage.MintId()
 		docId := durable.IdFromNumber[durable.DocumentId](rawDocId)
 
@@ -704,10 +704,10 @@ func TestSqliteStorage(t *testing.T) {
 				t.Fatalf("delta %d failed: %v", count, err)
 			}
 		}
-		if got := sstRevisionCount(t, path, docId); got != 11 {
+		if got := tsstRevisionCount(t, path, docId); got != 11 {
 			t.Fatalf("expected 11 revisions, got %d", got)
 		}
-		raw := sstOpenRawDB(t, path, true)
+		raw := tsstOpenRawDB(t, path, true)
 		var contentStr string
 		if err := raw.QueryRow("SELECT content FROM document_revisions WHERE document_id = ? AND kind = 'delta' ORDER BY seq DESC LIMIT 1", int64(docId)).Scan(&contentStr); err != nil {
 			_ = raw.Close()
@@ -735,7 +735,7 @@ func TestSqliteStorage(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("base change failed: %v", err)
 		}
-		if got := sstRevisionCount(t, path, docId); got != 1 {
+		if got := tsstRevisionCount(t, path, docId); got != 1 {
 			t.Fatalf("expected 1 revision after base, got %d", got)
 		}
 
@@ -752,7 +752,7 @@ func TestSqliteStorage(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("replace change failed: %v", err)
 		}
-		if got := sstRevisionCount(t, path, docId); got != 2 {
+		if got := tsstRevisionCount(t, path, docId); got != 2 {
 			t.Fatalf("expected 2 revisions, got %d", got)
 		}
 
@@ -761,22 +761,22 @@ func TestSqliteStorage(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("retire failed: %v", err)
 		}
-		if got := sstRevisionCount(t, path, docId); got != 0 {
+		if got := tsstRevisionCount(t, path, docId); got != 0 {
 			t.Fatalf("expected 0 revisions after retire, got %d", got)
 		}
 	})
 
 	t.Run("auto-checkpoints WAL frames and truncates the WAL on close", func(t *testing.T) {
 		pages := 1
-		storage, path := sstCreateStorage(t, sqlite.NodeSqliteStorageOptions{WalAutoCheckpointPages: &pages})
-		sstCreateRoot(t, storage)
+		storage, path := tsstCreateStorage(t, sqlite.NodeSqliteStorageOptions{WalAutoCheckpointPages: &pages})
+		tsstCreateRoot(t, storage)
 		pad := strings.Repeat("x", 32*1024)
 		for index := 0; index < 20; index++ {
 			id, _ := storage.MintId()
 			if _, err := storage.Commit(ctx, []durable.StorageWrite{
 				durable.StorageWriteEntry{
 					Type: durable.StorageWriteTypeEntry,
-					Value: sstEntry(durable.IdFromNumber[durable.EntryId](id), durable.RootConversationId,
+					Value: tsstEntry(durable.IdFromNumber[durable.EntryId](id), durable.RootConversationId,
 						jsonx.ObjectOf("text", pad, "index", float64(index))),
 				},
 			}); err != nil {
@@ -793,9 +793,9 @@ func TestSqliteStorage(t *testing.T) {
 			t.Fatalf("expected WAL < 512KiB with auto-checkpoint=1, got %d", info.Size())
 		}
 
-		observer := sstOpenRawDB(t, path, true)
+		observer := tsstOpenRawDB(t, path, true)
 		defer func() { _ = observer.Close() }()
-		if got := sstScalarInt(t, observer, "SELECT count(*) FROM entries"); got != 20 {
+		if got := tsstScalarInt(t, observer, "SELECT count(*) FROM entries"); got != 20 {
 			t.Fatalf("expected 20 entries in observer, got %d", got)
 		}
 		if err := storage.Close(ctx); err != nil {
@@ -808,8 +808,8 @@ func TestSqliteStorage(t *testing.T) {
 	})
 
 	t.Run("reuses pages released by current-only checkpoints", func(t *testing.T) {
-		storage, path := sstCreateStorage(t)
-		sstCreateRoot(t, storage)
+		storage, path := tsstCreateStorage(t)
+		tsstCreateRoot(t, storage)
 		rawDocId, _ := storage.MintId()
 		docId := durable.IdFromNumber[durable.DocumentId](rawDocId)
 		large := strings.Repeat("x", 512*1024)
@@ -845,9 +845,9 @@ func TestSqliteStorage(t *testing.T) {
 			t.Fatalf("shrink change failed: %v", err)
 		}
 
-		before := sstOpenRawDB(t, path, true)
-		pagesAfterDelete := sstScalarInt(t, before, "SELECT page_count FROM pragma_page_count()")
-		freeAfterDelete := sstScalarInt(t, before, "SELECT freelist_count FROM pragma_freelist_count()")
+		before := tsstOpenRawDB(t, path, true)
+		pagesAfterDelete := tsstScalarInt(t, before, "SELECT page_count FROM pragma_page_count()")
+		freeAfterDelete := tsstScalarInt(t, before, "SELECT freelist_count FROM pragma_freelist_count()")
 		_ = before.Close()
 		if freeAfterDelete <= 0 {
 			t.Fatalf("expected freelist_count > 0, got %d", freeAfterDelete)
@@ -867,9 +867,9 @@ func TestSqliteStorage(t *testing.T) {
 			t.Fatalf("large rewrite failed: %v", err)
 		}
 
-		after := sstOpenRawDB(t, path, true)
-		pagesAfterReuse := sstScalarInt(t, after, "SELECT page_count FROM pragma_page_count()")
-		freeAfterReuse := sstScalarInt(t, after, "SELECT freelist_count FROM pragma_freelist_count()")
+		after := tsstOpenRawDB(t, path, true)
+		pagesAfterReuse := tsstScalarInt(t, after, "SELECT page_count FROM pragma_page_count()")
+		freeAfterReuse := tsstScalarInt(t, after, "SELECT freelist_count FROM pragma_freelist_count()")
 		_ = after.Close()
 		if pagesAfterReuse > pagesAfterDelete+2 {
 			t.Fatalf("expected page reuse (<= %d), got %d", pagesAfterDelete+2, pagesAfterReuse)
@@ -880,15 +880,15 @@ func TestSqliteStorage(t *testing.T) {
 	})
 
 	t.Run("keeps representative row and document storage bounded", func(t *testing.T) {
-		storage, path := sstCreateStorage(t)
-		sstCreateRoot(t, storage)
+		storage, path := tsstCreateStorage(t)
+		tsstCreateRoot(t, storage)
 		pad := strings.Repeat("x", 1024)
 		for index := 0; index < 100; index++ {
 			id, _ := storage.MintId()
 			if _, err := storage.Commit(ctx, []durable.StorageWrite{
 				durable.StorageWriteEntry{
 					Type: durable.StorageWriteTypeEntry,
-					Value: sstEntry(durable.IdFromNumber[durable.EntryId](id), durable.RootConversationId,
+					Value: tsstEntry(durable.IdFromNumber[durable.EntryId](id), durable.RootConversationId,
 						jsonx.ObjectOf("index", float64(index), "text", pad)),
 				},
 			}); err != nil {

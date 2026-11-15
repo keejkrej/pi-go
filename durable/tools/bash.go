@@ -15,7 +15,7 @@ import (
 	"github.com/keejkrej/pi-go/internal/typebox"
 )
 
-const tbshMaxTimeoutSeconds = float64(2_147_483_647) / 1000
+const bashMaxTimeoutSeconds = float64(2_147_483_647) / 1000
 
 // BashToolInput defines arguments accepted by the built-in bash tool.
 type BashToolInput struct {
@@ -40,26 +40,26 @@ type BashToolOptions struct {
 	Prepare       BashPrepare
 }
 
-func tbshBashSchema() *typebox.Schema {
-	return tidxObjectSchema(
-		tidxProp{"command", typebox.String(jsonx.ObjectOf("description", "Bash command to execute"))},
-		tidxProp{"timeout", typebox.Optional(typebox.Number(jsonx.ObjectOf("description", "Timeout in seconds (optional, no default timeout)")))},
+func bashBashSchema() *typebox.Schema {
+	return indexObjectSchema(
+		indexProp{"command", typebox.String(jsonx.ObjectOf("description", "Bash command to execute"))},
+		indexProp{"timeout", typebox.Optional(typebox.Number(jsonx.ObjectOf("description", "Timeout in seconds (optional, no default timeout)")))},
 	)
 }
 
-func tbshFormatNumber(v float64) string {
+func bashFormatNumber(v float64) string {
 	return strconv.FormatFloat(v, 'f', -1, 64)
 }
 
-func tbshValidateTimeout(timeout *float64) error {
+func bashValidateTimeout(timeout *float64) error {
 	if timeout == nil {
 		return nil
 	}
 	if math.IsNaN(*timeout) || math.IsInf(*timeout, 0) || *timeout <= 0 {
 		return errors.New("Invalid timeout: must be a finite number of seconds")
 	}
-	if *timeout > tbshMaxTimeoutSeconds {
-		return fmt.Errorf("Invalid timeout: maximum is %s seconds", tbshFormatNumber(tbshMaxTimeoutSeconds))
+	if *timeout > bashMaxTimeoutSeconds {
+		return fmt.Errorf("Invalid timeout: maximum is %s seconds", bashFormatNumber(bashMaxTimeoutSeconds))
 	}
 	return nil
 }
@@ -77,16 +77,16 @@ func CreateBashTool(options ...*BashToolOptions) *durable.ToolRegistration {
 			durable.DefaultMaxLines,
 			durable.DefaultMaxBytes/1024,
 		),
-		Parameters: tbshBashSchema(),
+		Parameters: bashBashSchema(),
 		OutputLimits: &durable.ToolOutputLimits{
 			Retain: durable.ToolOutputRetainTail,
 		},
 		Execute: func(args any, api durable.ToolExecutionApi, ctx chord.Context) (*durable.ToolExecutionResult, error) {
-			input, err := tidxDecodeArgs[BashToolInput](args)
+			input, err := indexDecodeArgs[BashToolInput](args)
 			if err != nil {
 				return nil, err
 			}
-			if err := tbshValidateTimeout(input.Timeout); err != nil {
+			if err := bashValidateTimeout(input.Timeout); err != nil {
 				return nil, err
 			}
 			executionEnv, err := RequireEnv(api, ctx)
@@ -147,13 +147,13 @@ func CreateBashTool(options ...*BashToolOptions) *durable.ToolRegistration {
 
 			if !result.Ok {
 				if result.Error != nil {
-					if result.Error.Code == env.ExecutionErrorAborted && tidxIsAborted(ctx) {
+					if result.Error.Code == env.ExecutionErrorAborted && indexIsAborted(ctx) {
 						return nil, result.Error
 					}
 					if result.Error.Code == env.ExecutionErrorTimeout {
 						timeoutDisplay := "<nil>"
 						if input.Timeout != nil {
-							timeoutDisplay = tbshFormatNumber(*input.Timeout)
+							timeoutDisplay = bashFormatNumber(*input.Timeout)
 						}
 						return nil, fmt.Errorf("Command timed out after %s seconds", timeoutDisplay)
 					}

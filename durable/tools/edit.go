@@ -28,12 +28,12 @@ type EditToolDetails struct {
 	FirstChangedLine *int   `json:"firstChangedLine,omitzero"`
 }
 
-type tedtAccessError struct {
+type editAccessError struct {
 	path  string
 	cause *env.FileError
 }
 
-func (e *tedtAccessError) Error() string {
+func (e *editAccessError) Error() string {
 	var code env.FileErrorCode
 	if e.cause != nil {
 		code = e.cause.Code
@@ -41,25 +41,25 @@ func (e *tedtAccessError) Error() string {
 	return fmt.Sprintf("Could not edit file: %s. Error code: %s.", e.path, code)
 }
 
-func (e *tedtAccessError) Unwrap() error {
+func (e *editAccessError) Unwrap() error {
 	if e.cause == nil {
 		return nil
 	}
 	return e.cause
 }
 
-func tedtEditSchema() *typebox.Schema {
-	replaceEditSchema := tidxObjectSchema(
-		tidxProp{"oldText", typebox.String(jsonx.ObjectOf("description", "Exact text for one targeted replacement. It must be unique in the original file and must not overlap with any other edits[].oldText in the same call."))},
-		tidxProp{"newText", typebox.String(jsonx.ObjectOf("description", "Replacement text for this targeted edit."))},
+func editEditSchema() *typebox.Schema {
+	replaceEditSchema := indexObjectSchema(
+		indexProp{"oldText", typebox.String(jsonx.ObjectOf("description", "Exact text for one targeted replacement. It must be unique in the original file and must not overlap with any other edits[].oldText in the same call."))},
+		indexProp{"newText", typebox.String(jsonx.ObjectOf("description", "Replacement text for this targeted edit."))},
 	)
-	return tidxObjectSchema(
-		tidxProp{"path", typebox.String(jsonx.ObjectOf("description", "Path to the file to edit (relative or absolute)"))},
-		tidxProp{"edits", typebox.Array(replaceEditSchema, jsonx.ObjectOf("description", "One or more targeted replacements. Each edit is matched against the original file, not incrementally. Do not include overlapping or nested edits. If two changes touch the same block or nearby lines, merge them into one edit instead."))},
+	return indexObjectSchema(
+		indexProp{"path", typebox.String(jsonx.ObjectOf("description", "Path to the file to edit (relative or absolute)"))},
+		indexProp{"edits", typebox.Array(replaceEditSchema, jsonx.ObjectOf("description", "One or more targeted replacements. Each edit is matched against the original file, not incrementally. Do not include overlapping or nested edits. If two changes touch the same block or nearby lines, merge them into one edit instead."))},
 	)
 }
 
-func tedtIsSingleEditObject(value any) bool {
+func editIsSingleEditObject(value any) bool {
 	switch o := value.(type) {
 	case *jsonx.Object:
 		if o == nil {
@@ -79,7 +79,7 @@ func tedtIsSingleEditObject(value any) bool {
 	}
 }
 
-func tedtPrepareEditArguments(input any) any {
+func editPrepareEditArguments(input any) any {
 	obj, ok := input.(*jsonx.Object)
 	if !ok || obj == nil {
 		if m, isMap := input.(map[string]any); isMap && m != nil {
@@ -99,12 +99,12 @@ func tedtPrepareEditArguments(input any) any {
 			if parsed, err := jsonx.ParseString(ev); err == nil {
 				if arr, isArr := parsed.([]any); isArr {
 					out.Set("edits", arr)
-				} else if tedtIsSingleEditObject(parsed) {
+				} else if editIsSingleEditObject(parsed) {
 					out.Set("edits", []any{parsed})
 				}
 			}
 		default:
-			if tedtIsSingleEditObject(ev) {
+			if editIsSingleEditObject(ev) {
 				out.Set("edits", []any{ev})
 			}
 		}
@@ -131,7 +131,7 @@ func tedtPrepareEditArguments(input any) any {
 	return out
 }
 
-func tedtValidateEditInput(input EditToolInput) (string, []Edit, error) {
+func editValidateEditInput(input EditToolInput) (string, []Edit, error) {
 	if len(input.Edits) == 0 {
 		return "", nil, errors.New("Edit tool input is invalid. edits must contain at least one replacement.")
 	}
@@ -143,14 +143,14 @@ func CreateEditTool() *durable.ToolRegistration {
 	return durable.DefineTool(&durable.ToolRegistration{
 		Name:             "edit",
 		Description:      "Edit a single file using exact text replacement. Every edits[].oldText must match a unique, non-overlapping region of the original file. If two changes affect the same block or nearby lines, merge them into one edit instead of emitting overlapping edits. Do not include large unchanged regions just to connect distant changes.",
-		Parameters:       tedtEditSchema(),
-		PrepareArguments: tedtPrepareEditArguments,
+		Parameters:       editEditSchema(),
+		PrepareArguments: editPrepareEditArguments,
 		Execute: func(args any, api durable.ToolExecutionApi, ctx chord.Context) (*durable.ToolExecutionResult, error) {
-			decoded, err := tidxDecodeArgs[EditToolInput](args)
+			decoded, err := indexDecodeArgs[EditToolInput](args)
 			if err != nil {
 				return nil, err
 			}
-			path, edits, err := tedtValidateEditInput(decoded)
+			path, edits, err := editValidateEditInput(decoded)
 			if err != nil {
 				return nil, err
 			}
@@ -164,12 +164,12 @@ func CreateEditTool() *durable.ToolRegistration {
 			}
 
 			return WithFileMutationQueue(executionEnv, absolutePath, func() (*durable.ToolExecutionResult, error) {
-				if tidxIsAborted(ctx) {
+				if indexIsAborted(ctx) {
 					return nil, errors.New("Operation aborted")
 				}
 				info := executionEnv.FileInfo(absolutePath, ctx)
 				if !info.Ok {
-					return nil, &tedtAccessError{path: path, cause: info.Error}
+					return nil, &editAccessError{path: path, cause: info.Error}
 				}
 				if info.Value.Kind != env.FileKindFile && info.Value.Kind != env.FileKindSymlink {
 					return nil, fmt.Errorf("Could not edit file: %s. Path is not a file.", path)
@@ -177,9 +177,9 @@ func CreateEditTool() *durable.ToolRegistration {
 
 				readResult := executionEnv.ReadTextFile(absolutePath, ctx)
 				if !readResult.Ok {
-					return nil, &tedtAccessError{path: path, cause: readResult.Error}
+					return nil, &editAccessError{path: path, cause: readResult.Error}
 				}
-				if tidxIsAborted(ctx) {
+				if indexIsAborted(ctx) {
 					return nil, errors.New("Operation aborted")
 				}
 
@@ -190,16 +190,16 @@ func CreateEditTool() *durable.ToolRegistration {
 				if err != nil {
 					return nil, err
 				}
-				if tidxIsAborted(ctx) {
+				if indexIsAborted(ctx) {
 					return nil, errors.New("Operation aborted")
 				}
 
 				finalContent := bom + RestoreLineEndings(applied.NewContent, originalEnding)
 				writeResult := executionEnv.WriteFile(absolutePath, []byte(finalContent), ctx)
 				if !writeResult.Ok {
-					return nil, &tedtAccessError{path: path, cause: writeResult.Error}
+					return nil, &editAccessError{path: path, cause: writeResult.Error}
 				}
-				if tidxIsAborted(ctx) {
+				if indexIsAborted(ctx) {
 					return nil, errors.New("Operation aborted")
 				}
 

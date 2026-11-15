@@ -17,7 +17,7 @@ import (
 	"github.com/keejkrej/pi-go/durable/storage/sqlite"
 )
 
-func sbtCreateStorage(tb testing.TB, backend string) durable.Storage {
+func tsbtCreateStorage(tb testing.TB, backend string) durable.Storage {
 	tb.Helper()
 	ctx := chord.BackgroundContext
 	switch backend {
@@ -45,7 +45,7 @@ func sbtCreateStorage(tb testing.TB, backend string) durable.Storage {
 	}
 }
 
-func sbtCopyDir(src, dst string) error {
+func tsbtCopyDir(src, dst string) error {
 	if err := os.MkdirAll(dst, 0o755); err != nil {
 		return err
 	}
@@ -57,7 +57,7 @@ func sbtCopyDir(src, dst string) error {
 		sp := filepath.Join(src, entry.Name())
 		dp := filepath.Join(dst, entry.Name())
 		if entry.IsDir() {
-			if err := sbtCopyDir(sp, dp); err != nil {
+			if err := tsbtCopyDir(sp, dp); err != nil {
 				return err
 			}
 			continue
@@ -84,7 +84,7 @@ func sbtCopyDir(src, dst string) error {
 	return nil
 }
 
-func sbtCopyFile(src, dst string) error {
+func tsbtCopyFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -113,7 +113,7 @@ func TestStorageBenchmarkScenarios(t *testing.T) {
 
 	for _, backend := range []string{"memory", "sqlite", "jsonl"} {
 		t.Run("reads/"+backend, func(t *testing.T) {
-			st := sbtCreateStorage(t, backend)
+			st := tsbtCreateStorage(t, backend)
 			dataset, err := durabletest.SeedStorageBenchmark(st, smallScale)
 			if err != nil {
 				t.Fatalf("SeedStorageBenchmark failed: %v", err)
@@ -131,7 +131,7 @@ func TestStorageBenchmarkScenarios(t *testing.T) {
 
 		t.Run("writes/"+backend, func(t *testing.T) {
 			for _, scenario := range durabletest.StorageWriteBenchmarks {
-				st := sbtCreateStorage(t, backend)
+				st := tsbtCreateStorage(t, backend)
 				if err := durabletest.SeedStorageWriteBenchmark(st); err != nil {
 					t.Fatalf("SeedStorageWriteBenchmark failed: %v", err)
 				}
@@ -171,9 +171,9 @@ func TestStorageBenchmarkScenarios(t *testing.T) {
 				copyDir := t.TempDir()
 				copyPath := filepath.Join(copyDir, filepath.Base(seedPath))
 				if backend == "sqlite" {
-					err = sbtCopyFile(seedPath, copyPath)
+					err = tsbtCopyFile(seedPath, copyPath)
 				} else {
-					err = sbtCopyDir(seedPath, copyPath)
+					err = tsbtCopyDir(seedPath, copyPath)
 				}
 				if err != nil {
 					t.Fatalf("copy seed failed: %v", err)
@@ -202,7 +202,7 @@ func BenchmarkStorageReads(b *testing.B) {
 	stores := make(map[string]durable.Storage, len(backends))
 	datasets := make(map[string]durabletest.StorageBenchmarkDataset, len(backends))
 	for _, backend := range backends {
-		st := sbtCreateStorage(b, backend)
+		st := tsbtCreateStorage(b, backend)
 		ds, err := durabletest.SeedStorageBenchmark(st)
 		if err != nil {
 			b.Fatalf("seed %s failed: %v", backend, err)
@@ -233,7 +233,7 @@ func BenchmarkStorageWrites(b *testing.B) {
 			b.Run(fmt.Sprintf("%s/%s", scenario.Name, backend), func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					b.StopTimer()
-					st := sbtCreateStorage(b, backend)
+					st := tsbtCreateStorage(b, backend)
 					if err := durabletest.SeedStorageWriteBenchmark(st); err != nil {
 						b.Fatalf("seed failed: %v", err)
 					}

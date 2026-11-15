@@ -16,12 +16,12 @@ var CodingTools = durable.DefineExtension(&durable.Extension{
 	Tools: []*durable.ToolRegistration{CreateReadTool(), CreateWriteTool(), CreateEditTool(), CreateBashTool()},
 })
 
-type tidxProp struct {
+type indexProp struct {
 	key    string
 	schema *typebox.Schema
 }
 
-func tidxObjectSchema(props ...tidxProp) *typebox.Schema {
+func indexObjectSchema(props ...indexProp) *typebox.Schema {
 	m := omap.NewMap[string, *typebox.Schema]()
 	for _, p := range props {
 		m.Set(p.key, p.schema)
@@ -29,11 +29,11 @@ func tidxObjectSchema(props ...tidxProp) *typebox.Schema {
 	return typebox.Object(m)
 }
 
-func tidxIsAborted(ctx chord.Context) bool {
+func indexIsAborted(ctx chord.Context) bool {
 	return ctx != nil && ctx.AbortSignal() != nil && ctx.AbortSignal().Err() != nil
 }
 
-func tidxDecodeArgs[T any](args any) (T, error) {
+func indexDecodeArgs[T any](args any) (T, error) {
 	if typed, ok := args.(T); ok {
 		return typed, nil
 	}

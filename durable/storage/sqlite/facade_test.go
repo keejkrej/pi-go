@@ -20,37 +20,37 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-type sftSettlementMode int
+type tsftSettlementMode int
 
 const (
-	sftModeImmediate sftSettlementMode = iota
-	sftModeDelay
-	sftModeReject
+	tsftModeImmediate tsftSettlementMode = iota
+	tsftModeDelay
+	tsftModeReject
 )
 
-type sftControlledDatabase struct {
+type tsftControlledDatabase struct {
 	delegate *sqlite.NodeSqliteDatabase
 
 	mu      sync.Mutex
-	mode    sftSettlementMode
+	mode    tsftSettlementMode
 	started chan struct{}
 	release chan struct{}
 }
 
-func sftNewControlledDatabase(delegate *sqlite.NodeSqliteDatabase) *sftControlledDatabase {
-	return &sftControlledDatabase{delegate: delegate}
+func tsftNewControlledDatabase(delegate *sqlite.NodeSqliteDatabase) *tsftControlledDatabase {
+	return &tsftControlledDatabase{delegate: delegate}
 }
 
-func (c *sftControlledDatabase) Exec(sqlText string) error { return c.delegate.Exec(sqlText) }
-func (c *sftControlledDatabase) Run(sqlText string, params ...sqlite.SqliteValue) error {
+func (c *tsftControlledDatabase) Exec(sqlText string) error { return c.delegate.Exec(sqlText) }
+func (c *tsftControlledDatabase) Run(sqlText string, params ...sqlite.SqliteValue) error {
 	return c.delegate.Run(sqlText, params...)
 }
-func (c *sftControlledDatabase) Query(sqlText string, params ...sqlite.SqliteValue) (sqlite.SqliteRows, error) {
+func (c *tsftControlledDatabase) Query(sqlText string, params ...sqlite.SqliteValue) (sqlite.SqliteRows, error) {
 	return c.delegate.Query(sqlText, params...)
 }
-func (c *sftControlledDatabase) Close() error { return c.delegate.Close() }
+func (c *tsftControlledDatabase) Close() error { return c.delegate.Close() }
 
-func (c *sftControlledDatabase) ControlNextSettlement(mode sftSettlementMode) {
+func (c *tsftControlledDatabase) ControlNextSettlement(mode tsftSettlementMode) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.release != nil {
@@ -61,7 +61,7 @@ func (c *sftControlledDatabase) ControlNextSettlement(mode sftSettlementMode) {
 	c.release = make(chan struct{})
 }
 
-func (c *sftControlledDatabase) WaitStarted(t *testing.T) {
+func (c *tsftControlledDatabase) WaitStarted(t *testing.T) {
 	t.Helper()
 	c.mu.Lock()
 	started := c.started
@@ -76,7 +76,7 @@ func (c *sftControlledDatabase) WaitStarted(t *testing.T) {
 	}
 }
 
-func (c *sftControlledDatabase) Settle() {
+func (c *tsftControlledDatabase) Settle() {
 	c.mu.Lock()
 	rel := c.release
 	c.release = nil
@@ -88,15 +88,15 @@ func (c *sftControlledDatabase) Settle() {
 	close(rel)
 }
 
-func (c *sftControlledDatabase) Transaction(callback func(tx sqlite.SqliteExecutor) error) error {
+func (c *tsftControlledDatabase) Transaction(callback func(tx sqlite.SqliteExecutor) error) error {
 	c.mu.Lock()
 	mode := c.mode
 	started := c.started
 	release := c.release
-	c.mode = sftModeImmediate
+	c.mode = tsftModeImmediate
 	c.mu.Unlock()
 
-	if mode == sftModeImmediate {
+	if mode == tsftModeImmediate {
 		return c.delegate.Transaction(callback)
 	}
 	return c.delegate.Transaction(func(tx sqlite.SqliteExecutor) error {
@@ -106,14 +106,14 @@ func (c *sftControlledDatabase) Transaction(callback func(tx sqlite.SqliteExecut
 		if err != nil {
 			return err
 		}
-		if mode == sftModeReject {
+		if mode == tsftModeReject {
 			return errors.New("controlled settlement rejection")
 		}
 		return nil
 	})
 }
 
-type sftCountingConnector struct {
+type tsftCountingConnector struct {
 	baseDriver driver.Driver
 	dsn        string
 
@@ -121,23 +121,23 @@ type sftCountingConnector struct {
 	prepareCounts map[string]int
 }
 
-func (c *sftCountingConnector) Connect(_ context.Context) (driver.Conn, error) {
+func (c *tsftCountingConnector) Connect(_ context.Context) (driver.Conn, error) {
 	conn, err := c.baseDriver.Open(c.dsn)
 	if err != nil {
 		return nil, err
 	}
-	return &sftCountingConn{Conn: conn, owner: c}, nil
+	return &tsftCountingConn{Conn: conn, owner: c}, nil
 }
 
-func (c *sftCountingConnector) Driver() driver.Driver { return c.baseDriver }
+func (c *tsftCountingConnector) Driver() driver.Driver { return c.baseDriver }
 
-func (c *sftCountingConnector) recordPrepare(query string) {
+func (c *tsftCountingConnector) recordPrepare(query string) {
 	c.mu.Lock()
 	c.prepareCounts[query]++
 	c.mu.Unlock()
 }
 
-func (c *sftCountingConnector) repeatedPrepares() []string {
+func (c *tsftCountingConnector) repeatedPrepares() []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	var repeated []string
@@ -149,17 +149,17 @@ func (c *sftCountingConnector) repeatedPrepares() []string {
 	return repeated
 }
 
-type sftCountingConn struct {
+type tsftCountingConn struct {
 	driver.Conn
-	owner *sftCountingConnector
+	owner *tsftCountingConnector
 }
 
-func (c *sftCountingConn) Prepare(query string) (driver.Stmt, error) {
+func (c *tsftCountingConn) Prepare(query string) (driver.Stmt, error) {
 	c.owner.recordPrepare(query)
 	return c.Conn.Prepare(query)
 }
 
-func (c *sftCountingConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
+func (c *tsftCountingConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
 	c.owner.recordPrepare(query)
 	if p, ok := c.Conn.(driver.ConnPrepareContext); ok {
 		return p.PrepareContext(ctx, query)
@@ -167,28 +167,28 @@ func (c *sftCountingConn) PrepareContext(ctx context.Context, query string) (dri
 	return c.Conn.Prepare(query)
 }
 
-func (c *sftCountingConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+func (c *tsftCountingConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	if e, ok := c.Conn.(driver.ExecerContext); ok {
 		return e.ExecContext(ctx, query, args)
 	}
 	return nil, driver.ErrSkip
 }
 
-func (c *sftCountingConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+func (c *tsftCountingConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	if q, ok := c.Conn.(driver.QueryerContext); ok {
 		return q.QueryContext(ctx, query, args)
 	}
 	return nil, driver.ErrSkip
 }
 
-func (c *sftCountingConn) CheckNamedValue(nv *driver.NamedValue) error {
+func (c *tsftCountingConn) CheckNamedValue(nv *driver.NamedValue) error {
 	if chk, ok := c.Conn.(driver.NamedValueChecker); ok {
 		return chk.CheckNamedValue(nv)
 	}
 	return driver.ErrSkip
 }
 
-func sftOpenCountingDB(t *testing.T) (*sql.DB, *sftCountingConnector) {
+func tsftOpenCountingDB(t *testing.T) (*sql.DB, *tsftCountingConnector) {
 	t.Helper()
 	probe, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
@@ -197,7 +197,7 @@ func sftOpenCountingDB(t *testing.T) (*sql.DB, *sftCountingConnector) {
 	baseDrv := probe.Driver()
 	_ = probe.Close()
 
-	connector := &sftCountingConnector{
+	connector := &tsftCountingConnector{
 		baseDriver:    baseDrv,
 		dsn:           ":memory:",
 		prepareCounts: make(map[string]int),
@@ -207,7 +207,7 @@ func sftOpenCountingDB(t *testing.T) (*sql.DB, *sftCountingConnector) {
 	return db, connector
 }
 
-func sftOpenMemoryNodeDB(t *testing.T) *sqlite.NodeSqliteDatabase {
+func tsftOpenMemoryNodeDB(t *testing.T) *sqlite.NodeSqliteDatabase {
 	t.Helper()
 	db, err := sqlite.OpenNodeSqliteDatabase(":memory:")
 	if err != nil {
@@ -220,7 +220,7 @@ func TestSqliteFacade(t *testing.T) {
 	ctx := chord.BackgroundContext
 
 	t.Run("prepares each storage statement once per connection and reuses it across transactions", func(t *testing.T) {
-		rawDB, connector := sftOpenCountingDB(t)
+		rawDB, connector := tsftOpenCountingDB(t)
 		nodeDB, err := sqlite.NewNodeSqliteDatabase(rawDB)
 		if err != nil {
 			t.Fatalf("NewNodeSqliteDatabase failed: %v", err)
@@ -298,7 +298,7 @@ func TestSqliteFacade(t *testing.T) {
 	})
 
 	t.Run("commits work done through the transaction handle and closes idempotently", func(t *testing.T) {
-		db := sftOpenMemoryNodeDB(t)
+		db := tsftOpenMemoryNodeDB(t)
 		if err := db.Transaction(func(tx sqlite.SqliteExecutor) error {
 			if err := tx.Exec("CREATE TABLE async_probe (value INTEGER)"); err != nil {
 				return err
@@ -332,7 +332,7 @@ func TestSqliteFacade(t *testing.T) {
 	})
 
 	t.Run("serializes concurrent transactions", func(t *testing.T) {
-		db := sftOpenMemoryNodeDB(t)
+		db := tsftOpenMemoryNodeDB(t)
 		defer func() { _ = db.Close() }()
 		if err := db.Exec("CREATE TABLE transaction_queue (value INTEGER)"); err != nil {
 			t.Fatalf("create table failed: %v", err)
@@ -394,7 +394,7 @@ func TestSqliteFacade(t *testing.T) {
 	})
 
 	t.Run("queues ordinary operations behind an active transaction and keeps rollback isolated", func(t *testing.T) {
-		db := sftOpenMemoryNodeDB(t)
+		db := tsftOpenMemoryNodeDB(t)
 		defer func() { _ = db.Close() }()
 		if err := db.Exec("CREATE TABLE operation_queue (value INTEGER)"); err != nil {
 			t.Fatalf("create table failed: %v", err)
@@ -455,7 +455,7 @@ func TestSqliteFacade(t *testing.T) {
 	})
 
 	t.Run("queues concurrent database calls spawned while a transaction runs", func(t *testing.T) {
-		db := sftOpenMemoryNodeDB(t)
+		db := tsftOpenMemoryNodeDB(t)
 		defer func() { _ = db.Close() }()
 		if err := db.Exec("CREATE TABLE barrier_probe (value INTEGER)"); err != nil {
 			t.Fatalf("create table failed: %v", err)
@@ -497,7 +497,7 @@ func TestSqliteFacade(t *testing.T) {
 	})
 
 	t.Run("lets admitted reads complete around Close and rejects post-close calls", func(t *testing.T) {
-		storage, err := sqlite.OpenSqliteStorage(sftOpenMemoryNodeDB(t))
+		storage, err := sqlite.OpenSqliteStorage(tsftOpenMemoryNodeDB(t))
 		if err != nil {
 			t.Fatalf("open failed: %v", err)
 		}
@@ -540,7 +540,7 @@ func TestSqliteFacade(t *testing.T) {
 	})
 
 	t.Run("rejects a transaction handle used after its transaction settles", func(t *testing.T) {
-		db := sftOpenMemoryNodeDB(t)
+		db := tsftOpenMemoryNodeDB(t)
 		defer func() { _ = db.Close() }()
 		if err := db.Exec("CREATE TABLE stale_probe (value INTEGER)"); err != nil {
 			t.Fatalf("create table failed: %v", err)
@@ -574,7 +574,7 @@ func TestSqliteFacade(t *testing.T) {
 	})
 
 	t.Run("does not preserve a guaranteed rejection when rollback itself fails", func(t *testing.T) {
-		db := sftOpenMemoryNodeDB(t)
+		db := tsftOpenMemoryNodeDB(t)
 		defer func() { _ = db.Close() }()
 		if err := db.Exec("CREATE TABLE rollback_probe (value INTEGER)"); err != nil {
 			t.Fatalf("create table failed: %v", err)
@@ -602,9 +602,9 @@ func TestSqliteFacade(t *testing.T) {
 	})
 
 	t.Run("awaits transaction settlement and adopts IDs only after success", func(t *testing.T) {
-		db := sftNewControlledDatabase(sftOpenMemoryNodeDB(t))
+		db := tsftNewControlledDatabase(tsftOpenMemoryNodeDB(t))
 
-		db.ControlNextSettlement(sftModeDelay)
+		db.ControlNextSettlement(tsftModeDelay)
 		type openRes struct {
 			storage *sqlite.SqliteStorage
 			err     error
@@ -628,7 +628,7 @@ func TestSqliteFacade(t *testing.T) {
 		storage := opened.storage
 		defer func() { _ = storage.Close(ctx) }()
 
-		db.ControlNextSettlement(sftModeDelay)
+		db.ControlNextSettlement(tsftModeDelay)
 		type commitRes struct {
 			seq durable.Seq
 			err error
@@ -667,7 +667,7 @@ func TestSqliteFacade(t *testing.T) {
 			t.Fatalf("expected mintedAfter=101, got %d err=%v", mintedAfter, err)
 		}
 
-		db.ControlNextSettlement(sftModeReject)
+		db.ControlNextSettlement(tsftModeReject)
 		rejectCh := make(chan commitRes, 1)
 		go func() {
 			seq, err := storage.Commit(ctx, []durable.StorageWrite{
@@ -705,7 +705,7 @@ func TestSqliteFacade(t *testing.T) {
 	t.Run("reads a document from one committed state while a commit replaces its base", func(t *testing.T) {
 		docId := durable.IdFromNumber[durable.DocumentId](5)
 		for iter := 0; iter < 16; iter++ {
-			storage, err := sqlite.OpenSqliteStorage(sftOpenMemoryNodeDB(t))
+			storage, err := sqlite.OpenSqliteStorage(tsftOpenMemoryNodeDB(t))
 			if err != nil {
 				t.Fatalf("open failed: %v", err)
 			}

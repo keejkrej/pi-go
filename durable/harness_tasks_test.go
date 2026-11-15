@@ -1860,13 +1860,26 @@ func TestHarnessTaskAbort(t *testing.T) {
 
 	t.Run("signals and joins the run before returning, then runs the abort handler", func(t *testing.T) {
 		reached := testkit.NewDeferred[struct{}]()
+		abortGate := testkit.NewDeferred[struct{}]()
+		defer abortGate.Resolve(struct{}{})
 		var runEnded atomic.Bool
-		signalled := thtkOneStep[any]("test.signalled", func(_ chord.Context, _ durable.RunningTask[any, thtkStep], rt *durable.TaskRuntime[any, thtkStep, any, struct{}]) error {
-			reached.Resolve(struct{}{})
-			defer runEnded.Store(true)
-			_ = testkit.Aborted(rt.Signal())
-			return nil
-		})
+		var abortRanAfterRun atomic.Bool
+		signalled := thtkOneStep[any]("test.signalled",
+			func(_ chord.Context, _ durable.RunningTask[any, thtkStep], rt *durable.TaskRuntime[any, thtkStep, any, struct{}]) error {
+				reached.Resolve(struct{}{})
+				defer runEnded.Store(true)
+				_ = testkit.Aborted(rt.Signal())
+				return nil
+			},
+			func(ctx chord.Context, _ durable.RunningTask[any, thtkStep], rt *durable.TaskRuntime[any, thtkStep, any, struct{}]) error {
+				abortRanAfterRun.Store(runEnded.Load())
+				_, _ = abortGate.Wait()
+				return rt.Commit(ctx, func(_ durable.Tx, current durable.RunningTask[any, thtkStep]) (*durable.NextTaskState[thtkStep, any], error) {
+					next := testkit.AbortedWith[thtkStep, any](current.Checkpoint, "test")
+					return &next, nil
+				})
+			},
+		)
 		opened := thtkOpenRoot(t, []durable.AnyTask{signalled}, nil)
 		defer func() { _ = opened.Harness.Close(nil) }()
 		id := thtkStart(t, opened.Root, signalled)
@@ -1882,9 +1895,10 @@ func TestHarnessTaskAbort(t *testing.T) {
 		if err != nil || res2 != durable.TaskAbortMarked {
 			t.Fatalf("AbortTask 2=%s err=%v", res2, err)
 		}
+		abortGate.Resolve(struct{}{})
 		settled, err := opened.Harness.WaitForTask(nil, id)
-		if err != nil || settled.State.Outcome == nil || settled.State.Outcome.Status != durable.TaskOutcomeAborted || settled.State.Outcome.Reason == nil || *settled.State.Outcome.Reason != "test" {
-			t.Fatalf("settled=%+v err=%v", settled, err)
+		if err != nil || !abortRanAfterRun.Load() || settled.State.Outcome == nil || settled.State.Outcome.Status != durable.TaskOutcomeAborted || settled.State.Outcome.Reason == nil || *settled.State.Outcome.Reason != "test" {
+			t.Fatalf("settled=%+v abortRanAfterRun=%v err=%v", settled, abortRanAfterRun.Load(), err)
 		}
 	})
 
