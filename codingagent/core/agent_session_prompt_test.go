@@ -390,11 +390,315 @@ func TestAgentSessionPromptCharacterization(t *testing.T) {
 	})
 
 	t.Run("before_agent_start hook", func(t *testing.T) {
-		t.Skip("barebone excludes extension hooks (before_agent_start)")
+		largePng := tsaspEncodePngBase64(t, 200, 200)
+		var capturedEvents []core.BeforeAgentStartEvent
+		var mu sync.Mutex
+
+		h, err := testkit.CreateSuiteHarness(ctx, &testkit.SuiteHarnessOptions{
+			Models: []providers.FauxModelDefinition{
+				{
+					Id:            "faux-permissive",
+					Input:         []string{"text", "image"},
+					ContextWindow: tsaspIntPtr(100_000),
+					MaxTokens:     tsaspIntPtr(4096),
+				},
+				{
+					Id:            "faux-strict",
+					Input:         []string{"text", "image"},
+					ContextWindow: tsaspIntPtr(100_000),
+					MaxTokens:     tsaspIntPtr(4096),
+					InputLimits: &ai.ModelInputLimits{
+						Images: &ai.ModelImageInputLimits{
+							Resize: &ai.ModelImageResizeOptions{
+								MaxWidth:  tsaspIntPtr(32),
+								MaxHeight: tsaspIntPtr(32),
+							},
+						},
+					},
+				},
+			},
+			ExtensionFactories: []core.InlineExtension{
+				{
+					Name: "before-agent-start-ext",
+					Factory: func(pi core.ExtensionAPI) error {
+						pi.OnBeforeAgentStart(func(hookCtx context.Context, ev *core.BeforeAgentStartEvent, ectx core.ExtensionContext) (*core.BeforeAgentStartEventResult, error) {
+							if ev == nil {
+								return nil, nil
+							}
+							mu.Lock()
+							capturedEvents = append(capturedEvents, *ev)
+							mu.Unlock()
+
+							if ev.Prompt == "switch model with image" {
+								cur := ectx.Model()
+								strict := ectx.ModelRegistry().Find(string(cur.Provider), "faux-strict")
+								if strict == nil {
+									return nil, fmt.Errorf("missing faux-strict model")
+								}
+								ok, setErr := pi.SetModel(hookCtx, strict)
+								if setErr != nil {
+									return nil, setErr
+								}
+								if !ok {
+									return nil, fmt.Errorf("SetModel returned false")
+								}
+							}
+
+							override := ev.SystemPrompt + "\n\n[before_agent_start_override]"
+							return &core.BeforeAgentStartEventResult{
+								SystemPrompt: &override,
+								Message: &core.BeforeAgentStartCustomMessage{
+									CustomType: "hook-context",
+									Content:    "injected before agent start",
+									Display:    true,
+								},
+							}, nil
+						})
+						return nil
+					},
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("CreateSuiteHarness: %v", err)
+		}
+		defer h.Cleanup()
+
+		var sawSystemOverride bool
+		var sawCustomMsg bool
+		var sentImageData string
+
+		h.SetResponses([]providers.FauxResponseStep{
+			providers.FauxResponseFactory(func(_ context.Context, tc *ai.TranscriptContext, _ *ai.SimpleStreamOptions, _ *providers.FauxProviderState, _ *ai.Model) (*ai.AssistantMessage, error) {
+				for _, m := range tc.Messages {
+					switch msg := m.(type) {
+					case *ai.SystemMessage:
+						if msg != nil {
+							if msg.Content.Text != nil && strings.Contains(*msg.Content.Text, "[before_agent_start_override]") {
+								sawSystemOverride = true
+							}
+							for _, blk := range msg.Content.Blocks {
+								if tcBlk, ok := blk.(*ai.TextContent); ok && tcBlk != nil && strings.Contains(tcBlk.Text, "[before_agent_start_override]") {
+									sawSystemOverride = true
+								}
+							}
+						}
+					case *ai.UserMessage:
+						if msg != nil {
+							for _, blk := range msg.Content.Blocks {
+								if tcBlk, ok := blk.(*ai.TextContent); ok && tcBlk != nil && strings.Contains(tcBlk.Text, "injected before agent start") {
+									sawCustomMsg = true
+								}
+							}
+						}
+					}
+				}
+				return providers.FauxAssistantMessage(providers.FauxAssistantText("first ok"), nil), nil
+			}),
+			providers.FauxResponseFactory(func(_ context.Context, tc *ai.TranscriptContext, _ *ai.SimpleStreamOptions, _ *providers.FauxProviderState, _ *ai.Model) (*ai.AssistantMessage, error) {
+				for _, m := range tc.Messages {
+					if um, ok := m.(*ai.UserMessage); ok && um != nil {
+						for _, blk := range um.Content.Blocks {
+							if img, ok := blk.(*ai.ImageContent); ok && img != nil {
+								sentImageData = img.Data
+							}
+						}
+					}
+				}
+				return providers.FauxAssistantMessage(providers.FauxAssistantText("image ok"), nil), nil
+			}),
+		})
+
+		if err := h.Session.Prompt(ctx, "hello hook"); err != nil {
+			t.Fatalf("Prompt 1: %v", err)
+		}
+		if !sawSystemOverride {
+			t.Fatal("expected before_agent_start SystemPrompt override to reach LLM")
+		}
+		if !sawCustomMsg {
+			t.Fatal("expected before_agent_start injected custom message to reach LLM")
+		}
+
+		if err := h.Session.Prompt(ctx, "switch model with image", &core.PromptOptions{
+			Images: []*ai.ImageContent{{Type: "image", Data: largePng, MimeType: "image/png"}},
+		}); err != nil {
+			t.Fatalf("Prompt 2: %v", err)
+		}
+
+		if cur := h.Session.Model(); cur == nil || cur.Id != "faux-strict" {
+			t.Fatalf("expected active model to switch to faux-strict, got %+v", cur)
+		}
+		if sentImageData == "" {
+			t.Fatal("expected normalized user image in second LLM request")
+		}
+		if sentImageData == largePng {
+			t.Fatalf("expected user image to be resized using switched faux-strict ModelInputLimits")
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		if len(capturedEvents) != 2 {
+			t.Fatalf("expected 2 before_agent_start events, got %d", len(capturedEvents))
+		}
+		if capturedEvents[0].MessageType != "user" || capturedEvents[0].Prompt != "hello hook" {
+			t.Fatalf("unexpected first before_agent_start event: %+v", capturedEvents[0])
+		}
+		if len(capturedEvents[1].Images) != 1 {
+			t.Fatalf("expected 1 trigger image on second before_agent_start event, got %d", len(capturedEvents[1].Images))
+		}
 	})
 
 	t.Run("input hook", func(t *testing.T) {
-		t.Skip("barebone excludes extension input hooks")
+		gateStarted := make(chan struct{})
+		gateRelease := make(chan struct{})
+		var gateOnce sync.Once
+
+		waitTool := &agent.AgentTool{
+			Name:        "wait_gate",
+			Label:       "wait_gate",
+			Description: "Waits until test releases gate",
+			Parameters:  typebox.Object(nil),
+			Execute: func(toolCtx context.Context, _ string, _ any, _ agent.AgentToolUpdateCallback) (agent.AgentToolResult, error) {
+				gateOnce.Do(func() { close(gateStarted) })
+				select {
+				case <-gateRelease:
+				case <-toolCtx.Done():
+					return agent.AgentToolResult{}, toolCtx.Err()
+				}
+				return agent.AgentToolResult{
+					Content: ai.ContentList{&ai.TextContent{Type: "text", Text: "gate released"}},
+				}, nil
+			},
+		}
+
+		type inputRecord struct {
+			text              string
+			source            core.InputSource
+			streamingBehavior *string
+		}
+		var mu sync.Mutex
+		var recorded []inputRecord
+
+		h, err := testkit.CreateSuiteHarness(ctx, &testkit.SuiteHarnessOptions{
+			Tools: []*agent.AgentTool{waitTool},
+			ExtensionFactories: []core.InlineExtension{
+				{
+					Name: "input-hook-ext",
+					Factory: func(pi core.ExtensionAPI) error {
+						pi.OnInput(func(_ context.Context, ev *core.InputEvent, _ core.ExtensionContext) (*core.InputEventResult, error) {
+							if ev == nil {
+								return nil, nil
+							}
+							var sbCopy *string
+							if ev.StreamingBehavior != nil {
+								s := *ev.StreamingBehavior
+								sbCopy = &s
+							}
+							mu.Lock()
+							recorded = append(recorded, inputRecord{
+								text:              ev.Text,
+								source:            ev.Source,
+								streamingBehavior: sbCopy,
+							})
+							mu.Unlock()
+
+							switch ev.Text {
+							case "drop me":
+								return &core.InputEventResult{Action: "handled"}, nil
+							case "rewrite me":
+								return &core.InputEventResult{
+									Action: "transform",
+									Text:   "transformed: " + ev.Text,
+								}, nil
+							default:
+								return &core.InputEventResult{Action: "continue"}, nil
+							}
+						})
+						return nil
+					},
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("CreateSuiteHarness: %v", err)
+		}
+		defer h.Cleanup()
+
+		stopTool := ai.StopReasonToolUse
+		h.SetResponses([]providers.FauxResponseStep{
+			providers.FauxResponseMessage{Message: providers.FauxAssistantMessage(providers.FauxAssistantText("idle reply"), nil)},
+			providers.FauxResponseMessage{
+				Message: providers.FauxAssistantMessage(
+					providers.FauxAssistantBlocks{providers.FauxToolCall("wait_gate", jsonx.NewObject(), nil)},
+					&providers.FauxAssistantMessageOptions{StopReason: &stopTool},
+				),
+			},
+			providers.FauxResponseMessage{Message: providers.FauxAssistantMessage(providers.FauxAssistantText("after gate"), nil)},
+			providers.FauxResponseMessage{Message: providers.FauxAssistantMessage(providers.FauxAssistantText("after queued"), nil)},
+		})
+
+		// When idle, caller-supplied StreamingBehavior is omitted from the InputEvent.
+		if err := h.Session.Prompt(ctx, "idle msg", &core.PromptOptions{StreamingBehavior: "followUp"}); err != nil {
+			t.Fatalf("idle Prompt: %v", err)
+		}
+		if err := h.Session.Prompt(ctx, "drop me"); err != nil {
+			t.Fatalf("handled Prompt: %v", err)
+		}
+		if h.Faux.State.CallCount != 1 {
+			t.Fatalf("expected handled input not to invoke LLM (calls=%d)", h.Faux.State.CallCount)
+		}
+
+		// Start a streaming turn and send followUp/handled inputs while streaming.
+		promptErrCh := make(chan error, 1)
+		go func() {
+			promptErrCh <- h.Session.Prompt(ctx, "start wait")
+		}()
+
+		select {
+		case <-gateStarted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for wait_gate tool to start")
+		}
+
+		if err := h.Session.Prompt(ctx, "rewrite me", &core.PromptOptions{
+			StreamingBehavior: "followUp",
+			Source:            core.InputSourceRpc,
+		}); err != nil {
+			t.Fatalf("queued rewrite Prompt: %v", err)
+		}
+		if err := h.Session.Prompt(ctx, "drop me", &core.PromptOptions{
+			StreamingBehavior: "steer",
+			Source:            core.InputSourceRpc,
+		}); err != nil {
+			t.Fatalf("queued drop Prompt: %v", err)
+		}
+
+		close(gateRelease)
+		if err := <-promptErrCh; err != nil {
+			t.Fatalf("streaming Prompt failed: %v", err)
+		}
+
+		wantUsers := []string{"idle msg", "start wait", "transformed: rewrite me"}
+		gotUsers := testkit.GetUserTexts(h)
+		if !slices.Equal(gotUsers, wantUsers) {
+			t.Fatalf("GetUserTexts = %v, want %v", gotUsers, wantUsers)
+		}
+
+		mu.Lock()
+		recs := slices.Clone(recorded)
+		mu.Unlock()
+		if len(recs) != 5 {
+			t.Fatalf("expected 5 input events, got %d (%+v)", len(recs), recs)
+		}
+		if recs[0].streamingBehavior != nil || recs[0].source != core.InputSourceInteractive {
+			t.Fatalf("expected idle prompt input event with nil StreamingBehavior & interactive source, got %+v", recs[0])
+		}
+		if recs[3].streamingBehavior == nil || *recs[3].streamingBehavior != "followUp" || recs[3].source != core.InputSourceRpc {
+			t.Fatalf("expected streaming followUp rpc input event, got %+v", recs[3])
+		}
+		if recs[4].streamingBehavior == nil || *recs[4].streamingBehavior != "steer" || recs[4].source != core.InputSourceRpc {
+			t.Fatalf("expected streaming steer rpc input event, got %+v", recs[4])
+		}
 	})
 
 	t.Run("sendUserMessage while idle triggers a turn", func(t *testing.T) {
@@ -616,7 +920,66 @@ func TestAgentSessionPromptCharacterization(t *testing.T) {
 	})
 
 	t.Run("extension command execution", func(t *testing.T) {
-		t.Skip("barebone excludes extension commands")
+		type cmdCall struct {
+			args string
+			cwd  string
+		}
+		var calls []cmdCall
+		var mu sync.Mutex
+
+		h, err := testkit.CreateSuiteHarness(ctx, &testkit.SuiteHarnessOptions{
+			ExtensionFactories: []core.InlineExtension{
+				{
+					Name: "test-cmd-ext",
+					Factory: func(pi core.ExtensionAPI) error {
+						pi.RegisterCommand("testcmd", core.RegisteredCommand{
+							Name:        "testcmd",
+							Description: tsaspStrPtr("A test command"),
+							Handler: func(_ context.Context, args string, ectx core.ExtensionCommandContext) error {
+								mu.Lock()
+								calls = append(calls, cmdCall{args: args, cwd: ectx.Cwd()})
+								mu.Unlock()
+								return nil
+							},
+						})
+						return nil
+					},
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("CreateSuiteHarness: %v", err)
+		}
+		defer h.Cleanup()
+
+		if err := h.Session.Prompt(ctx, "/testcmd hello world"); err != nil {
+			t.Fatalf("Prompt(/testcmd): %v", err)
+		}
+		if err := h.Session.SendUserMessage(ctx, "/testcmd from-send", nil, &core.SendUserMessageOptions{
+			ExpandPromptTemplates: true,
+		}); err != nil {
+			t.Fatalf("SendUserMessage(/testcmd): %v", err)
+		}
+
+		mu.Lock()
+		gotCalls := slices.Clone(calls)
+		mu.Unlock()
+		if len(gotCalls) != 2 {
+			t.Fatalf("expected 2 command invocations, got %d (%+v)", len(gotCalls), gotCalls)
+		}
+		wantCwd := h.TempDir
+		if gotCalls[0].args != "hello world" || gotCalls[0].cwd != wantCwd {
+			t.Fatalf("unexpected first command invocation: %+v (want args=%q cwd=%q)", gotCalls[0], "hello world", wantCwd)
+		}
+		if gotCalls[1].args != "from-send" || gotCalls[1].cwd != wantCwd {
+			t.Fatalf("unexpected second command invocation: %+v (want args=%q cwd=%q)", gotCalls[1], "from-send", wantCwd)
+		}
+		if h.Faux.State.CallCount != 0 {
+			t.Fatalf("expected extension command not to invoke LLM (calls=%d)", h.Faux.State.CallCount)
+		}
+		if len(h.Session.Messages()) != 0 {
+			t.Fatalf("expected extension command not to append session messages, got %d", len(h.Session.Messages()))
+		}
 	})
 }
 

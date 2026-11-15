@@ -189,6 +189,7 @@ func (s *Server[M]) startInternal(startDone chan struct{}) error {
 	if err := s.closeServerState(); err != nil {
 		cleanupErrors = append(cleanupErrors, err)
 	}
+	s.disconnectWg.Wait()
 
 	s.mu.Lock()
 	s.starting = false
@@ -243,6 +244,7 @@ func (s *Server[M]) Accept(connection ByteConnection) ByteConnectionHandler {
 	state.mu.Unlock()
 
 	s.connections[state] = struct{}{}
+	s.disconnectWg.Add(1)
 	count := len(s.connections)
 	s.mu.Unlock()
 
@@ -796,7 +798,6 @@ func (s *Server[M]) disconnect(state *connState) {
 		s.notifyConnectionCountChanged(count)
 	}
 
-	s.disconnectWg.Add(1)
 	go func() {
 		defer s.disconnectWg.Done()
 		if err := s.sessions.Disconnect(state, chord.TodoContext); err != nil {

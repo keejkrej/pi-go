@@ -242,6 +242,21 @@ func CreateTestExtensionsResult() core.LoadExtensionsResult {
 	}
 }
 
+// CreateTestExtensionsResultWithFactories loads inline extension factories into a LoadExtensionsResult.
+func CreateTestExtensionsResultWithFactories(ctx context.Context, cwd string, factories ...core.InlineExtension) (core.LoadExtensionsResult, error) {
+	if len(factories) == 0 {
+		return CreateTestExtensionsResult(), nil
+	}
+	res := core.LoadExtensionsWithOptions(ctx, nil, &core.LoadExtensionsOptions{
+		Cwd:       cwd,
+		Factories: factories,
+	})
+	if len(res.Errors) > 0 {
+		return res, fmt.Errorf("extension load error (%s): %s", res.Errors[0].Path, res.Errors[0].Error)
+	}
+	return res, nil
+}
+
 // CreateTestResourceLoaderOptions configures CreateTestResourceLoader.
 type CreateTestResourceLoaderOptions struct {
 	ExtensionsResult   *core.LoadExtensionsResult

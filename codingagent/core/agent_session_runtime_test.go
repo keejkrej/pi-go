@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -40,8 +41,10 @@ type tsasrRuntimeFixture struct {
 }
 
 type tsasrFixtureOptions struct {
-	tools    []*agent.AgentTool
-	inMemory bool
+	tools              []*agent.AgentTool
+	inMemory           bool
+	extensionFactories []core.InlineExtension
+	bindExtensions     bool
 }
 
 func tsasrCreateRuntimeFixture(t *testing.T, ctx context.Context, opts *tsasrFixtureOptions) *tsasrRuntimeFixture {
@@ -131,10 +134,14 @@ func tsasrCreateRuntimeFixture(t *testing.T, ctx context.Context, opts *tsasrFix
 	}
 
 	var extraTools []*agent.AgentTool
+	var extensionFactories []core.InlineExtension
 	inMemory := false
+	bindExtensions := false
 	if opts != nil {
 		extraTools = opts.tools
 		inMemory = opts.inMemory
+		extensionFactories = opts.extensionFactories
+		bindExtensions = opts.bindExtensions
 	}
 
 	createRuntime := func(c context.Context, args core.AgentSessionRuntimeCreateArgs) (*core.CreateAgentSessionRuntimeResult, error) {
@@ -143,10 +150,11 @@ func tsasrCreateRuntimeFixture(t *testing.T, ctx context.Context, opts *tsasrFix
 			AgentDir:    args.AgentDir,
 			AuthStorage: authStorage,
 			ResourceLoaderOptions: &core.DefaultResourceLoaderOptions{
-				NoExtensions:      true,
-				NoSkills:          true,
-				NoPromptTemplates: true,
-				NoThemes:          true,
+				NoExtensions:       true,
+				NoSkills:           true,
+				NoPromptTemplates:  true,
+				NoThemes:           true,
+				ExtensionFactories: extensionFactories,
 			},
 		})
 		if err != nil {
@@ -198,6 +206,11 @@ func tsasrCreateRuntimeFixture(t *testing.T, ctx context.Context, opts *tsasrFix
 	t.Cleanup(func() {
 		_ = runtime.Dispose(context.Background())
 	})
+	if bindExtensions || len(extensionFactories) > 0 {
+		if err := runtime.Session.BindExtensions(ctx, core.ExtensionBindings{}); err != nil {
+			t.Fatalf("BindExtensions: %v", err)
+		}
+	}
 
 	return &tsasrRuntimeFixture{
 		runtime:    runtime,
@@ -666,6 +679,340 @@ func TestAgentSessionRuntimeCharacterization(t *testing.T) {
 	})
 
 	t.Run("extension session_before_switch / session_before_fork / message_end hooks", func(t *testing.T) {
-		t.Skip("barebone excludes extension lifecycle hooks")
+		t.Run("persists assistant message modified by message_end hook", func(t *testing.T) {
+			fx := tsasrCreateRuntimeFixture(t, ctx, &tsasrFixtureOptions{
+				extensionFactories: []core.InlineExtension{
+					{
+						Name: "rewrite-cost-ext",
+						Factory: func(pi core.ExtensionAPI) error {
+							pi.OnMessageEnd(func(_ context.Context, ev *core.MessageEndEvent, _ core.ExtensionContext) (*core.MessageEndEventResult, error) {
+								am, ok := ev.Message.(*ai.AssistantMessage)
+								if !ok || am == nil {
+									return nil, nil
+								}
+								usage := am.Usage
+								usage.Cost.Total = 0.123
+								cp := &ai.AssistantMessage{
+									Role:                  am.Role,
+									Content:               am.Content,
+									Api:                   am.Api,
+									Provider:              am.Provider,
+									Model:                 am.Model,
+									ResponseModel:         am.ResponseModel,
+									ResponseId:            am.ResponseId,
+									ProviderThinkingLevel: am.ProviderThinkingLevel,
+									ThinkingLevel:         am.ThinkingLevel,
+									Diagnostics:           am.Diagnostics,
+									Usage:                 usage,
+									StopReason:            am.StopReason,
+									Deferred:              am.Deferred,
+									ErrorMessage:          am.ErrorMessage,
+									RawStopReason:         am.RawStopReason,
+									EndTurn:               am.EndTurn,
+									Timestamp:             am.Timestamp,
+									DurationMs:            am.DurationMs,
+								}
+								return &core.MessageEndEventResult{Message: cp}, nil
+							})
+							return nil
+						},
+					},
+				},
+			})
+
+			fx.faux.SetResponses([]providers.FauxResponseStep{
+				providers.FauxResponseMessage{Message: providers.FauxAssistantMessage(providers.FauxAssistantText("costed reply"), nil)},
+			})
+			if err := fx.runtime.Session.Prompt(ctx, "hello cost"); err != nil {
+				t.Fatalf("Prompt: %v", err)
+			}
+
+			var sessionTotal float64
+			var foundSession bool
+			for _, m := range fx.runtime.Session.Messages() {
+				if am, ok := m.(*ai.AssistantMessage); ok && am != nil {
+					sessionTotal = am.Usage.Cost.Total
+					foundSession = true
+				}
+			}
+			if !foundSession || sessionTotal != 0.123 {
+				t.Fatalf("expected session assistant cost 0.123, got (found=%v, total=%v)", foundSession, sessionTotal)
+			}
+
+			var persistedTotal float64
+			var foundPersisted bool
+			for _, entry := range fx.runtime.Session.SessionManager.GetBranch() {
+				if me, ok := entry.(*core.SessionMessageEntry); ok && me != nil {
+					if am, ok := me.Message.(*ai.AssistantMessage); ok && am != nil {
+						persistedTotal = am.Usage.Cost.Total
+						foundPersisted = true
+					}
+				}
+			}
+			if !foundPersisted || persistedTotal != 0.123 {
+				t.Fatalf("expected persisted assistant cost 0.123, got (found=%v, total=%v)", foundPersisted, persistedTotal)
+			}
+		})
+
+		t.Run("runs and cancels session_before_switch, session_shutdown, and session_start on newSession and switchSession", func(t *testing.T) {
+			var mu sync.Mutex
+			var events []string
+			var cancelSwitch bool
+
+			fx := tsasrCreateRuntimeFixture(t, ctx, &tsasrFixtureOptions{
+				extensionFactories: []core.InlineExtension{
+					{
+						Name: "switch-lifecycle-ext",
+						Factory: func(pi core.ExtensionAPI) error {
+							pi.OnSessionStart(func(_ context.Context, ev *core.SessionStartEvent, _ core.ExtensionContext) (*core.NoResult, error) {
+								mu.Lock()
+								prev := ""
+								if ev.PreviousSessionFile != nil {
+									prev = filepath.Base(*ev.PreviousSessionFile)
+								}
+								events = append(events, fmt.Sprintf("start:%s:%s", ev.Reason, prev))
+								mu.Unlock()
+								return nil, nil
+							})
+							pi.OnSessionBeforeSwitch(func(_ context.Context, ev *core.SessionBeforeSwitchEvent, _ core.ExtensionContext) (*core.SessionBeforeSwitchResult, error) {
+								mu.Lock()
+								shouldCancel := cancelSwitch
+								target := ""
+								if ev.TargetSessionFile != nil {
+									target = filepath.Base(*ev.TargetSessionFile)
+								}
+								events = append(events, fmt.Sprintf("before_switch:%s:%s:cancel=%v", ev.Reason, target, shouldCancel))
+								mu.Unlock()
+								if shouldCancel {
+									return &core.SessionBeforeSwitchResult{Cancel: true}, nil
+								}
+								return nil, nil
+							})
+							pi.OnSessionShutdown(func(_ context.Context, ev *core.SessionShutdownEvent, _ core.ExtensionContext) (*core.NoResult, error) {
+								mu.Lock()
+								target := ""
+								if ev.TargetSessionFile != nil {
+									target = filepath.Base(*ev.TargetSessionFile)
+								}
+								events = append(events, fmt.Sprintf("shutdown:%s:%s", ev.Reason, target))
+								mu.Unlock()
+								return nil, nil
+							})
+							return nil
+						},
+					},
+				},
+			})
+
+			fx.faux.SetResponses([]providers.FauxResponseStep{
+				providers.FauxResponseMessage{Message: providers.FauxAssistantMessage(providers.FauxAssistantText("first"), nil)},
+			})
+			if err := fx.runtime.Session.Prompt(ctx, "hello 1"); err != nil {
+				t.Fatalf("Prompt: %v", err)
+			}
+			firstFilePtr := fx.runtime.Session.SessionFile()
+			if firstFilePtr == nil {
+				t.Fatal("expected first SessionFile")
+			}
+			firstFile := *firstFilePtr
+
+			// 1. Cancel NewSession.
+			mu.Lock()
+			cancelSwitch = true
+			mu.Unlock()
+			newRes, err := fx.runtime.NewSession(ctx)
+			if err != nil {
+				t.Fatalf("cancelled NewSession: %v", err)
+			}
+			if !newRes.Cancelled {
+				t.Fatal("expected Cancelled=true when session_before_switch cancels newSession")
+			}
+			if got := fx.runtime.Session.SessionFile(); got == nil || *got != firstFile {
+				t.Fatalf("expected original SessionFile %q preserved on cancelled NewSession, got %v", firstFile, got)
+			}
+
+			// 2. Allow NewSession, then bindExtensions to emit session_start.
+			mu.Lock()
+			cancelSwitch = false
+			mu.Unlock()
+			newRes, err = fx.runtime.NewSession(ctx)
+			if err != nil {
+				t.Fatalf("NewSession: %v", err)
+			}
+			if newRes.Cancelled {
+				t.Fatal("expected Cancelled=false on NewSession")
+			}
+			if err := fx.runtime.Session.BindExtensions(ctx, core.ExtensionBindings{}); err != nil {
+				t.Fatalf("BindExtensions after NewSession: %v", err)
+			}
+			secondFilePtr := fx.runtime.Session.SessionFile()
+			if secondFilePtr == nil || *secondFilePtr == firstFile {
+				t.Fatalf("expected distinct second SessionFile, got %v", secondFilePtr)
+			}
+			secondFile := *secondFilePtr
+
+			// 3. Cancel SwitchSession back to firstFile.
+			mu.Lock()
+			cancelSwitch = true
+			mu.Unlock()
+			swRes, err := fx.runtime.SwitchSession(ctx, firstFile)
+			if err != nil {
+				t.Fatalf("cancelled SwitchSession: %v", err)
+			}
+			if !swRes.Cancelled {
+				t.Fatal("expected Cancelled=true when session_before_switch cancels switchSession")
+			}
+			if got := fx.runtime.Session.SessionFile(); got == nil || *got != secondFile {
+				t.Fatalf("expected second SessionFile %q preserved on cancelled SwitchSession, got %v", secondFile, got)
+			}
+
+			// 4. Allow SwitchSession back to firstFile, then bindExtensions to emit session_start.
+			mu.Lock()
+			cancelSwitch = false
+			mu.Unlock()
+			swRes, err = fx.runtime.SwitchSession(ctx, firstFile)
+			if err != nil {
+				t.Fatalf("SwitchSession: %v", err)
+			}
+			if swRes.Cancelled {
+				t.Fatal("expected Cancelled=false on SwitchSession")
+			}
+			if err := fx.runtime.Session.BindExtensions(ctx, core.ExtensionBindings{}); err != nil {
+				t.Fatalf("BindExtensions after SwitchSession: %v", err)
+			}
+
+			mu.Lock()
+			gotEvents := slices.Clone(events)
+			mu.Unlock()
+			wantEvents := []string{
+				"start:startup:",
+				"before_switch:new::cancel=true",
+				"before_switch:new::cancel=false",
+				"shutdown:new:" + filepath.Base(secondFile),
+				"start:new:" + filepath.Base(firstFile),
+				"before_switch:resume:" + filepath.Base(firstFile) + ":cancel=true",
+				"before_switch:resume:" + filepath.Base(firstFile) + ":cancel=false",
+				"shutdown:resume:" + filepath.Base(firstFile),
+				"start:resume:" + filepath.Base(secondFile),
+			}
+			if !slices.Equal(gotEvents, wantEvents) {
+				t.Fatalf("lifecycle events mismatch:\n got: %v\nwant: %v", gotEvents, wantEvents)
+			}
+		})
+
+		t.Run("runs and cancels session_before_fork, session_shutdown, and session_start on fork", func(t *testing.T) {
+			var mu sync.Mutex
+			var events []string
+			var cancelFork bool
+
+			fx := tsasrCreateRuntimeFixture(t, ctx, &tsasrFixtureOptions{
+				extensionFactories: []core.InlineExtension{
+					{
+						Name: "fork-lifecycle-ext",
+						Factory: func(pi core.ExtensionAPI) error {
+							pi.OnSessionStart(func(_ context.Context, ev *core.SessionStartEvent, _ core.ExtensionContext) (*core.NoResult, error) {
+								mu.Lock()
+								prev := ""
+								if ev.PreviousSessionFile != nil {
+									prev = filepath.Base(*ev.PreviousSessionFile)
+								}
+								events = append(events, fmt.Sprintf("start:%s:%s", ev.Reason, prev))
+								mu.Unlock()
+								return nil, nil
+							})
+							pi.OnSessionBeforeFork(func(_ context.Context, ev *core.SessionBeforeForkEvent, _ core.ExtensionContext) (*core.SessionBeforeForkResult, error) {
+								mu.Lock()
+								shouldCancel := cancelFork
+								events = append(events, fmt.Sprintf("before_fork:%s:%s:cancel=%v", ev.EntryId, ev.Position, shouldCancel))
+								mu.Unlock()
+								if shouldCancel {
+									return &core.SessionBeforeForkResult{Cancel: true}, nil
+								}
+								return nil, nil
+							})
+							pi.OnSessionShutdown(func(_ context.Context, ev *core.SessionShutdownEvent, _ core.ExtensionContext) (*core.NoResult, error) {
+								mu.Lock()
+								events = append(events, fmt.Sprintf("shutdown:%s", ev.Reason))
+								mu.Unlock()
+								return nil, nil
+							})
+							return nil
+						},
+					},
+				},
+			})
+
+			fx.faux.SetResponses([]providers.FauxResponseStep{
+				providers.FauxResponseMessage{Message: providers.FauxAssistantMessage(providers.FauxAssistantText("forkable reply"), nil)},
+			})
+			if err := fx.runtime.Session.Prompt(ctx, "prompt to fork"); err != nil {
+				t.Fatalf("Prompt: %v", err)
+			}
+			origFilePtr := fx.runtime.Session.SessionFile()
+			if origFilePtr == nil {
+				t.Fatal("expected orig SessionFile")
+			}
+			origFile := *origFilePtr
+
+			var userEntryId string
+			for _, entry := range fx.runtime.Session.SessionManager.GetEntries() {
+				if me, ok := entry.(*core.SessionMessageEntry); ok && me != nil {
+					if um, ok := me.Message.(*ai.UserMessage); ok && um != nil {
+						userEntryId = me.Id
+						break
+					}
+				}
+			}
+			if userEntryId == "" {
+				t.Fatal("failed to locate user entry ID")
+			}
+
+			// 1. Cancel fork.
+			mu.Lock()
+			cancelFork = true
+			mu.Unlock()
+			forkRes, err := fx.runtime.Fork(ctx, userEntryId, &core.ForkSessionOptions{Position: "at"})
+			if err != nil {
+				t.Fatalf("cancelled Fork: %v", err)
+			}
+			if !forkRes.Cancelled {
+				t.Fatal("expected Cancelled=true on cancelled Fork")
+			}
+			if got := fx.runtime.Session.SessionFile(); got == nil || *got != origFile {
+				t.Fatalf("expected original SessionFile %q preserved on cancelled Fork, got %v", origFile, got)
+			}
+
+			// 2. Allow fork, then bindExtensions to emit session_start.
+			mu.Lock()
+			cancelFork = false
+			mu.Unlock()
+			forkRes, err = fx.runtime.Fork(ctx, userEntryId, &core.ForkSessionOptions{Position: "at"})
+			if err != nil {
+				t.Fatalf("Fork: %v", err)
+			}
+			if forkRes.Cancelled {
+				t.Fatal("expected Cancelled=false on Fork")
+			}
+			if err := fx.runtime.Session.BindExtensions(ctx, core.ExtensionBindings{}); err != nil {
+				t.Fatalf("BindExtensions after Fork: %v", err)
+			}
+			if got := fx.runtime.Session.SessionFile(); got == nil || *got == origFile {
+				t.Fatalf("expected new SessionFile after Fork, got %v", got)
+			}
+
+			mu.Lock()
+			gotEvents := slices.Clone(events)
+			mu.Unlock()
+			wantEvents := []string{
+				"start:startup:",
+				fmt.Sprintf("before_fork:%s:at:cancel=true", userEntryId),
+				fmt.Sprintf("before_fork:%s:at:cancel=false", userEntryId),
+				"shutdown:fork",
+				"start:fork:" + filepath.Base(origFile),
+			}
+			if !slices.Equal(gotEvents, wantEvents) {
+				t.Fatalf("fork lifecycle events mismatch:\n got: %v\nwant: %v", gotEvents, wantEvents)
+			}
+		})
 	})
 }

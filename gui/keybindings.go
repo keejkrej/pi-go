@@ -1,7 +1,6 @@
 package gui
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"runtime"
@@ -10,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/keejkrej/pi-go/internal/jsonx"
 )
 
 // EditorAction identifies an input/editing/navigation action mirroring tui keybindings.
@@ -566,7 +566,7 @@ func LoadKeybindingsFromFile(path string) (*KeybindingsManager, error) {
 		return nil, err
 	}
 	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := jsonx.Unmarshal(data, &raw); err != nil {
 		return nil, err
 	}
 	overrides := make(map[string][]string)

@@ -189,7 +189,199 @@ func TestAgentSessionConcurrentPromptGuard(t *testing.T) {
 	})
 
 	t.Run("extension-origin steering messages while streaming", func(t *testing.T) {
-		t.Skip("barebone scope excludes extension runner")
+		tempDir := t.TempDir()
+		model := compat.GetModel(compat.BuiltinProvider("anthropic"), "claude-sonnet-4-5")
+		if model == nil {
+			t.Fatalf("GetModel returned nil")
+		}
+
+		var mu sync.Mutex
+		var sawSteeringMessage bool
+		var lastInputSource core.InputSource
+		var queueEvents []core.AgentSessionEventQueueUpdate
+		var firstOnce sync.Once
+		firstStarted := make(chan struct{})
+		releaseFirst := make(chan struct{})
+
+		ag := agent.NewAgent(&agent.AgentOptions{
+			GetApiKey: func(_ context.Context, _ string) (string, error) { return "test-key", nil },
+			InitialState: &agent.AgentInitialState{
+				Model:        model,
+				SystemPrompt: "Test",
+				Tools:        []*agent.AgentTool{},
+			},
+			StreamFn: func(streamCtx context.Context, _ *ai.Model, tc *ai.TranscriptContext, _ *ai.SimpleStreamOptions) (*ai.AssistantMessageEventStream, error) {
+				stream := ai.NewAssistantMessageEventStream()
+				go func() {
+					var hasSteer bool
+					if tc != nil {
+						for _, msg := range tc.Messages {
+							if um, ok := msg.(*ai.UserMessage); ok && um != nil && testkit.GetMessageText(um) == "Steer from extension" {
+								hasSteer = true
+							}
+						}
+					}
+					if hasSteer {
+						mu.Lock()
+						sawSteeringMessage = true
+						mu.Unlock()
+						stream.Push(&ai.AssistantMessageEventStart{Type: "start", Partial: tascoAssistantMessage("", ai.StopReasonStop)})
+						stream.Push(&ai.AssistantMessageEventDone{Type: "done", Reason: ai.StopReasonStop, Message: tascoAssistantMessage("Steered", ai.StopReasonStop)})
+						return
+					}
+
+					stream.Push(&ai.AssistantMessageEventStart{Type: "start", Partial: tascoAssistantMessage("", ai.StopReasonStop)})
+					firstOnce.Do(func() { close(firstStarted) })
+					select {
+					case <-releaseFirst:
+						stream.Push(&ai.AssistantMessageEventDone{Type: "done", Reason: ai.StopReasonStop, Message: tascoAssistantMessage("First done", ai.StopReasonStop)})
+					case <-streamCtx.Done():
+						stream.Push(&ai.AssistantMessageEventError{
+							Type:   "error",
+							Reason: ai.StopReasonAborted,
+							Error:  tascoAssistantMessage("Aborted", ai.StopReasonAborted),
+						})
+					}
+				}()
+				return stream, nil
+			},
+		})
+
+		sessionManager := core.SessionManagerInMemory()
+		settingsManager := core.SettingsManagerCreate(tempDir, tempDir)
+		authStorage := core.AuthStorageCreate(filepath.Join(tempDir, "auth.json"))
+		modelRegistry, err := testkit.CreateModelRegistry(ctx, authStorage, &tempDir)
+		if err != nil {
+			t.Fatalf("CreateModelRegistry: %v", err)
+		}
+		_, err = authStorage.Modify(ctx, "anthropic", func(_ ai.Credential) (ai.Credential, error) {
+			k := "test-key"
+			return &ai.ApiKeyCredential{Type: ai.AuthTypeApiKey, Key: &k}, nil
+		}, nil)
+		if err != nil {
+			t.Fatalf("Modify: %v", err)
+		}
+		runtime, err := testkit.GetModelRuntime(modelRegistry)
+		if err != nil {
+			t.Fatalf("GetModelRuntime: %v", err)
+		}
+		t.Cleanup(func() { runtime.Close() })
+
+		var extAPI core.ExtensionAPI
+		extRes, err := testkit.CreateTestExtensionsResultWithFactories(
+			ctx,
+			tempDir,
+			core.InlineExtension{
+				Name: "ext-api-capture",
+				Factory: func(pi core.ExtensionAPI) error {
+					extAPI = pi
+					return nil
+				},
+			},
+			core.InlineExtension{
+				Name: "ext-input-tracker",
+				Factory: func(pi core.ExtensionAPI) error {
+					pi.OnInput(func(_ context.Context, ev *core.InputEvent, _ core.ExtensionContext) (*core.InputEventResult, error) {
+						mu.Lock()
+						lastInputSource = ev.Source
+						mu.Unlock()
+						return nil, nil
+					})
+					return nil
+				},
+			},
+		)
+		if err != nil {
+			t.Fatalf("CreateTestExtensionsResultWithFactories: %v", err)
+		}
+
+		session := core.NewAgentSession(core.AgentSessionConfig{
+			Agent:           ag,
+			SessionManager:  sessionManager,
+			SettingsManager: settingsManager,
+			Cwd:             tempDir,
+			ModelRuntime:    runtime,
+			ResourceLoader: testkit.CreateTestResourceLoader(&testkit.CreateTestResourceLoaderOptions{
+				ExtensionsResult: &extRes,
+			}),
+		})
+		defer session.Dispose()
+
+		unsub := session.Subscribe(func(ev core.AgentSessionEvent) {
+			if qu, ok := ev.(*core.AgentSessionEventQueueUpdate); ok && qu != nil {
+				mu.Lock()
+				queueEvents = append(queueEvents, *qu)
+				mu.Unlock()
+			}
+		})
+		defer unsub()
+
+		firstErr := make(chan error, 1)
+		go func() {
+			firstErr <- session.Prompt(ctx, "First message")
+		}()
+
+		select {
+		case <-firstStarted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for initial stream start")
+		}
+		tascoWaitForStreaming(t, session)
+
+		if extAPI == nil {
+			t.Fatal("expected extension API to be captured")
+		}
+		extAPI.SendUserMessage("Steer from extension", &core.SendUserMessageOptions{
+			DeliverAs: "steer",
+		})
+
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			if session.PendingMessageCount() == 1 {
+				break
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		if got := session.PendingMessageCount(); got != 1 {
+			close(releaseFirst)
+			<-firstErr
+			t.Fatalf("PendingMessageCount = %d, want 1", got)
+		}
+		if !slices.Contains(session.GetSteeringMessages(), "Steer from extension") {
+			close(releaseFirst)
+			<-firstErr
+			t.Fatalf("GetSteeringMessages = %v, expected 'Steer from extension'", session.GetSteeringMessages())
+		}
+		mu.Lock()
+		gotSource := lastInputSource
+		var sawQueueEvent bool
+		for _, qe := range queueEvents {
+			if slices.Contains(qe.Steering, "Steer from extension") {
+				sawQueueEvent = true
+			}
+		}
+		mu.Unlock()
+		if gotSource != core.InputSourceExtension {
+			close(releaseFirst)
+			<-firstErr
+			t.Fatalf("lastInputSource = %q, want %q", gotSource, core.InputSourceExtension)
+		}
+		if !sawQueueEvent {
+			close(releaseFirst)
+			<-firstErr
+			t.Fatal("expected queue_update event containing 'Steer from extension'")
+		}
+
+		close(releaseFirst)
+		if err := <-firstErr; err != nil {
+			t.Fatalf("Prompt failed: %v", err)
+		}
+		mu.Lock()
+		sawSteer := sawSteeringMessage
+		mu.Unlock()
+		if !sawSteer {
+			t.Fatal("expected steering message to be delivered to subsequent stream call")
+		}
 	})
 
 	t.Run("allows prompt() after previous completes", func(t *testing.T) {

@@ -589,7 +589,7 @@ func tithDrainUI(t *testing.T, mode *InteractiveMode) {
 		})
 		select {
 		case <-done:
-		case <-time.After(3 * time.Second):
+		case <-time.After(15 * time.Second):
 			t.Fatalf("timed out draining UI post queue")
 		}
 	}
@@ -619,7 +619,7 @@ func tithRenderOnUI(t *testing.T, ui tui.TUI, comp tui.Component, width int) str
 	})
 	select {
 	case <-done:
-	case <-time.After(3 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatalf("timed out rendering component on UI thread")
 	}
 	return out

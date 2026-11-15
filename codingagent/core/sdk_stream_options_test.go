@@ -1,6 +1,4 @@
 // Ported from packages/coding-agent/test/sdk-stream-options.test.ts (pi v1.5.2).
-// Extension-only handler cases (provider_stream_event, before_provider_headers) are
-// omitted per barebone 0-extension scope.
 
 package core_test
 
@@ -68,6 +66,17 @@ func tssoCaptureStreamOptions(
 	settings *core.Settings,
 	requestOptions *ai.SimpleStreamOptions,
 ) *ai.SimpleStreamOptions {
+	return tssoCaptureStreamOptionsWithExtensions(t, api, settings, requestOptions, nil, nil)
+}
+
+func tssoCaptureStreamOptionsWithExtensions(
+	t *testing.T,
+	api string,
+	settings *core.Settings,
+	requestOptions *ai.SimpleStreamOptions,
+	extensionFactories []core.InlineExtension,
+	providerStreamEvent any,
+) *ai.SimpleStreamOptions {
 	t.Helper()
 	ctx := context.Background()
 	cwd := t.TempDir()
@@ -76,9 +85,11 @@ func tssoCaptureStreamOptions(
 	model := tssoCreateModel(api)
 	settingsManager := core.SettingsManagerInMemory(settings)
 	rl := core.NewDefaultResourceLoader(core.DefaultResourceLoaderOptions{
-		Cwd:             cwd,
-		AgentDir:        agentDir,
-		SettingsManager: settingsManager,
+		Cwd:                cwd,
+		AgentDir:           agentDir,
+		SettingsManager:    settingsManager,
+		NoExtensions:       true,
+		ExtensionFactories: extensionFactories,
 	})
 	if err := rl.Reload(ctx); err != nil {
 		t.Fatalf("ResourceLoader.Reload: %v", err)
@@ -117,8 +128,11 @@ func tssoCaptureStreamOptions(
 	if err := modelRegistry.RegisterProvider(string(model.Provider), core.ProviderConfigInput{
 		Api:     &apiCopy,
 		Headers: provHeaders,
-		StreamSimple: func(_ context.Context, _ *ai.Model, _ *ai.TranscriptContext, providerOptions *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream {
+		StreamSimple: func(_ context.Context, m *ai.Model, _ *ai.TranscriptContext, providerOptions *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream {
 			captured = providerOptions
+			if providerStreamEvent != nil && providerOptions != nil && providerOptions.OnProviderStreamEvent != nil {
+				_ = providerOptions.OnProviderStreamEvent(providerStreamEvent, m)
+			}
 			return tssoCreateDoneStream(api, 0)
 		},
 	}); err != nil {
@@ -391,6 +405,114 @@ func TestSdkStreamOptions(t *testing.T) {
 		}
 		if options.MaxRetryDelayMs == nil || *options.MaxRetryDelayMs != 3000 {
 			t.Fatalf("MaxRetryDelayMs = %v, want 3000", options)
+		}
+	})
+
+	t.Run("forwards provider stream events to extensions", func(t *testing.T) {
+		providerEvent := map[string]any{
+			"openrouter_metadata": map[string]any{"strategy": "direct"},
+		}
+		var extensionEvents []core.ProviderStreamEvent
+
+		options := tssoCaptureStreamOptionsWithExtensions(
+			t,
+			"openai-completions",
+			nil,
+			nil,
+			[]core.InlineExtension{
+				{
+					Name: "provider-stream-listener",
+					Factory: func(pi core.ExtensionAPI) error {
+						pi.OnProviderStreamEvent(func(_ context.Context, ev *core.ProviderStreamEvent, _ core.ExtensionContext) (*core.NoResult, error) {
+							if ev != nil {
+								extensionEvents = append(extensionEvents, *ev)
+							}
+							return nil, nil
+						})
+						return nil
+					},
+				},
+			},
+			providerEvent,
+		)
+
+		if options == nil || options.OnProviderStreamEvent == nil {
+			t.Fatalf("expected OnProviderStreamEvent callback on captured options, got %#v", options)
+		}
+		if len(extensionEvents) != 1 {
+			t.Fatalf("expected 1 provider_stream_event, got %d (%#v)", len(extensionEvents), extensionEvents)
+		}
+		ev := extensionEvents[0]
+		if ev.Type != "provider_stream_event" || ev.Provider != "capture-provider" || ev.Api != "openai-completions" || ev.Model != "capture-model" {
+			t.Fatalf("unexpected provider_stream_event metadata: %#v", ev)
+		}
+		m, ok := ev.Data.(map[string]any)
+		if !ok {
+			t.Fatalf("expected map data, got %T", ev.Data)
+		}
+		meta, _ := m["openrouter_metadata"].(map[string]any)
+		if meta["strategy"] != "direct" {
+			t.Fatalf("unexpected provider_stream_event data: %#v", ev.Data)
+		}
+	})
+
+	t.Run("runs before_provider_headers on assembled headers without forwarding the transform", func(t *testing.T) {
+		explicitVal := "explicit"
+		explicitHeaders := omap.NewMap[string, *string]()
+		explicitHeaders.Set("x-explicit", &explicitVal)
+		options := tssoCaptureStreamOptionsWithExtensions(
+			t,
+			"openai-completions",
+			nil,
+			&ai.SimpleStreamOptions{
+				StreamOptions: ai.StreamOptions{
+					ProviderRequestOptions: ai.ProviderRequestOptions[ai.Model]{
+						Headers: explicitHeaders,
+					},
+				},
+			},
+			[]core.InlineExtension{
+				{
+					Name: "before-provider-headers",
+					Factory: func(pi core.ExtensionAPI) error {
+						pi.OnBeforeProviderHeaders(func(_ context.Context, ev *core.BeforeProviderHeadersEvent, _ core.ExtensionContext) (*core.NoResult, error) {
+							if ev != nil && ev.Headers != nil {
+								deref := func(key string) string {
+									v, _ := ev.Headers.Get(key)
+									if v == nil {
+										return ""
+									}
+									return *v
+								}
+								hookVal := deref("x-provider") + ":" + deref("x-model") + ":" + deref("x-explicit")
+								ev.Headers.Set("x-hook", &hookVal)
+							}
+							return nil, nil
+						})
+						return nil
+					},
+				},
+			},
+			nil,
+		)
+
+		if options == nil || options.Headers == nil {
+			t.Fatalf("expected captured Headers, got %#v", options)
+		}
+		for k, want := range map[string]string{
+			"x-provider": "provider",
+			"x-model":    "model",
+			"x-explicit": "explicit",
+			"x-hook":     "provider:model:explicit",
+		} {
+			got, ok := options.Headers.Get(k)
+			if !ok || got == nil || *got != want {
+				var gotStr string
+				if got != nil {
+					gotStr = *got
+				}
+				t.Fatalf("header %q = (%q, %v), want %q", k, gotStr, ok, want)
+			}
 		}
 	})
 }

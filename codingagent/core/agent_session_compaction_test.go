@@ -259,7 +259,106 @@ func TestAgentSessionCompaction(t *testing.T) {
 	})
 
 	t.Run("manually compacts using an extension-provided summary", func(t *testing.T) {
-		t.Skip("extensions excluded in barebone scope")
+		summaryUsage := ai.Usage{
+			Input:       10,
+			Output:      20,
+			CacheRead:   30,
+			CacheWrite:  40,
+			TotalTokens: 100,
+			Cost: ai.UsageCost{
+				Input:      0.1,
+				Output:     0.2,
+				CacheRead:  0.3,
+				CacheWrite: 0.4,
+				Total:      1,
+			},
+		}
+		h, err := testkit.CreateSuiteHarness(ctx, &testkit.SuiteHarnessOptions{
+			Settings: &core.Settings{
+				Compaction: &core.SettingsCompactionSettings{
+					KeepRecentTokens: tascmpFloatPtr(1),
+				},
+			},
+			ExtensionFactories: []core.InlineExtension{
+				{
+					Name: "custom-compaction-summary",
+					Factory: func(pi core.ExtensionAPI) error {
+						pi.OnSessionBeforeCompact(func(_ context.Context, ev *core.SessionBeforeCompactEvent, _ core.ExtensionContext) (*core.SessionBeforeCompactResult, error) {
+							u := summaryUsage
+							return &core.SessionBeforeCompactResult{
+								Compaction: &core.CompactionResult{
+									Summary:          "summary from extension",
+									FirstKeptEntryId: ev.Preparation.FirstKeptEntryId,
+									TokensBefore:     ev.Preparation.TokensBefore,
+									Usage:            &u,
+									Details:          map[string]any{"source": "extension"},
+								},
+							}, nil
+						})
+						return nil
+					},
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("CreateSuiteHarness failed: %v", err)
+		}
+		defer h.Cleanup()
+
+		tascmpSeedCompactionTurns(t, ctx, h, 2)
+		statsBefore := h.Session.GetSessionStats()
+
+		res, err := h.Session.Compact(ctx)
+		if err != nil {
+			t.Fatalf("Compact failed: %v", err)
+		}
+		if res == nil || res.Summary != "summary from extension" {
+			t.Fatalf("unexpected compaction result: %+v", res)
+		}
+		if res.Usage == nil || *res.Usage != summaryUsage {
+			t.Fatalf("result.Usage = %#v, want %#v", res.Usage, summaryUsage)
+		}
+
+		estimatedTokensAfter := 0
+		for _, m := range h.Session.Messages() {
+			estimatedTokensAfter += core.EstimateTokens(m)
+		}
+		if res.EstimatedTokensAfter == nil || *res.EstimatedTokensAfter != estimatedTokensAfter {
+			t.Fatalf("EstimatedTokensAfter = %v, want %d", res.EstimatedTokensAfter, estimatedTokensAfter)
+		}
+
+		var compactionEntries []*core.CompactionEntry
+		for _, entry := range h.SessionManager.GetEntries() {
+			if ce, ok := entry.(*core.CompactionEntry); ok && ce != nil {
+				compactionEntries = append(compactionEntries, ce)
+			}
+		}
+		if len(compactionEntries) != 1 {
+			t.Fatalf("expected 1 compaction entry, got %d", len(compactionEntries))
+		}
+		if compactionEntries[0].Usage == nil || *compactionEntries[0].Usage != summaryUsage {
+			t.Fatalf("compactionEntries[0].Usage = %#v, want %#v", compactionEntries[0].Usage, summaryUsage)
+		}
+
+		statsAfter := h.Session.GetSessionStats()
+		if statsAfter.Tokens.Input != statsBefore.Tokens.Input+summaryUsage.Input ||
+			statsAfter.Tokens.Output != statsBefore.Tokens.Output+summaryUsage.Output ||
+			statsAfter.Tokens.CacheRead != statsBefore.Tokens.CacheRead+summaryUsage.CacheRead ||
+			statsAfter.Tokens.CacheWrite != statsBefore.Tokens.CacheWrite+summaryUsage.CacheWrite ||
+			statsAfter.Cost != statsBefore.Cost+summaryUsage.Cost.Total {
+			t.Fatalf("statsAfter = %+v, statsBefore = %+v, summaryUsage = %+v", statsAfter, statsBefore, summaryUsage)
+		}
+
+		msgs := h.Session.Messages()
+		if len(msgs) < 2 || msgs[0].GetRole() != "system" || msgs[1].GetRole() != "compactionSummary" {
+			t.Fatalf("expected [system, compactionSummary, ...], got roles %v", func() []string {
+				roles := make([]string, len(msgs))
+				for i, m := range msgs {
+					roles[i] = m.GetRole()
+				}
+				return roles
+			}())
+		}
 	})
 
 	t.Run("allows a queued prompt to start when manual compaction ends", func(t *testing.T) {

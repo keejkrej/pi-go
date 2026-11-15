@@ -2640,7 +2640,9 @@ func (s *AgentSession) as1EmitExtensionEvent(ctx context.Context, event agent.Ag
 		if runner != nil {
 			replacement := runner.EmitMessageEnd(ctx, MessageEndEvent{Type: "message_end", Message: e.Message})
 			if replacement != nil {
-				s.as1ReplaceMessageInPlace(e.Message, replacement)
+				if !s.as1ReplaceMessageInPlace(e.Message, replacement) {
+					e.Message = replacement
+				}
 			}
 		}
 	case *agent.AgentEventToolExecutionStart:
@@ -2827,38 +2829,62 @@ func (s *AgentSession) as1FindLastAssistantMessage() *ai.AssistantMessage {
 	return nil
 }
 
-func (s *AgentSession) as1ReplaceMessageInPlace(target, replacement agent.AgentMessage) {
+func (s *AgentSession) as1ReplaceMessageInPlace(target, replacement agent.AgentMessage) bool {
 	if target == nil || replacement == nil || as1SameMessage(target, replacement) {
-		return
+		return true
 	}
 	switch dst := target.(type) {
 	case *ai.UserMessage:
 		if src, ok := replacement.(*ai.UserMessage); ok {
 			*dst = *src
-			return
+			return true
+		}
+	case *ai.AssistantMessage:
+		if src, ok := replacement.(*ai.AssistantMessage); ok {
+			// Copy exported fields explicitly so AssistantMessage's internal mutex is not copied.
+			dst.Role = src.Role
+			dst.Content = src.Content
+			dst.Api = src.Api
+			dst.Provider = src.Provider
+			dst.Model = src.Model
+			dst.ResponseModel = src.ResponseModel
+			dst.ResponseId = src.ResponseId
+			dst.ProviderThinkingLevel = src.ProviderThinkingLevel
+			dst.ThinkingLevel = src.ThinkingLevel
+			dst.Diagnostics = src.Diagnostics
+			dst.Usage = src.Usage
+			dst.StopReason = src.StopReason
+			dst.Deferred = src.Deferred
+			dst.ErrorMessage = src.ErrorMessage
+			dst.RawStopReason = src.RawStopReason
+			dst.EndTurn = src.EndTurn
+			dst.Timestamp = src.Timestamp
+			dst.DurationMs = src.DurationMs
+			return true
 		}
 	case *ai.ToolResultMessage:
 		if src, ok := replacement.(*ai.ToolResultMessage); ok {
 			*dst = *src
-			return
+			return true
 		}
 	case *CustomMessage:
 		if src, ok := replacement.(*CustomMessage); ok {
 			*dst = *src
-			return
+			return true
 		}
 	}
 	if s.Agent == nil {
-		return
+		return false
 	}
 	msgs := s.Agent.Messages()
 	for i, m := range msgs {
 		if as1SameMessage(m, target) {
 			msgs[i] = replacement
 			s.Agent.ReplaceMessages(msgs)
-			return
+			break
 		}
 	}
+	return false
 }
 
 // Subscribe attaches an event listener and returns a function that unsubscribes it.
