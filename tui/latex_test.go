@@ -1,0 +1,339 @@
+package tui
+
+import "testing"
+
+func tlatexDefineCases(t *testing.T, cases [][2]string) {
+	t.Helper()
+	for _, tc := range cases {
+		source, expected := tc[0], tc[1]
+		t.Run(source, func(t *testing.T) {
+			got := RenderLatex(source, nil)
+			if got == nil {
+				t.Fatalf("RenderLatex(%q) = nil, want %q", source, expected)
+			}
+			if *got != expected {
+				t.Fatalf("RenderLatex(%q) =\n%q\nwant:\n%q", source, *got, expected)
+			}
+		})
+	}
+}
+
+func tlatexAssertEqual(t *testing.T, source string, opts *RenderLatexOptions, expected string) {
+	t.Helper()
+	got := RenderLatex(source, opts)
+	if got == nil {
+		t.Fatalf("RenderLatex(%q) = nil, want %q", source, expected)
+	}
+	if *got != expected {
+		t.Fatalf("RenderLatex(%q) =\n%q\nwant:\n%q", source, *got, expected)
+	}
+}
+
+func tlatexDisplayOpts() *RenderLatexOptions {
+	d := true
+	return &RenderLatexOptions{Display: &d}
+}
+
+func TestLatex_RenderLatex(t *testing.T) {
+	t.Run("Jacobian_conjecture_session_using_dollar_delimiters", func(t *testing.T) {
+		tlatexDefineCases(t, [][2]string{
+			{`\mathbb{C}^3 \to \mathbb{C}^3`, "ℂ³ → ℂ³"},
+			{
+				`\{3x+2y,\; 27x^2-4z-1,\; x(x-1)(x+1)\} \quad\Rightarrow\quad x \in \{0, \pm 1\},`,
+				"{3x+2y, 27x²-4z-1, x(x-1)(x+1)} ⇒ x ∈ {0, ± 1},",
+			},
+			{`F_1 = -\frac{1}{4x^2}.`, "F₁ = -1/(4x²)."},
+			{"-2", "-2"},
+			{"(0,0,-1/4)", "(0,0,-1/4)"},
+			{"(1,-3/2,13/2)", "(1,-3/2,13/2)"},
+			{"(1,1,1)", "(1,1,1)"},
+			{"(2,1,0)", "(2,1,0)"},
+			{"(-1/4, 0, 0)", "(-1/4, 0, 0)"},
+			{`\{(0,0,-1/4), (1,-3/2,13/2), (-1,3/2,13/2)\}`, "{(0,0,-1/4), (1,-3/2,13/2), (-1,3/2,13/2)}"},
+			{"(2,1,1)", "(2,1,1)"},
+			{"(7/3,-2/5,11/7)", "(7/3,-2/5,11/7)"},
+			{`\{y - p(x),\; q(x)\}`, "{y - p(x), q(x)}"},
+			{`\deg q = 3`, "deg q = 3"},
+			{`[\mathbb{C}(x,y,z):\mathbb{C}(F_1,F_2,F_3)] = 3`, "[ℂ(x,y,z):ℂ(F₁,F₂,F₃)] = 3"},
+			{"u = 1+xy", "u = 1+xy"},
+			{"G = u^2 z + y^2(4+3xy)", "G = u² z + y²(4+3xy)"},
+			{"F_1 = uG", "F₁ = uG"},
+			{"F_2 = y + 3xG", "F₂ = y + 3xG"},
+			{"x=0", "x = 0"},
+			{"F_2 = F_3 = 0", "F₂ = F₃ = 0"},
+			{"xy = -3/2", "xy = -3/2"},
+			{"x^2 z = 13/2", "x² z = 13/2"},
+			{`\mathbb{C}^*`, "ℂ^*"},
+			{`s \mapsto (s,\, -\tfrac{3}{2s},\, \tfrac{13}{2s^2})`, "s ↦ (s, -3/(2s), 13/(2s²))"},
+			{"X", "X"},
+			{`p_\pm`, "p_±"},
+			{"F(-x,-y,z) = (F_1, -F_2, -F_3)", "F(-x,-y,z) = (F₁, -F₂, -F₃)"},
+			{"p_0", "p₀"},
+			{`s \to \infty`, "s → ∞"},
+			{"(0,0,0)", "(0,0,0)"},
+			{`\Rightarrow`, "⇒"},
+			{`\ge 2`, "≥ 2"},
+			{`\ge 3`, "≥ 3"},
+			{"1", "1"},
+			{`\mathrm{diag}(-1/2,1,1),\quad F_{\rm intrinsic}(\lambda)`, "diag(-1/2,1,1), F_intrinsic(λ)"},
+			{"4+3xy", "4+3xy"},
+		})
+	})
+
+	t.Run("satellite_calculation_session_using_bracket_delimiters", func(t *testing.T) {
+		tlatexDefineCases(t, [][2]string{
+			{
+				`E \approx \frac{0.1\ \text{lux}}{100\ \text{lm/W}} = 0.001\ \text{W/m}^2`,
+				"E ≈ (0.1 lux)/(100 lm/W) = 0.001 W/m²",
+			},
+			{`\boxed{1\ \text{milliwatt per square metre}}`, "[1 milliwatt per square metre]"},
+			{`5\ \text{km}^2 = 5{,}000{,}000\ \text{m}^2`, "5 km² = 5,000,000 m²"},
+			{
+				"P_{\\text{light}} = 0.001 \\times 5{,}000{,}000\n= \\boxed{5{,}000\\ \\text{W}}",
+				"P_light = 0.001 × 5,000,000 = [5,000 W]",
+			},
+			{
+				"P_{\\text{electric}} = 5\\ \\text{kW} \\times 0.2\n= \\boxed{1\\ \\text{kW}}",
+				"P_electric = 5 kW × 0.2 = [1 kW]",
+			},
+			{`\pi(2.5\ \text{km})^2 = 19.6\ \text{km}^2`, "π(2.5 km)² = 19.6 km²"},
+			{
+				"0.001\\ \\text{W/m}^2 \\times 19.6 \\times 10^6\\ \\text{m}^2\n\\approx \\boxed{20\\ \\text{kW optical}}",
+				"0.001 W/m² × 19.6 × 10⁶ m² ≈ [20 kW optical]",
+			},
+			{
+				"1\\ \\text{kW} \\times \\frac{1}{3600}\\ \\text{hour}\n= \\boxed{0.28\\ \\text{Wh}}",
+				"1 kW × 1/3600 hour = [0.28 Wh]",
+			},
+		})
+	})
+
+	t.Run("Jacobian_conjecture_sessions_using_parenthesis_and_bracket_delimiters", func(t *testing.T) {
+		tlatexDefineCases(t, [][2]string{
+			{
+				`\det\!\left(\frac{\partial(F_1,F_2,F_3)}{\partial(x,y,z)}\right)=-2.`,
+				"det((∂(F₁,F₂,F₃))/(∂(x,y,z))) = -2.",
+			},
+			{
+				"\\begin{aligned}\nF(0,0,-\\tfrac14)&=(-\\tfrac14,0,0),\\\\\nF(1,-\\tfrac32,\\tfrac{13}2)&=(-\\tfrac14,0,0),\\\\\nF(-1,\\tfrac32,\\tfrac{13}2)&=(-\\tfrac14,0,0).\n\\end{aligned}",
+				"F(0,0,-1/4) = (-1/4,0,0),\nF(1,-3/2,13/2) = (-1/4,0,0),\nF(-1,3/2,13/2) = (-1/4,0,0).",
+			},
+			{"F=(F_1,F_2,F_3)", "F = (F₁,F₂,F₃)"},
+			{"F", "F"},
+			{"3", "3"},
+		})
+	})
+
+	t.Run("Jacobian_matrix_session_using_dollar_delimiters", func(t *testing.T) {
+		tlatexDefineCases(t, [][2]string{
+			{
+				"J = \\begin{pmatrix}\n\\frac{\\partial f_1}{\\partial x} & \\frac{\\partial f_1}{\\partial y} & \\frac{\\partial f_1}{\\partial z} \\\\\n\\frac{\\partial f_2}{\\partial x} & \\frac{\\partial f_2}{\\partial y} & \\frac{\\partial f_2}{\\partial z} \\\\\n\\frac{\\partial f_3}{\\partial x} & \\frac{\\partial f_3}{\\partial y} & \\frac{\\partial f_3}{\\partial z}\n\\end{pmatrix}",
+				"J = ⎛ (∂ f₁)/(∂ x) │ (∂ f₁)/(∂ y) │ (∂ f₁)/(∂ z) ⎞\n    ⎜ (∂ f₂)/(∂ x) │ (∂ f₂)/(∂ y) │ (∂ f₂)/(∂ z) ⎟\n    ⎝ (∂ f₃)/(∂ x) │ (∂ f₃)/(∂ y) │ (∂ f₃)/(∂ z) ⎠",
+			},
+			{
+				"\\begin{aligned}\nf_1 &= (1+xy)^3 z + y^2(1+xy)(4+3xy) \\\\\nf_2 &= y + 3x(1+xy)^2 z + 3xy^2(4+3xy) \\\\\nf_3 &= 2x - 3x^2y - x^3z\n\\end{aligned}",
+				"f₁ = (1+xy)³ z + y²(1+xy)(4+3xy)\nf₂ = y + 3x(1+xy)² z + 3xy²(4+3xy)\nf₃ = 2x - 3x²y - x³z",
+			},
+			{"x, y, z", "x, y, z"},
+			{"(x, y, z)", "(x, y, z)"},
+			{`(0,\; 0,\; -\tfrac14)`, "(0, 0, -1/4)"},
+			{`(-\tfrac14,\; 0,\; 0)`, "(-1/4, 0, 0)"},
+			{`(1,\; -\tfrac32,\; \tfrac{13}{2})`, "(1, -3/2, 13/2)"},
+			{`(-1,\; \tfrac32,\; \tfrac{13}{2})`, "(-1, 3/2, 13/2)"},
+			{`(-\frac14, 0, 0)`, "(-1/4, 0, 0)"},
+			{`F: \mathbb{C}^3 \to \mathbb{C}^3`, "F: ℂ³ → ℂ³"},
+			{
+				`F(0,0,-\tfrac14) = F(1,-\tfrac32,\tfrac{13}{2}) = F(-1,\tfrac32,\tfrac{13}{2}) = (-\tfrac14, 0, 0)`,
+				"F(0,0,-1/4) = F(1,-3/2,13/2) = F(-1,3/2,13/2) = (-1/4, 0, 0)",
+			},
+			{`\mathbb{C}^3`, "ℂ³"},
+			{
+				"\\begin{aligned}\nf_1 &= \\frac{f_1^{\\text{ut}}(u,t)}{x^2}, \\quad\nf_2 = \\frac{f_2^{\\text{ut}}(u,t)}{x}, \\quad\nf_3 = x\\,(2 - 3u - t)\n\\end{aligned}",
+				"f₁ = (f₁ᵘᵗ(u,t))/(x²), f₂ = (f₂ᵘᵗ(u,t))/x, f₃ = x (2 - 3u - t)",
+			},
+			{`\det J_F`, "det J_F"},
+			{`(-\tfrac14, 0, 0)`, "(-1/4, 0, 0)"},
+			{"u = xy", "u = xy"},
+			{"t = x^2z", "t = x²z"},
+			{`x \neq 0`, "x ≠ 0"},
+			{`f_1^{\text{ut}}, f_2^{\text{ut}}`, "f₁ᵘᵗ, f₂ᵘᵗ"},
+			{"u,t", "u,t"},
+			{"x", "x"},
+			{"x, x^2", "x, x²"},
+			{`\mathbb{C}^n \to \mathbb{C}^n`, "ℂⁿ → ℂⁿ"},
+			{`n \geq 2`, "n ≥ 2"},
+			{`\mathbb{P}^3`, "ℙ³"},
+		})
+	})
+
+	t.Run("extended_formulas_from_a_renderer_stress_test_session", func(t *testing.T) {
+		tlatexDefineCases(t, [][2]string{
+			{`e^{i\pi}+1=0`, "e^(iπ)+1 = 0"},
+			{
+				"\\boxed{\n\\mathcal{Z}(\\beta)\n=\n\\int_{\\mathcal M}\n\\exp\\!\\left(\n-\\beta\\left[\n\\frac12 g^{ij}(x)\\,\\partial_i\\phi\\,\\partial_j\\phi\n+V(\\phi)\n\\right]\\right)\n\\mathcal D\\phi\n}",
+				"[Z(β) = ∫_M exp( -β[ 1/2 gⁱʲ(x) ∂ᵢϕ ∂ⱼϕ +V(ϕ) ]) Dϕ]",
+			},
+			{
+				"\\begin{aligned}\n\\nabla_\\mu T^{\\mu\\nu}\n&=\n\\frac{1}{\\sqrt{-g}}\n\\partial_\\mu\\!\\left(\\sqrt{-g}\\,T^{\\mu\\nu}\\right)\n+\\Gamma^\\nu_{\\mu\\lambda}T^{\\mu\\lambda}\n=0, \\\\[4pt]\nR_{\\mu\\nu}-\\frac12 Rg_{\\mu\\nu}+\\Lambda g_{\\mu\\nu}\n&=\n\\frac{8\\pi G}{c^4}T_{\\mu\\nu}.\n\\end{aligned}",
+				"∇_μ T^(μν) = 1/(√(-g)) ∂_μ(√(-g) T^(μν)) +Γ^ν_(μλ)T^(μλ) = 0,\nR_(μν)-1/2 Rg_(μν)+Λ g_(μν) = (8π G)/(c⁴)T_(μν).",
+			},
+			{
+				"f(z)\n=\n\\frac{1}{2\\pi i}\n\\oint_{\\gamma}\n\\frac{f(\\zeta)}{\\zeta-z}\\,d\\zeta,\n\\qquad\n\\det\\!\\begin{pmatrix}\n\\lambda-a & -b & 0\\\\\n-c & \\lambda-d & -e\\\\\n0 & -f & \\lambda-g\n\\end{pmatrix}\n=0.",
+				"f(z) = 1/(2π i) ∮_γ (f(ζ))/(ζ-z) dζ, det⎛ λ-a │ -b  │ 0   ⎞ = 0.\n" +
+					"                                        ⎜ -c  │ λ-d │ -e  ⎟\n" +
+					"                                        ⎝ 0   │ -f  │ λ-g ⎠",
+			},
+			{
+				"\\Psi(x,t)=\n\\sum_{n=1}^{\\infty}\n\\underbrace{\nc_n\n\\sqrt{\\frac{2}{L}}\n\\sin\\!\\left(\\frac{n\\pi x}{L}\\right)\n}_{\\text{spatial eigenmode}}\n\\exp\\!\\left(-\\frac{i\\hbar n^2\\pi^2}{2mL^2}t\\right),\n\\qquad\n|\\Psi(x,t)|^2\n=\n\\begin{cases}\n\\Psi^\\ast\\Psi, & 0<x<L,\\\\\n0, & \\text{otherwise}.\n\\end{cases}",
+				"                                                                                                 ⎧ Ψ^∗Ψ if 0 < x < L,\nΨ(x,t) = ∑ₙ₌₁^∞ cₙ √(2/L) sin((nπ x)/L)_(spatial eigenmode) exp(-(iℏ n²π²)/(2mL²)t), |Ψ(x,t)|² = ⎨\n                                                                                                 ⎩ 0    otherwise.",
+			},
+			{`x=\frac{-b\pm\sqrt{b^2-4ac}}{2a}`, "x = (-b±√(b²-4ac))/(2a)"},
+			{`\int_0^\infty e^{-x^2}\,dx=\frac{\sqrt{\pi}}{2}`, "∫₀^∞ e^(-x²) dx = (√π)/2"},
+			{`e^{i\theta}=\cos\theta+i\sin\theta`, "e^(iθ) = cos θ+i sin θ"},
+			{`\sum_{n=1}^{\infty}\frac{1}{n^2}=\frac{\pi^2}{6}`, "∑ₙ₌₁^∞1/(n²) = π²/6"},
+			{`\lim_{x\to 0}\frac{\sin x}{x}=1`, "lim[x→0] (sin x)/x = 1"},
+			{"\\lim_{n\\to\\infty}\n\\left(1+\\frac{1}{n}\\right)^n=e", "lim[n→∞] (1+1/n)ⁿ = e"},
+			{"\\int_0^1 \\frac{x^2}{1+x^3}\\,dx\n=\\frac{1}{3}\\ln 2", "∫₀¹ x²/(1+x³) dx = 1/3 ln 2"},
+			{"\\sum_{k=1}^{n}\\frac{k}{k+1}\n=n+1-H_{n+1}", "∑ₖ₌₁ⁿk/(k+1) = n+1-Hₙ₊₁"},
+			{
+				"\\frac{\n  \\displaystyle \\frac{x^2+1}{x-1}\n  -\n  \\displaystyle \\frac{2x}{x+1}\n}{\n  \\displaystyle \\frac{x}{x^2-1}\n}",
+				"((x²+1)/(x-1) - 2x/(x+1))/(x/(x²-1))",
+			},
+			{
+				"\\lim_{x\\to 0}\n\\frac{\n  \\displaystyle \\frac{\\sin x}{x}-1\n}{\n  \\displaystyle \\frac{e^x-1}{x}-1\n}\n=0",
+				"lim[x→0] ((sin x)/x-1)/((eˣ-1)/x-1) = 0",
+			},
+			{
+				"\\frac{\n  1+\\displaystyle\\frac{1}{1+\\frac{1}{x}}\n}{\n  1-\\displaystyle\\frac{1}{1-\\frac{1}{x}}\n}",
+				"(1+1/(1+1/x))/(1-1/(1-1/x))",
+			},
+			{
+				"\\sum_{n=1}^{\\infty}\n\\frac{\n  \\displaystyle \\frac{1}{n}-\\frac{1}{n+1}\n}{\n  \\displaystyle 1+\\frac{1}{n^2}\n}",
+				"∑ₙ₌₁^∞ (1/n-1/(n+1))/(1+1/(n²))",
+			},
+		})
+	})
+
+	t.Run("common_symbols_roots_sums_integrals", func(t *testing.T) {
+		tlatexAssertEqual(t, `\sum_{i=0}^n \alpha_i + \int_0^\infty e^{-x^2}\,dx = \sqrt{\pi}`, nil, "∑ᵢ₌₀ⁿ αᵢ + ∫₀^∞ e^(-x²) dx = √π")
+	})
+
+	t.Run("common_accents_and_binomial_notation", func(t *testing.T) {
+		tlatexAssertEqual(t, `\binom{n}{k}+\vec{x}+\hat{y}+\overline{AB}`, nil, "(n choose k)+x⃗+ŷ+overline(AB)")
+	})
+
+	t.Run("extended_symbols_and_negated_relations", func(t *testing.T) {
+		tlatexAssertEqual(t, `\epsilon+\varepsilon+\varsigma+\varkappa+\oplus+\otimes+\therefore+\because`, nil, "ϵ+ε+ς+ϰ+⊕+⊗+∴+∵")
+		tlatexAssertEqual(t, `A\not\subseteq B,\quad x\not\in X`, nil, "A ⊈ B, x ∉ X")
+	})
+
+	t.Run("relational_algebra_join_operators", func(t *testing.T) {
+		tlatexAssertEqual(t, `R\bowtie S,\quad R\Join S`, nil, "R ⋈ S, R ⋈ S")
+		tlatexAssertEqual(t, `R\ltimes S,\quad R\rtimes S`, nil, "R ⋉ S, R ⋊ S")
+		tlatexAssertEqual(t, `R\leftouterjoin S,\quad R\rightouterjoin S,\quad R\fullouterjoin S`, nil, "R ⟕ S, R ⟖ S, R ⟗ S")
+	})
+
+	t.Run("delimiter_commands_and_invisible_delimiters", func(t *testing.T) {
+		tlatexAssertEqual(t, `\lvert{x}\rvert+\lVert{v}\rVert+\left.\frac{dy}{dx}\right|_{x=0}`, nil, "|x|+‖v‖+dy/(dx)|ₓ₌₀")
+		tlatexAssertEqual(t, `\left\lbrace x \middle| x>0 \right\rbrace`, nil, "{ x | x > 0 }")
+	})
+
+	t.Run("named_modular_overlaid_and_underlaid_operators", func(t *testing.T) {
+		tlatexAssertEqual(t, `\operatorname*{arg\,max}_{x\in X} f(x)`, nil, "arg max[x∈X] f(x)")
+		tlatexAssertEqual(t, `a\bmod n,\quad a\equiv b\pmod n`, nil, "a mod n, a ≡ b (mod n)")
+		tlatexAssertEqual(t, `\overset{!}{=}+\underset{n}{x}+\stackrel{def}{=}`, nil, "=^!+xₙ+=ᵈᵉᶠ")
+	})
+
+	t.Run("indexed_roots_and_additional_accents_and_wrappers", func(t *testing.T) {
+		tlatexAssertEqual(t, `\sqrt[2]{x}+\sqrt[3]{x}+\sqrt[4]{x}+\sqrt[n]{x}+\sqrt[k]{x+1}`, nil, "√x+∛x+∜x+ⁿ√x+ᵏ√(x+1)")
+		tlatexAssertEqual(t, `\acute{x}+\grave{y}+\widehat{xyz}+\overrightarrow{AB}`, nil, "x́+ỳ+widehat(xyz)+overrightarrow(AB)")
+		tlatexAssertEqual(t, `\textnormal{hello}+\mbox{world}+\boldsymbol{x}+{\rm roman}+{\bf bold}+{\it italic}+{\sf sans}+{\tt mono}+{\cal calligraphic}+{\sl slanted}`, nil, "hello+world+x+roman+bold+italic+sans+mono+calligraphic+slanted")
+	})
+
+	t.Run("additional_display_environments", func(t *testing.T) {
+		tlatexAssertEqual(t, `\begin{equation}\begin{split}a&=b\\&=c\end{split}\end{equation}`, nil, "a = b\n= c")
+		tlatexAssertEqual(t, `\begin{alignedat}{2}a&=b&\quad c&=d\\e&=f&g&=h\end{alignedat}`, nil, "a = b c = d\ne = f g = h")
+	})
+
+	t.Run("natural_case_conditions_and_aligns_matrix_columns", func(t *testing.T) {
+		tlatexAssertEqual(t, `f(x)=\begin{cases}a & x<0 \\ b & \text{if }x=0 \\ c & \text{otherwise}\end{cases}`, nil, "       ⎧ a if x < 0\nf(x) = ⎨ b if x = 0\n       ⎩ c otherwise")
+		tlatexAssertEqual(t, `\begin{pmatrix}1&200\\3000&4\end{pmatrix}`, nil, "⎛ 1    │ 200 ⎞\n⎝ 3000 │ 4   ⎠")
+	})
+
+	t.Run("composes_matrices_with_fractions_and_adjacent_matrices", func(t *testing.T) {
+		opts := tlatexDisplayOpts()
+		tlatexAssertEqual(t, "R\\left(\\frac{\\pi}{4}\\right)\n=\n\\begin{pmatrix}\n\\frac{\\sqrt{2}}{2} & -\\frac{\\sqrt{2}}{2}\\\\\n\\frac{\\sqrt{2}}{2} & \\frac{\\sqrt{2}}{2}\n\\end{pmatrix}.", opts, "   π\nR( ─ ) = ⎛ (√2)/2 │ -(√2)/2 ⎞\n   4     ⎝ (√2)/2 │ (√2)/2  ⎠.")
+		tlatexAssertEqual(t, "\\mathbf w\n=\nR\\left(\\frac{\\pi}{4}\\right)\n\\begin{pmatrix}1\\\\0\\end{pmatrix}\n=\n\\begin{pmatrix}\\frac{\\sqrt{2}}{2}\\\\\\frac{\\sqrt{2}}{2}\\end{pmatrix}.", opts, "       π\nw = R( ─ ) ⎛ 1 ⎞ = ⎛ (√2)/2 ⎞\n       4   ⎝ 0 ⎠   ⎝ (√2)/2 ⎠.")
+		tlatexAssertEqual(t, `A\mathbf e_1=\begin{pmatrix}\pi\\0\end{pmatrix},\qquad A\mathbf e_2=\begin{pmatrix}0\\\frac{1}{\pi}\end{pmatrix}.`, opts, "Ae₁ = ⎛ π ⎞, Ae₂ = ⎛ 0   ⎞\n      ⎝ 0 ⎠        ⎝ 1/π ⎠.")
+		tlatexAssertEqual(t, `\sum_{i=0}^n x_i=\begin{pmatrix}a&b\\c&d\end{pmatrix}.`, opts, " n\n ∑  xᵢ = ⎛ a │ b ⎞\ni=0      ⎝ c │ d ⎠.")
+	})
+
+	t.Run("normalizes_relation_multiplication_and_named_operator_spacing", func(t *testing.T) {
+		for _, source := range []string{"x=y", "x =y", "x=\ny", "x\n=\ny"} {
+			tlatexAssertEqual(t, source, nil, "x = y")
+		}
+		tlatexAssertEqual(t, "x_{i=0}", nil, "xᵢ₌₀")
+		tlatexAssertEqual(t, `x\neq0`, nil, "x ≠ 0")
+		tlatexAssertEqual(t, `A\to B`, nil, "A → B")
+		tlatexAssertEqual(t, `\pi\cdot\frac{1}{\pi}`, nil, "π · 1/π")
+		tlatexAssertEqual(t, `\sin\theta`, nil, "sin θ")
+		tlatexAssertEqual(t, `\sin^2 x`, nil, "sin² x")
+		tlatexAssertEqual(t, `-\sin\theta`, nil, "-sin θ")
+		tlatexAssertEqual(t, `i\sin\theta`, nil, "i sin θ")
+		tlatexAssertEqual(t, `\det(A)`, nil, "det(A)")
+	})
+
+	t.Run("backslash_followed_by_line_ending_as_control_space", func(t *testing.T) {
+		source := "\\boxed{\n(1,1,1),\\ (1,1,2),\\ (1,2,5),\\ (1,5,13),\\ (2,5,29),\\\n(1,13,34),\\ (1,34,89)\n}."
+		tlatexAssertEqual(t, source, tlatexDisplayOpts(), "[(1,1,1), (1,1,2), (1,2,5), (1,5,13), (2,5,29), (1,13,34), (1,34,89)].")
+		tlatexAssertEqual(t, "a\\\r\nb", nil, "a b")
+	})
+
+	t.Run("stacks_operator_limits_in_display_mode", func(t *testing.T) {
+		opts := tlatexDisplayOpts()
+		tlatexAssertEqual(t, `\sum_{i=0}^n x_i`, opts, " n\n ∑  xᵢ\ni=0")
+		tlatexAssertEqual(t, `\min_{x\in X} f(x)`, opts, "min f(x)\nx∈X")
+		tlatexAssertEqual(t, `\operatorname*{arg\,max}_{x\in X} f(x)`, opts, "arg max f(x)\n  x∈X")
+		tlatexAssertEqual(t, `\int\nolimits_0^1 f(x)\,dx`, opts, "∫₀¹ f(x) dx")
+		tlatexAssertEqual(t, `\int\limits_0^1 f(x)\,dx`, opts, "1\n∫ f(x) dx\n0")
+	})
+
+	t.Run("centers_even_case_rows_around_middle_brace", func(t *testing.T) {
+		tlatexAssertEqual(t, `f(x) = \begin{cases} x^{2} & x \geq 0 \\ -x & x < 0 \end{cases}`, nil, "       ⎧ x² if x ≥ 0\nf(x) = ⎨\n       ⎩ -x if x < 0")
+	})
+
+	t.Run("stacks_fractions_in_display_mode", func(t *testing.T) {
+		opts := tlatexDisplayOpts()
+		tlatexAssertEqual(t, `x=\frac{-b\pm\sqrt{b^2-4ac}}{2a}`, opts, "    -b±√(b²-4ac)\nx = ────────────\n         2a")
+		tlatexAssertEqual(t, `\frac{x^2+1}{x-1}`, opts, "x²+1\n────\nx-1")
+		tlatexAssertEqual(t, "\\frac{1}\n{2}", opts, "1\n─\n2")
+	})
+
+	t.Run("keeps_nested_display_fractions_linear", func(t *testing.T) {
+		opts := tlatexDisplayOpts()
+		tlatexAssertEqual(t, `\frac{\frac{x^2+1}{x-1}-\frac{2x}{x+1}}{\frac{x}{x^2-1}}`, opts, "(x²+1)/(x-1)-2x/(x+1)\n─────────────────────\n      x/(x²-1)")
+		tlatexAssertEqual(t, `\lim_{x\to 0}\frac{\frac{\sin x}{x}-1}{\frac{e^x-1}{x}-1}=0`, opts, "     (sin x)/x-1\nlim  ─────────── = 0\nx→0  (eˣ-1)/x-1")
+		tlatexAssertEqual(t, `\frac{1+\frac{1}{1+\frac{1}{x}}}{1-\frac{1}{1-\frac{1}{x}}}`, opts, "1+1/(1+1/x)\n───────────\n1-1/(1-1/x)")
+	})
+
+	t.Run("lays_out_unsupported_and_nested_scripts_keeping_script_fractions_linear", func(t *testing.T) {
+		opts := tlatexDisplayOpts()
+		tlatexAssertEqual(t, `\partial_tU_2(t,0)=Aj_*(1-t)^{-A-1}.\qquad x^{n^2}+x_{i_j}`, opts, "                            2\n                    -A-1   n\n∂ₜU₂(t,0) = Aj (1-t)    . x  +x\n              *                i\n                                j")
+		tlatexAssertEqual(t, `e^{\frac{1}{2}}+\tfrac{1}{2}`, opts, "e^(1/2)+1/2")
+	})
+
+	t.Run("returns_nil_for_unsupported_commands", func(t *testing.T) {
+		if got := RenderLatex(`x + \unknown{y}`, nil); got != nil {
+			t.Fatalf("expected nil, got %q", *got)
+		}
+	})
+
+	t.Run("returns_nil_for_malformed_groups_and_environments", func(t *testing.T) {
+		malformed := []string{`\frac{1}{x`, "x}", `\begin{matrix}1 & 2`, `x\`}
+		for _, source := range malformed {
+			if got := RenderLatex(source, nil); got != nil {
+				t.Fatalf("expected nil for %q, got %q", source, *got)
+			}
+		}
+	})
+}

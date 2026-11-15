@@ -1,4 +1,26 @@
-import { Marked, Tokenizer, walkTokens } from "file:///C:/Users/ctyja/workspace/pi/node_modules/marked/lib/marked.esm.js";
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import os from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+function resolveMarkedESM() {
+  const candidates = [
+    process.env.MARKED_ESM_PATH,
+    process.env.PI_REPO_DIR && path.join(process.env.PI_REPO_DIR, "node_modules/marked/lib/marked.esm.js"),
+    process.env.PI_DIR && path.join(process.env.PI_DIR, "node_modules/marked/lib/marked.esm.js"),
+    process.env.NODE_MODULES && path.join(process.env.NODE_MODULES, "marked/lib/marked.esm.js"),
+    path.join(os.homedir(), "workspace/pi/node_modules/marked/lib/marked.esm.js"),
+    "/Users/jack/workspace/pi/node_modules/marked/lib/marked.esm.js",
+  ].filter(Boolean);
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
+  const req = createRequire(import.meta.url);
+  return req.resolve("marked/lib/marked.esm.js");
+}
+
+const { Marked, Tokenizer, walkTokens } = await import(pathToFileURL(resolveMarkedESM()).href);
 import { readFileSync } from "node:fs";
 
 const STRICT_STRIKETHROUGH_REGEX = /^(~~)(?=[^\s~])((?:\\.|[^\\])*?(?:\\.|[^\s~\\]))\1(?=[^~]|$)/;

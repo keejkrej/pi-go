@@ -10,12 +10,12 @@ type Spacer struct {
 
 // NewSpacer returns a spacer of lines empty rows.
 func NewSpacer(lines int) *Spacer {
-	panic("unported: NewSpacer")
+	return &Spacer{lines: lines}
 }
 
 // SetLines sets how many empty rows Render returns.
 func (s *Spacer) SetLines(lines int) {
-	panic("unported: Spacer.SetLines")
+	s.lines = lines
 }
 
 // Invalidate is a no-op. Spacer has no cached render state.
@@ -23,7 +23,10 @@ func (s *Spacer) Invalidate() {}
 
 // Render returns lines empty strings. width is ignored.
 func (s *Spacer) Render(width int) []string {
-	panic("unported: Spacer.Render")
+	if s.lines <= 0 {
+		return []string{}
+	}
+	return make([]string, s.lines)
 }
 
 var _ Component = (*Spacer)(nil)

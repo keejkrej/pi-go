@@ -20,7 +20,13 @@ type CancellableLoader struct {
 // NewCancellableLoader returns a loader that can be cancelled.
 // Pass "Loading..." for the TypeScript default message. Nil indicator uses the default spinner.
 func NewCancellableLoader(ui TUI, spinnerColorFn func(str string) string, messageColorFn func(str string) string, message string, indicator *LoaderIndicatorOptions) *CancellableLoader {
-	panic("unported: NewCancellableLoader")
+	ctx, cancel := context.WithCancel(context.Background())
+	c := &CancellableLoader{
+		ctx:    ctx,
+		cancel: cancel,
+	}
+	clInitLoader(&c.Loader, ui, spinnerColorFn, messageColorFn, message, indicator)
+	return c
 }
 
 // Signal returns the context aborted by the cancel key.
@@ -28,17 +34,25 @@ func (c *CancellableLoader) Signal() context.Context { return c.ctx }
 
 // Aborted reports whether the cancel key has aborted the loader.
 func (c *CancellableLoader) Aborted() bool {
-	panic("unported: CancellableLoader.Aborted")
+	return c.ctx != nil && c.ctx.Err() != nil
 }
 
 // HandleInput aborts when data matches the tui.select.cancel binding.
 func (c *CancellableLoader) HandleInput(data string) {
-	panic("unported: CancellableLoader.HandleInput")
+	kb := GetKeybindings()
+	if kb.Matches(data, KeybindingTuiSelectCancel) {
+		if c.cancel != nil {
+			c.cancel()
+		}
+		if c.OnAbort != nil {
+			c.OnAbort()
+		}
+	}
 }
 
 // Dispose stops the spinner.
 func (c *CancellableLoader) Dispose() {
-	panic("unported: CancellableLoader.Dispose")
+	c.Stop()
 }
 
 var _ Component = (*CancellableLoader)(nil)

@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -91,7 +92,46 @@ type ScrollView struct {
 // An axis other than nil or vertical returns an error whose message is
 // "Unsupported ScrollView axis: " plus the axis text.
 func NewScrollView(component Component, options *ScrollViewOptions) (*ScrollView, error) {
-	panic("unported: NewScrollView")
+	if options != nil && options.Axis != nil && *options.Axis != ScrollViewAxisVertical {
+		return nil, fmt.Errorf("Unsupported ScrollView axis: %s", *options.Axis)
+	}
+
+	followEnd := options != nil && options.Follow != nil && *options.Follow == ScrollViewFollowEnd
+	primary := options != nil && options.Primary != nil && *options.Primary
+	overscroll := ScrollLayoutOverscrollChain
+	if options != nil && options.Overscroll != nil {
+		overscroll = *options.Overscroll
+	}
+	scrollbar := ScrollViewScrollbarHidden
+	if options != nil && options.Scrollbar != nil {
+		scrollbar = *options.Scrollbar
+	}
+	trackStyle := func(text string) string { return "\x1b[90m" + text + "\x1b[39m" }
+	if options != nil && options.ScrollbarTrackStyle != nil {
+		trackStyle = options.ScrollbarTrackStyle
+	}
+	thumbStyle := func(text string) string { return "\x1b[37m" + text + "\x1b[39m" }
+	if options != nil && options.ScrollbarThumbStyle != nil {
+		thumbStyle = options.ScrollbarThumbStyle
+	}
+	hideDelayMs := int64(1000)
+	if options != nil && options.ScrollbarHideDelayMs != nil {
+		hideDelayMs = max(int64(0), *options.ScrollbarHideDelayMs)
+	}
+
+	sv := &ScrollView{
+		child:                component,
+		followEnd:            followEnd,
+		followingEnd:         followEnd,
+		primary:              primary,
+		overscroll:           overscroll,
+		ScrollbarTrackStyle:  trackStyle,
+		ScrollbarThumbStyle:  thumbStyle,
+		currentScrollbar:     scrollbar,
+		scrollbarHideDelayMs: hideDelayMs,
+	}
+	sv.Container.SetChildren([]Component{component})
+	return sv, nil
 }
 
 // FollowEnd reports whether this view was constructed to follow the content end.
@@ -104,100 +144,301 @@ func (s *ScrollView) Primary() bool { return s.primary }
 func (s *ScrollView) Overscroll() ScrollLayoutOverscroll { return s.overscroll }
 
 // ScrollTop returns the current content row at the top of the viewport.
-func (s *ScrollView) ScrollTop() int { return s.currentScrollTop }
+func (s *ScrollView) ScrollTop() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.currentScrollTop
+}
 
 // IsFollowingEnd reports whether the view is currently stuck to the content end.
-func (s *ScrollView) IsFollowingEnd() bool { return s.followingEnd }
+func (s *ScrollView) IsFollowingEnd() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.followingEnd
+}
 
 // ViewportHeight returns the last viewport height passed to UpdateLayout.
-func (s *ScrollView) ViewportHeight() int { return s.currentViewportHeight }
+func (s *ScrollView) ViewportHeight() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.currentViewportHeight
+}
 
 // Scrollbar returns the current scrollbar mode.
-func (s *ScrollView) Scrollbar() ScrollViewScrollbar { return s.currentScrollbar }
+func (s *ScrollView) Scrollbar() ScrollViewScrollbar {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.currentScrollbar
+}
 
 // IsScrollbarVisible reports whether the bar should be painted.
 // "always" is visible when the viewport height is positive.
 // "auto" is visible only while the transient show is active and the content overflows.
 func (s *ScrollView) IsScrollbarVisible() bool {
-	panic("unported: ScrollView.IsScrollbarVisible")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.isScrollbarVisibleLocked()
+}
+
+func (s *ScrollView) isScrollbarVisibleLocked() bool {
+	if s.currentScrollbar == ScrollViewScrollbarAlways {
+		return s.currentViewportHeight > 0
+	}
+	return s.currentScrollbar == ScrollViewScrollbarAuto &&
+		s.contentHeight > s.currentViewportHeight &&
+		s.transientScrollbarVisible
 }
 
 // IsScrollbarActive reports whether the pointer is over the scrollbar.
-func (s *ScrollView) IsScrollbarActive() bool { return s.scrollbarActive }
+func (s *ScrollView) IsScrollbarActive() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.scrollbarActive
+}
 
 // SetScrollbar changes the scrollbar mode and requests a render when it changes.
 func (s *ScrollView) SetScrollbar(scrollbar ScrollViewScrollbar) {
-	panic("unported: ScrollView.SetScrollbar")
+	s.mu.Lock()
+	if scrollbar == s.currentScrollbar {
+		s.mu.Unlock()
+		return
+	}
+	s.currentScrollbar = scrollbar
+	if scrollbar != ScrollViewScrollbarAuto {
+		s.hideTransientScrollbarLocked()
+	} else if s.scrollbarActive {
+		s.markScrollbarActivityLocked()
+	}
+	cb := s.requestRenderCallback
+	s.mu.Unlock()
+	if cb != nil {
+		cb()
+	}
 }
 
 // GetContentWidth returns the width offered to the child.
 // "always" reserves one column when width is greater than 1.
 func (s *ScrollView) GetContentWidth(width int) int {
-	panic("unported: ScrollView.GetContentWidth")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.getContentWidthLocked(width)
 }
 
-func (s *ScrollView) markScrollbarActivity() {
-	panic("unported: ScrollView.markScrollbarActivity")
+func (s *ScrollView) getContentWidthLocked(width int) int {
+	if s.currentScrollbar == ScrollViewScrollbarAlways && width > 1 {
+		return width - 1
+	}
+	return width
 }
 
-func (s *ScrollView) hideTransientScrollbar() {
-	panic("unported: ScrollView.hideTransientScrollbar")
+func (s *ScrollView) markScrollbarActivityLocked() {
+	if s.currentScrollbar != ScrollViewScrollbarAuto || s.contentHeight <= s.currentViewportHeight {
+		return
+	}
+	s.transientScrollbarVisible = true
+	if s.scrollbarHideTimer != nil {
+		s.scrollbarHideTimer.Stop()
+		s.scrollbarHideTimer = nil
+	}
+	if s.scrollbarActive {
+		return
+	}
+	var timer *time.Timer
+	timer = time.AfterFunc(time.Duration(s.scrollbarHideDelayMs)*time.Millisecond, func() {
+		s.mu.Lock()
+		if s.scrollbarHideTimer != timer {
+			s.mu.Unlock()
+			return
+		}
+		s.scrollbarHideTimer = nil
+		s.transientScrollbarVisible = false
+		cb := s.requestRenderCallback
+		s.mu.Unlock()
+		if cb != nil {
+			cb()
+		}
+	})
+	s.scrollbarHideTimer = timer
+}
+
+func (s *ScrollView) hideTransientScrollbarLocked() {
+	s.transientScrollbarVisible = false
+	if s.scrollbarHideTimer == nil {
+		return
+	}
+	s.scrollbarHideTimer.Stop()
+	s.scrollbarHideTimer = nil
 }
 
 // SetScrollbarActive sets whether the pointer is over the scrollbar.
 func (s *ScrollView) SetScrollbarActive(active bool) {
-	panic("unported: ScrollView.SetScrollbarActive")
+	s.mu.Lock()
+	if active == s.scrollbarActive {
+		s.mu.Unlock()
+		return
+	}
+	s.scrollbarActive = active
+	s.markScrollbarActivityLocked()
+	cb := s.requestRenderCallback
+	s.mu.Unlock()
+	if cb != nil {
+		cb()
+	}
 }
 
 // ScrollTo moves to scrollTop. Nil options means follow-end is updated from the position.
 func (s *ScrollView) ScrollTo(scrollTop int, options *ScrollViewScrollToOptions) {
-	panic("unported: ScrollView.ScrollTo")
+	s.mu.Lock()
+	maxScrollTop := max(0, s.contentHeight-s.currentViewportHeight)
+	next := max(0, min(maxScrollTop, scrollTop))
+	nextFollowSuppressedAtEnd := options != nil && options.DisableFollow != nil && *options.DisableFollow && next == maxScrollTop
+	nextFollowingEnd := !nextFollowSuppressedAtEnd && s.followEnd && next == maxScrollTop
+	if next == s.currentScrollTop && nextFollowingEnd == s.followingEnd && nextFollowSuppressedAtEnd == s.followSuppressedAtEnd {
+		s.mu.Unlock()
+		return
+	}
+	moved := next != s.currentScrollTop
+	s.currentScrollTop = next
+	s.followingEnd = nextFollowingEnd
+	s.followSuppressedAtEnd = nextFollowSuppressedAtEnd
+	if moved {
+		s.markScrollbarActivityLocked()
+	}
+	cb := s.requestRenderCallback
+	s.mu.Unlock()
+	if cb != nil {
+		cb()
+	}
 }
 
 // ScrollBy moves by lines. It returns the portion that was not applied
 // (TypeScript returns requested minus moved, the leftover overscroll).
 func (s *ScrollView) ScrollBy(lines int) int {
-	panic("unported: ScrollView.ScrollBy")
+	if lines == 0 {
+		return 0
+	}
+	s.mu.Lock()
+	maxScrollTop := max(0, s.contentHeight-s.currentViewportHeight)
+	start := s.currentScrollTop
+	if s.followingEnd {
+		start = maxScrollTop
+	}
+	next := max(0, min(maxScrollTop, start+lines))
+	moved := next - start
+	wasFollowingEnd := s.followingEnd
+	s.currentScrollTop = next
+	s.followingEnd = s.followEnd && next == maxScrollTop
+	s.followSuppressedAtEnd = false
+	if moved != 0 {
+		s.markScrollbarActivityLocked()
+	}
+	changed := moved != 0 || s.followingEnd != wasFollowingEnd
+	cb := s.requestRenderCallback
+	s.mu.Unlock()
+	if changed && cb != nil {
+		cb()
+	}
+	return lines - moved
 }
 
 // ScrollToStart scrolls to row 0.
 func (s *ScrollView) ScrollToStart() {
-	panic("unported: ScrollView.ScrollToStart")
+	s.mu.Lock()
+	nextFollowing := s.followEnd && s.contentHeight <= s.currentViewportHeight
+	changed := s.currentScrollTop != 0 || s.followingEnd != nextFollowing
+	s.currentScrollTop = 0
+	s.followingEnd = nextFollowing
+	s.followSuppressedAtEnd = false
+	var cb func()
+	if changed {
+		s.markScrollbarActivityLocked()
+		cb = s.requestRenderCallback
+	}
+	s.mu.Unlock()
+	if changed && cb != nil {
+		cb()
+	}
 }
 
 // ScrollToEnd scrolls to the last viewport of content and resumes follow-end when configured.
 func (s *ScrollView) ScrollToEnd() {
-	panic("unported: ScrollView.ScrollToEnd")
+	s.mu.Lock()
+	next := max(0, s.contentHeight-s.currentViewportHeight)
+	changed := s.currentScrollTop != next || s.followingEnd != s.followEnd
+	s.currentScrollTop = next
+	s.followingEnd = s.followEnd
+	s.followSuppressedAtEnd = false
+	var cb func()
+	if changed {
+		s.markScrollbarActivityLocked()
+		cb = s.requestRenderCallback
+	}
+	s.mu.Unlock()
+	if changed && cb != nil {
+		cb()
+	}
 }
 
 // UpdateLayout records the measured content and viewport and clamps the scroll position.
 func (s *ScrollView) UpdateLayout(contentHeight int, viewportHeight int, requestRender func()) {
-	panic("unported: ScrollView.UpdateLayout")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.contentHeight = max(0, contentHeight)
+	s.currentViewportHeight = max(0, viewportHeight)
+	s.requestRenderCallback = requestRender
+	maxScrollTop := max(0, s.contentHeight-s.currentViewportHeight)
+	if s.followingEnd {
+		s.currentScrollTop = maxScrollTop
+	} else {
+		s.currentScrollTop = max(0, min(s.currentScrollTop, maxScrollTop))
+	}
+	if s.currentScrollTop < maxScrollTop {
+		s.followSuppressedAtEnd = false
+	}
+	if s.followEnd && s.currentScrollTop == maxScrollTop && !s.followSuppressedAtEnd {
+		s.followingEnd = true
+	}
+	if s.contentHeight <= s.currentViewportHeight {
+		s.hideTransientScrollbarLocked()
+	}
 }
 
 // AddChild always fails. ScrollView has exactly one child.
 func (s *ScrollView) AddChild(component Component) {
-	panic("unported: ScrollView.AddChild")
+	panic("ScrollView has exactly one child")
 }
 
 // RemoveChild always fails. The scroll view child cannot be removed.
 func (s *ScrollView) RemoveChild(component Component) {
-	panic("unported: ScrollView.RemoveChild")
+	panic("ScrollView child cannot be removed")
 }
 
 // Clear always fails. The scroll view child cannot be cleared.
 func (s *ScrollView) Clear() {
-	panic("unported: ScrollView.Clear")
+	panic("ScrollView child cannot be cleared")
 }
 
 // Render draws the child at the content width, padding a column when the scrollbar reserves one.
 func (s *ScrollView) Render(width int) []string {
-	panic("unported: ScrollView.Render")
+	contentWidth := s.GetContentWidth(width)
+	lines := s.child.Render(contentWidth)
+	if contentWidth == width {
+		return lines
+	}
+	padded := make([]string, len(lines))
+	for i, line := range lines {
+		padded[i] = line + " "
+	}
+	return padded
 }
 
 // LayoutNode returns the scroll layout description. State is this scroll view.
 func (s *ScrollView) LayoutNode() LayoutNode {
-	panic("unported: ScrollView.LayoutNode")
+	return &ScrollLayoutNode{
+		Type:      LayoutNodeTypeScroll,
+		Component: s.child,
+		State:     s,
+	}
 }
 
 var (

@@ -1,6 +1,8 @@
-// Ported from packages/tui/src/layout-node.ts (pi v1.0.0).
+// Ported from packages/tui/src/layout-node.ts (pi v1.5.2).
 
 package tui
+
+import "reflect"
 
 // LayoutNodeType is the LayoutNode discriminator.
 type LayoutNodeType string
@@ -53,12 +55,12 @@ const (
 // StackLayoutEntry is one child of a stack layout node.
 // Field order matches the StackLayoutEntry interface.
 type StackLayoutEntry struct {
-	Component Component         `json:"component"`
-	Basis     StackLayoutBasis  `json:"basis,omitzero"`
-	Grow      *int              `json:"grow,omitzero"`
-	Shrink    *int              `json:"shrink,omitzero"`
-	MinSize   *int              `json:"minSize,omitzero"`
-	MaxSize   *int              `json:"maxSize,omitzero"`
+	Component Component                 `json:"component"`
+	Basis     StackLayoutBasis          `json:"basis,omitzero"`
+	Grow      *int                      `json:"grow,omitzero"`
+	Shrink    *int                      `json:"shrink,omitzero"`
+	MinSize   *int                      `json:"minSize,omitzero"`
+	MaxSize   *int                      `json:"maxSize,omitzero"`
 	Visible   func(LayoutViewport) bool `json:"-"`
 }
 
@@ -104,5 +106,14 @@ type LayoutComponent interface {
 
 // GetLayoutNode returns the component's layout node, or nil when it has none.
 func GetLayoutNode(component Component) LayoutNode {
-	panic("unported: GetLayoutNode")
+	if component == nil {
+		return nil
+	}
+	if v := reflect.ValueOf(component); v.Kind() == reflect.Ptr && v.IsNil() {
+		return nil
+	}
+	if lc, ok := component.(LayoutComponent); ok {
+		return lc.LayoutNode()
+	}
+	return nil
 }

@@ -27,10 +27,12 @@ type OAuthAuthInfo struct {
 
 // OAuthDeviceCodeInfo is a legacy extension OAuth device-code notification.
 type OAuthDeviceCodeInfo struct {
-	UserCode         string `json:"userCode"`
-	VerificationUri  string `json:"verificationUri"`
-	IntervalSeconds  *int   `json:"intervalSeconds,omitzero"`
-	ExpiresInSeconds *int   `json:"expiresInSeconds,omitzero"`
+	UserCode             string `json:"userCode"`
+	VerificationUri      string `json:"verificationUri"`
+	OpenBrowserOnConfirm *bool  `json:"openBrowserOnConfirm,omitzero"`
+	CopyCodeOnConfirm    *bool  `json:"copyCodeOnConfirm,omitzero"`
+	IntervalSeconds      *int   `json:"intervalSeconds,omitzero"`
+	ExpiresInSeconds     *int   `json:"expiresInSeconds,omitzero"`
 }
 
 // OAuthSelectOption is one choice in an OAuth select prompt.

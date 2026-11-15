@@ -2,7 +2,9 @@ package typebox
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/keejkrej/pi-go/internal/jsonx"
 	"github.com/keejkrej/pi-go/internal/omap"
@@ -59,6 +61,60 @@ func (s *Schema) MarshalJSON() ([]byte, error) {
 		return []byte("{}"), nil
 	}
 	return s.Object.MarshalJSON()
+}
+
+var schemaReflectType = reflect.TypeFor[Schema]()
+
+func schemaJSONKind(v any) string {
+	switch v.(type) {
+	case nil:
+		return "null"
+	case bool:
+		return "bool"
+	case float64:
+		return "number"
+	case string:
+		return "string"
+	case []any:
+		return "array"
+	case *jsonx.Object:
+		return "object"
+	default:
+		return fmt.Sprintf("%T", v)
+	}
+}
+
+// UnmarshalJSON parses a JSON object or boolean schema into s while preserving
+// property key order, and leaves s unchanged on JSON null.
+func (s *Schema) UnmarshalJSON(data []byte) error {
+	if s == nil {
+		return errors.New("typebox: UnmarshalJSON on nil *Schema")
+	}
+	v, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	switch x := v.(type) {
+	case nil:
+		return nil
+	case bool:
+		b := x
+		s.boolSchema = &b
+		s.Object = nil
+		s.kind = ""
+		s.optional = false
+		s.unsafe = false
+		return nil
+	case *jsonx.Object:
+		s.boolSchema = nil
+		s.Object = x
+		s.kind = ""
+		s.optional = false
+		s.unsafe = false
+		return nil
+	default:
+		return &json.UnmarshalTypeError{Value: schemaJSONKind(v), Type: schemaReflectType}
+	}
 }
 
 func applyOpts(o *jsonx.Object, opts []*jsonx.Object) {

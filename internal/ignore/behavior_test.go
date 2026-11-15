@@ -38,7 +38,27 @@ type behaviorFile struct {
 }
 
 func TestBehavior(t *testing.T) {
-	raw, err := os.ReadFile("testdata/behavior.json")
+	t.Run("win32", func(t *testing.T) {
+		behaviorRunFile(t, "testdata/behavior.json", func() *Ignore {
+			if runtime.GOOS == "windows" {
+				return New()
+			}
+			return &Ignore{windows: true}
+		})
+	})
+	t.Run("posix", func(t *testing.T) {
+		behaviorRunFile(t, "testdata/behavior_posix.json", func() *Ignore {
+			if runtime.GOOS != "windows" {
+				return New()
+			}
+			return &Ignore{windows: false}
+		})
+	})
+}
+
+func behaviorRunFile(t *testing.T, path string, newIgnore func() *Ignore) {
+	t.Helper()
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +67,7 @@ func TestBehavior(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, c := range file.Results {
-		g := New()
+		g := newIgnore()
 		if c.Raw != "" {
 			g.Add(c.Raw)
 		} else {
@@ -102,7 +122,7 @@ func TestBehavior(t *testing.T) {
 			t.Errorf("%s filter %s", c.Name, diff)
 		}
 	}
-	g := New()
+	g := newIgnore()
 	g.Add("*")
 	for _, p := range file.PanicResults {
 		_, err := catchBool(func() bool { return g.Ignores(p.Path) })
@@ -157,10 +177,10 @@ func sprintPanic(r any) string {
 }
 
 func TestWindowsPaths(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("win32 path rules")
+	g := &Ignore{windows: true}
+	if runtime.GOOS == "windows" {
+		g = New()
 	}
-	g := New()
 	g.Add("*")
 	_, err := catchBool(func() bool { return g.Ignores("C:/foo") })
 	if err != "path should be a `path.relative()`d string, but got \"C:/foo\"" {

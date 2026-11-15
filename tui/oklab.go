@@ -98,12 +98,18 @@ func oklabOkhslToOklabLightness(x float64) float64 {
 
 // oklabLinearToSrgb is the sRGB transfer function: linear to encoded channel, both 0-1.
 func oklabLinearToSrgb(value float64) float64 {
-	panic("unported: oklabLinearToSrgb")
+	if value > 0.0031308 {
+		return 1.055*math.Pow(value, 1.0/2.4) - 0.055
+	}
+	return 12.92 * value
 }
 
 // oklabSrgbToLinear is the inverse sRGB transfer function: encoded to linear channel, both 0-1.
 func oklabSrgbToLinear(value float64) float64 {
-	panic("unported: oklabSrgbToLinear")
+	if value <= 0.04045 {
+		return value / 12.92
+	}
+	return math.Pow((value+0.055)/1.055, 2.4)
 }
 
 // OklabToLinearSrgb converts Oklab [L, a, b] to linear sRGB [r, g, b] (0-1, may leave the gamut).
@@ -122,12 +128,28 @@ func oklabLinearSrgbToOklab(rgb [3]float64) [3]float64 {
 
 // RgbToOklab converts sRGB channels (0-255) to Oklab [L, a, b].
 func RgbToOklab(rgb RgbColor) [3]float64 {
-	panic("unported: RgbToOklab")
+	return oklabLinearSrgbToOklab([3]float64{
+		oklabSrgbToLinear(rgb.R / 255),
+		oklabSrgbToLinear(rgb.G / 255),
+		oklabSrgbToLinear(rgb.B / 255),
+	})
 }
 
 // LinearSrgbToRgb converts linear sRGB [r, g, b] to sRGB channels (0-255, rounded), clipping out-of-gamut channels.
 func LinearSrgbToRgb(linear [3]float64) RgbColor {
-	panic("unported: LinearSrgbToRgb")
+	clampByte := func(v float64) float64 {
+		c := math.Min(1, math.Max(0, oklabLinearToSrgb(v)))
+		r := math.Round(c * 255)
+		if r == 0 {
+			return 0
+		}
+		return r
+	}
+	return RgbColor{
+		R: clampByte(linear[0]),
+		G: clampByte(linear[1]),
+		B: clampByte(linear[2]),
+	}
 }
 
 // oklabLmsSlopes is the rate of change of each cube-root LMS component along chroma direction (a, b).
@@ -142,33 +164,148 @@ func oklabLmsSlopes(a float64, b float64) [3]float64 {
 
 // oklabMaxSaturation is the largest saturation (C/L) inside sRGB for hue (a, b).
 func oklabMaxSaturation(a float64, b float64) float64 {
-	panic("unported: oklabMaxSaturation")
+	channel := 2
+	for index := 0; index < 2; index++ {
+		plane := oklabSaturationFit[index].plane
+		if plane[0]*a+plane[1]*b > 1 {
+			channel = index
+			break
+		}
+	}
+	k := oklabSaturationFit[channel].coeff
+	weights := oklabLmsToLinearSrgb[channel]
+	saturation := k[0] + k[1]*a + k[2]*b + k[3]*a*a + k[4]*a*b
+
+	slopes := oklabLmsSlopes(a, b)
+	var f, f1, f2 float64
+	for i := 0; i < 3; i++ {
+		base := 1 + saturation*slopes[i]
+		w := weights[i]
+		f += w * base * base * base
+		f1 += w * 3 * slopes[i] * base * base
+		f2 += w * 6 * slopes[i] * slopes[i] * base
+	}
+	return saturation - (f*f1)/(f1*f1-0.5*f*f2)
 }
 
 // oklabCusp returns the Oklab lightness and chroma of the most saturated sRGB color of hue (a, b).
 func oklabCusp(a float64, b float64) (float64, float64) {
-	panic("unported: oklabCusp")
+	saturation := oklabMaxSaturation(a, b)
+	srgb := OklabToLinearSrgb([3]float64{1, saturation * a, saturation * b})
+	maxComp := math.Max(srgb[0], math.Max(srgb[1], srgb[2]))
+	lightness := math.Cbrt(1 / maxComp)
+	return lightness, lightness * saturation
 }
 
 // oklabMaxChroma is the chroma where the constant-lightness line at lightness leaves the sRGB gamut.
 // cuspL and cuspC are the cusp lightness and chroma.
 func oklabMaxChroma(a float64, b float64, lightness float64, cuspL float64, cuspC float64) float64 {
-	panic("unported: oklabMaxChroma")
+	if lightness <= cuspL {
+		return (cuspC * lightness) / cuspL
+	}
+	// Upper half: triangle edge, then one Halley step against each channel reaching 1.
+	t := (cuspC * (lightness - 1)) / (cuspL - 1)
+	slopes := oklabLmsSlopes(a, b)
+	var cubes, first, second [3]float64
+	for i := 0; i < 3; i++ {
+		lms := lightness + t*slopes[i]
+		cubes[i] = lms * lms * lms
+		first[i] = 3 * slopes[i] * lms * lms
+		second[i] = 6 * slopes[i] * slopes[i] * lms
+	}
+	dot := func(row, vals [3]float64) float64 {
+		return row[0]*vals[0] + row[1]*vals[1] + row[2]*vals[2]
+	}
+	minStep := math.MaxFloat64
+	for _, row := range oklabLmsToLinearSrgb {
+		f := dot(row, cubes) - 1
+		f1 := dot(row, first)
+		f2 := dot(row, second)
+		u := f1 / (f1*f1 - 0.5*f*f2)
+		step := math.MaxFloat64
+		if u >= 0 {
+			step = -f * u
+		}
+		if step < minStep {
+			minStep = step
+		}
+	}
+	return t + minStep
 }
 
 // oklabChromaStops returns OKHSL's chroma reference points at lightness L and hue (a, b): c0, cMid, cMax.
 func oklabChromaStops(L float64, a float64, b float64) (float64, float64, float64) {
-	panic("unported: oklabChromaStops")
+	cuspL, cuspC := oklabCusp(a, b)
+	cMax := oklabMaxChroma(a, b, L, cuspL, cuspC)
+	scale := math.Min(L*(cuspC/cuspL), (1-L)*(cuspC/(1-cuspL)))
+	k := cMax / scale
+	midS := 0.11516993 +
+		1/(7.4477897+
+			4.1590124*b+
+			a*(-2.19557347+
+				1.75198401*b+
+				a*(-2.13704948-10.02301043*b+a*(-4.24894561+5.38770819*b+4.69891013*a))))
+	midT := 0.11239642 +
+		1/(1.6132032-
+			0.68124379*b+
+			a*(0.40370612+
+				0.90148123*b+
+				a*(-0.27087943+0.6122399*b+a*(0.00299215-0.45399568*b-0.14661872*a))))
+	cMid := 0.9 * k * math.Sqrt(math.Sqrt(1/(math.Pow(L*midS, -4)+math.Pow((1-L)*midT, -4))))
+	c0 := math.Sqrt(1 / (math.Pow(L*0.4, -2) + math.Pow((1-L)*0.8, -2)))
+	return c0, cMid, cMax
 }
 
 // OkhslToRgb converts OKHSL to sRGB channels (0-255, rounded), clipping out-of-gamut channels.
 // hue is in degrees. saturation and lightness are 0-1.
 func OkhslToRgb(hue float64, saturation float64, lightness float64) RgbColor {
-	panic("unported: OkhslToRgb")
+	L := oklabOkhslToOklabLightness(lightness)
+	lab := [3]float64{L, 0, 0}
+	if L > 0 && L < 1 && saturation > 0 {
+		normHue := math.Mod(math.Mod(hue, 360)+360, 360)
+		angle := (2 * math.Pi * normHue) / 360
+		a := math.Cos(angle)
+		b := math.Sin(angle)
+		c0, cMid, cMax := oklabChromaStops(L, a, b)
+		var chroma float64
+		if saturation < 0.8 {
+			t := 1.25 * saturation
+			k1 := 0.8 * c0
+			chroma = (t * k1) / (1 - (1-k1/cMid)*t)
+		} else {
+			t := 5 * (saturation - 0.8)
+			k1 := (0.2 * cMid * cMid * 1.25 * 1.25) / c0
+			chroma = cMid + (t*k1)/(1-(1-k1/(cMax-cMid))*t)
+		}
+		lab = [3]float64{L, chroma * a, chroma * b}
+	}
+	return LinearSrgbToRgb(OklabToLinearSrgb(lab))
 }
 
 // RgbToOkhsl converts sRGB channels (0-255) to OKHSL.
 // Hue is in degrees (0 for grays). Saturation and lightness are 0-1.
 func RgbToOkhsl(rgb RgbColor) OkhslChannels {
-	panic("unported: RgbToOkhsl")
+	lab := RgbToOklab(rgb)
+	L, labA, labB := lab[0], lab[1], lab[2]
+	chroma := math.Hypot(labA, labB)
+	lightness := OklabToOkhslLightness(L)
+	if chroma < 1e-9 || lightness <= 0 || lightness >= 1 {
+		return OkhslChannels{H: 0, S: 0, L: lightness}
+	}
+	hue := math.Mod((math.Atan2(labB, labA)*180)/math.Pi+360, 360)
+	c0, cMid, cMax := oklabChromaStops(L, labA/chroma, labB/chroma)
+	var saturation float64
+	if chroma < cMid {
+		k1 := 0.8 * c0
+		saturation = 0.8 * (chroma / (k1 + (1-k1/cMid)*chroma))
+	} else {
+		k1 := (0.2 * cMid * cMid * 1.25 * 1.25) / c0
+		offset := chroma - cMid
+		saturation = 0.8 + 0.2*(offset/(k1+(1-k1/(cMax-cMid))*offset))
+	}
+	return OkhslChannels{
+		H: hue,
+		S: math.Min(1, math.Max(0, saturation)),
+		L: lightness,
+	}
 }

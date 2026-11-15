@@ -5,7 +5,6 @@ import (
 	"math"
 	"slices"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -231,13 +230,7 @@ func TestMap_MarshalJSONValues(t *testing.T) {
 	if string(b) != want {
 		t.Errorf("JSON = %s\nwant   %s", b, want)
 	}
-	var buf strings.Builder
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(m); err != nil {
-		t.Fatal(err)
-	}
-	if got := strings.TrimSuffix(buf.String(), "\n"); got != want {
+	if got := omapEncodeNoEscape(t, m); got != want {
 		t.Errorf("Encoder JSON = %s\nwant   %s", got, want)
 	}
 	empty, _ := json.Marshal(omap.NewMap[string, int]())
@@ -279,13 +272,7 @@ func TestMap_MarshalJSONMatchesJSONStringifySpecials(t *testing.T) {
 	if string(b) != want {
 		t.Errorf("JSON = %s\nwant   %s", b, want)
 	}
-	var buf strings.Builder
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(m); err != nil {
-		t.Fatal(err)
-	}
-	if got := strings.TrimSuffix(buf.String(), "\n"); got != want {
+	if got := omapEncodeNoEscape(t, m); got != want {
 		t.Errorf("Encoder JSON = %s\nwant   %s", got, want)
 	}
 

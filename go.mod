@@ -1,6 +1,6 @@
 module github.com/keejkrej/pi-go
 
-go 1.26.0
+go 1.27.3
 
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0
@@ -15,6 +15,7 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/dlclark/regexp2/v2 v2.8.1
 	github.com/ebitengine/purego v0.11.1
+	github.com/egoist/mygo v0.9.0
 	github.com/evanw/esbuild v0.28.2
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/go-cmp v0.7.0
@@ -27,10 +28,10 @@ require (
 	golang.org/x/image v0.46.0
 	golang.org/x/net v0.59.0
 	golang.org/x/oauth2 v0.37.0
-	golang.org/x/sync v0.23.0
+	golang.org/x/sync v0.24.0
 	golang.org/x/sys v0.48.0
 	golang.org/x/term v0.46.0
-	golang.org/x/text v0.42.0
+	golang.org/x/text v0.43.0
 	modernc.org/sqlite v1.60.1
 )
 
@@ -57,6 +58,7 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect

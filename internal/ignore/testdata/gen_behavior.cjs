@@ -1,6 +1,25 @@
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
-const ignore = require("C:/Users/ctyja/workspace/pi/node_modules/ignore");
+
+function loadIgnore() {
+  const candidates = [
+    process.env.IGNORE_PKG_PATH,
+    process.env.PI_REPO_DIR && path.join(process.env.PI_REPO_DIR, "node_modules/ignore"),
+    process.env.PI_DIR && path.join(process.env.PI_DIR, "node_modules/ignore"),
+    path.join(os.homedir(), "workspace/pi/node_modules/ignore"),
+    "/Users/jack/workspace/pi/node_modules/ignore",
+    "ignore",
+  ].filter(Boolean);
+  for (const c of candidates) {
+    try {
+      return require(c);
+    } catch {}
+  }
+  throw new Error("unable to locate npm ignore package; set IGNORE_PKG_PATH or PI_REPO_DIR");
+}
+
+const ignore = loadIgnore();
 
 const cases = [
   {
@@ -110,5 +129,6 @@ const panicResults = panics.map((p) => {
   }
 });
 
-fs.writeFileSync(path.join(__dirname, "behavior.json"), JSON.stringify({ results, panicResults }, null, 2));
+const outName = process.platform === "win32" ? "behavior.json" : "behavior_posix.json";
+fs.writeFileSync(path.join(__dirname, outName), JSON.stringify({ results, panicResults }, null, 2));
 console.log("cases", results.length, "panics", panicResults.length);
