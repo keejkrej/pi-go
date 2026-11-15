@@ -1,0 +1,9 @@
+.git
+**/.eval
+**/node_modules
+**/dist
+**/coverage
+**/bin
+**/*.test
+**/.env
+**/.env.*
