@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -164,17 +163,59 @@ type bundleEntryInput struct {
 }
 
 type bundleMetafile struct {
-	Outputs map[string]bundleMetafileOutput `json:"outputs"`
+	Outputs map[string]bundleMetafileOutput
 }
 
 type bundleMetafileOutput struct {
-	EntryPoint *string              `json:"entryPoint"`
-	Imports    []bundleMetafileLink `json:"imports"`
+	EntryPoint *string
+	Imports    []bundleMetafileLink
 }
 
 type bundleMetafileLink struct {
-	Path     string `json:"path"`
-	External bool   `json:"external"`
+	Path     string
+	External bool
+}
+
+func bundleParseMetafile(raw string) (bundleMetafile, error) {
+	parsed, err := jsonx.ParseString(raw)
+	if err != nil {
+		return bundleMetafile{}, err
+	}
+	root, ok := parsed.(*jsonx.Object)
+	if !ok || root == nil {
+		return bundleMetafile{}, errors.New("metafile root must be an object")
+	}
+	outputsObj, ok := root.GetObject("outputs")
+	if !ok || outputsObj == nil {
+		return bundleMetafile{}, errors.New("metafile outputs must be an object")
+	}
+	outputs := make(map[string]bundleMetafileOutput, outputsObj.Len())
+	for outPath, val := range outputsObj.All() {
+		outObj, ok := val.(*jsonx.Object)
+		if !ok || outObj == nil {
+			continue
+		}
+		var out bundleMetafileOutput
+		if epVal, hasEP := outObj.Get("entryPoint"); hasEP && epVal != nil {
+			if epStr, isStr := epVal.(string); isStr {
+				out.EntryPoint = &epStr
+			}
+		}
+		if impArr, hasImp := outObj.GetArray("imports"); hasImp {
+			out.Imports = make([]bundleMetafileLink, 0, len(impArr))
+			for _, item := range impArr {
+				impObj, ok := item.(*jsonx.Object)
+				if !ok || impObj == nil {
+					continue
+				}
+				p, _ := impObj.GetString("path")
+				ext, _ := impObj.GetBool("external")
+				out.Imports = append(out.Imports, bundleMetafileLink{Path: p, External: ext})
+			}
+		}
+		outputs[outPath] = out
+	}
+	return bundleMetafile{Outputs: outputs}, nil
 }
 
 func bundleEntry(input bundleEntryInput) (FacetBundleEntry, error) {
@@ -244,8 +285,8 @@ func bundleEntry(input bundleEntryInput) (FacetBundleEntry, error) {
 		return FacetBundleEntry{}, fmt.Errorf("Facet entry %s produced no build metadata", input.entryName)
 	}
 
-	var meta bundleMetafile
-	if err := json.Unmarshal([]byte(result.Metafile), &meta); err != nil {
+	meta, err := bundleParseMetafile(result.Metafile)
+	if err != nil {
 		return FacetBundleEntry{}, fmt.Errorf("Could not parse facet entry %s build metadata: %w", input.entryName, err)
 	}
 
