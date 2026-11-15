@@ -13,11 +13,14 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/keejkrej/pi-go/agent"
 	"github.com/keejkrej/pi-go/ai"
 	"github.com/keejkrej/pi-go/ai/providers"
 	"github.com/keejkrej/pi-go/codingagent/core"
 	"github.com/keejkrej/pi-go/codingagent/utils"
 	"github.com/keejkrej/pi-go/gui"
+	"github.com/keejkrej/pi-go/internal/jsonx"
+	"github.com/keejkrej/pi-go/internal/typebox"
 )
 
 func wpRGBAEqual(got, want color.RGBA) bool {
@@ -635,5 +638,141 @@ func TestWakuSidebarMultiProjectSwitchInvariance(t *testing.T) {
 	tt.Frame()
 	if len(listed3) != 13 {
 		t.Fatalf("external --session-dir session count = %d, want 13", len(listed3))
+	}
+}
+
+func TestWakuTerminalAndActivityWidthClampedTo720(t *testing.T) {
+	t.Setenv(utils.EnvSessionDir, t.TempDir())
+
+	unbrokenPolicy := `{"policy":"` + strings.Repeat("x", 4000) + `"}`
+	bashTool := &agent.AgentTool{
+		Name:        "bash",
+		Label:       "bash",
+		Description: "Runs a shell command",
+		Parameters:  typebox.Object(nil),
+		Execute: func(ctx context.Context, toolCallId string, params any, onUpdate agent.AgentToolUpdateCallback) (agent.AgentToolResult, error) {
+			out := "drwx------@ 53 jack staff 1696 Nov 15 22:48 Ambient\nAmbient.app\n"
+			if obj, ok := params.(*jsonx.Object); ok {
+				if cmd := tvArgStr(obj, "command"); strings.Contains(cmd, "long-policy") {
+					out = "header-before\n" + unbrokenPolicy + "\nfooter-after\n"
+				}
+			}
+			return agent.AgentToolResult{
+				Content: ai.ContentList{&ai.TextContent{Type: "text", Text: out}},
+			}, nil
+		},
+	}
+
+	fx := tgmNewFixture(t, &tgmFixtureOpts{
+		tools:        []*agent.AgentTool{bashTool},
+		defaultTools: []string{"read"},
+	})
+
+	cmd1Args := jsonx.NewObject()
+	cmd1Args.Set("command", "ls -la ~/Library/Application\\ Support/Ambient/ "+strings.Repeat("a", 280))
+	cmd2Args := jsonx.NewObject()
+	cmd2Args.Set("command", "cat long-policy.json "+strings.Repeat("b", 280))
+
+	stopTool := ai.StopReasonToolUse
+	fx.faux.SetResponses([]providers.FauxResponseStep{
+		providers.FauxResponseMessage{
+			Message: providers.FauxAssistantMessage(providers.FauxAssistantBlocks{
+				providers.FauxThinking(strings.Repeat("T", 3500)),
+				providers.FauxToolCall("bash", cmd1Args, nil),
+				providers.FauxToolCall("bash", cmd2Args, nil),
+			}, &providers.FauxAssistantMessageOptions{
+				StopReason: &stopTool,
+			}),
+		},
+		providers.FauxResponseMessage{
+			Message: providers.FauxAssistantMessage(providers.FauxAssistantBlocks{
+				providers.FauxText("terminal overflow regression check complete"),
+			}, nil),
+		},
+	})
+
+	mode := NewGuiMode(fx.runtime, &GuiModeOptions{
+		SkipWindow:          true,
+		InitialThemeSetting: tgmStrPtr("dark"),
+	})
+	t.Cleanup(func() { mode.Stop() })
+
+	mode.refreshSidebarSessionsSync(context.Background())
+
+	tt := ui.NewTester(mode.GUI().View, 1440, 820)
+	tt.SetTitleBar(ui.TitleBar{Height: 48, Left: 86})
+	tt.SetVibrancy(false)
+	tt.SetDark(true)
+	tt.Frame()
+
+	// Execute a !!/bash command with a 4,000-char unbroken output line to exercise BashExecutionCard.
+	if err := tt.Click("Prompt editor"); err != nil {
+		t.Fatalf("Click Prompt editor: %v", err)
+	}
+	tt.Frame()
+	tt.Type("!!printf '%04000d' 0")
+	tt.Key(0, ui.KeyEnter)
+	tgmWaitUntil(t, mode, tt, 5*time.Second, "user bash card finished", func() bool {
+		return !mode.Session().IsBashRunning() && tt.HasText("exit 0")
+	})
+
+	// Run the multi-tool turn containing 3.5KB unbroken Thinking and 4KB unbroken bash JSON output.
+	if err := tt.Click("Prompt editor"); err != nil {
+		t.Fatalf("Click Prompt editor (2): %v", err)
+	}
+	tt.Frame()
+	tt.Type("inspect long outputs")
+	tt.Key(0, ui.KeyEnter)
+	tgmWaitUntil(t, mode, tt, 5*time.Second, "multi-tool turn complete", func() bool {
+		return !mode.Session().IsStreaming() &&
+			tt.HasText("terminal overflow regression check complete") &&
+			tt.HasText("bash") &&
+			tt.HasText("header-before")
+	})
+
+	// Expand the 3,500-char thinking block too so its unconstrained line would try to stretch layout.
+	if tt.HasText("Thinking") {
+		_ = tt.Click("Thinking")
+		tt.Frame()
+	}
+
+	// Centered 720px column inside [257..1440] spans [488.5..1208.5].
+	// Verify every "Expand", "Copy", and "Copy message" button stays within the 720px column.
+	const colMaxRight float32 = 1212
+	var checkedButtons int
+	var bashActionRects []ui.Rect
+	for _, info := range tt.AccessAll() {
+		if info.Name == "Expand" || info.Name == "Copy" || info.Name == "Copy message" {
+			checkedButtons++
+			rightEdge := info.Bounds.X + info.Bounds.W
+			if rightEdge > colMaxRight || info.Bounds.X < 480 {
+				t.Fatalf("button %q bounds %+v overflowed 720px transcript column [488..1209]", info.Name, info.Bounds)
+			}
+			if info.Name == "Expand" || info.Name == "Copy" {
+				bashActionRects = append(bashActionRects, info.Bounds)
+			}
+		}
+	}
+	if checkedButtons < 3 {
+		t.Fatalf("expected at least 3 action buttons (Expand/Copy/Copy message) in transcript, got %d; texts=%v", checkedButtons, tt.Texts())
+	}
+
+	// Verify framebuffer pixels in the right gutter outside the 720px column remain pure canvas (#1A1A1A).
+	img := tt.Image()
+	wantCanvas := wpHexRGBA(t, "#1A1A1A")
+	probeYs := []int{120, 180, 240, 300, 360, 420, 480}
+	for _, r := range bashActionRects {
+		py := int(r.Y + r.H/2)
+		if py >= 60 && py < 620 {
+			probeYs = append(probeYs, py)
+		}
+	}
+	for _, px := range []int{1230, 1300, 1400} {
+		for _, py := range probeYs {
+			got := wpPixelAt(t, img, px, py)
+			if !wpRGBAEqual(got, wantCanvas) {
+				t.Fatalf("right gutter pixel (%d,%d) = %+v, want #1A1A1A (%+v) — card leaked past 720px column", px, py, got, wantCanvas)
+			}
+		}
 	}
 }

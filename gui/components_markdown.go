@@ -182,7 +182,7 @@ func (m *MarkdownView) View(c *ui.Context) ui.Element {
 		m.opts.CodeBlock = nil
 	}
 
-	wrap := ui.Column(c).FillWidth()
+	wrap := ui.Column(c).FillWidth().MinWidth(0)
 	if maxWidth > 0 {
 		wrap.MaxWidth(maxWidth)
 	}
@@ -206,6 +206,8 @@ func renderCopyableCodeBlock(
 ) {
 	box := ui.Column(c).
 		FillWidth().
+		MinWidth(0).
+		ClipX().
 		Background(theme.MdCodeBlockBg).
 		Border(1, theme.MdCodeBlockBorder).
 		Radius(10)

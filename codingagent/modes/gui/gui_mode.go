@@ -690,6 +690,7 @@ func (m *GuiMode) View(c *ui.Context) ui.Element {
 	root := ui.Row(c).
 		Key("waku-shell-root").
 		Fill().
+		Clip().
 		Background(th.Background)
 
 	root.Children(func() {
@@ -701,7 +702,9 @@ func (m *GuiMode) View(c *ui.Context) ui.Element {
 			Key("waku-center-pane").
 			Grow(1).
 			Shrink(1).
+			MinWidth(0).
 			FillHeight().
+			Clip().
 			Background(th.Background)
 		center.Children(func() {
 			renderWakuCenterHeader(
@@ -712,7 +715,7 @@ func (m *GuiMode) View(c *ui.Context) ui.Element {
 			)
 
 			// Virtualized scrollable transcript stream
-			ui.Box(c).FillWidth().Grow(1).Shrink(1).Children(func() {
+			ui.Box(c).FillWidth().Grow(1).Shrink(1).MinWidth(0).Clip().Children(func() {
 				m.scrollView.View(c, 1, func(rc *ui.Context, _ int) {
 					m.renderWakuTranscript(rc, th)
 				})

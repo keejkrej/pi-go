@@ -364,6 +364,8 @@ func (u *UserMessageCard) View(c *ui.Context) ui.Element {
 			if text != "" && md != nil {
 				ui.Column(c).
 					MaxWidth(wakuUserBubbleMaxWidth).
+					MinWidth(0).
+					ClipX().
 					Background(th.Raised).
 					Border(1, th.Raised).
 					Radius(wakuUserBubbleRadius).
@@ -395,6 +397,8 @@ func (u *UserMessageCard) View(c *ui.Context) ui.Element {
 		outer.Children(func() {
 			bubble := ui.Column(c).
 				MaxWidth(540).
+				MinWidth(0).
+				ClipX().
 				Background(th.UserMessageBg).
 				Border(1, th.Border).
 				Radius(14).
@@ -860,6 +864,7 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 
 	root := ui.Column(c).
 		FillWidth().
+		MinWidth(0).
 		Padding(2, 0).
 		Gap(8)
 
@@ -868,6 +873,7 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 		if retry.active {
 			ui.Row(c).
 				FillWidth().
+				MinWidth(0).
 				Background(th.Raised).
 				Border(1, th.Warning.Alpha(0.65)).
 				Radius(8).
@@ -881,7 +887,7 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 					if retry.errMsg != "" {
 						msgText += ": " + retry.errMsg
 					}
-					ui.Text(c, msgText).TextColor(th.Warning).FontSize(12).Wrap()
+					ui.Text(c, msgText).Grow(1).Shrink(1).MinWidth(0).TextColor(th.Warning).FontSize(12)
 				})
 		}
 
@@ -931,6 +937,8 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 				thinkCard := ui.Column(c).
 					Key(fmt.Sprintf("thinking-%d", idx)).
 					FillWidth().
+					MinWidth(0).
+					ClipX().
 					Background(th.Raised).
 					Border(1, th.Border).
 					Radius(8).
@@ -958,9 +966,9 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 						}{idx: idx, open: open})
 					}
 					cp.Panel(func() {
-						ui.Row(c).FillWidth().Padding(2, 0, 2, 2).Gap(8).Children(func() {
-							ui.Box(c).Width(2).Background(th.BorderStrong).Radius(999)
-							ui.Text(c, thinkText).TextColor(th.ThinkingText).FontSize(13).Selectable().Wrap()
+						ui.Row(c).FillWidth().MinWidth(0).Padding(2, 0, 2, 2).Gap(8).Children(func() {
+							ui.Box(c).Width(2).Shrink(0).Background(th.BorderStrong).Radius(999)
+							ui.Text(c, thinkText).Grow(1).Shrink(1).MinWidth(0).TextColor(th.ThinkingText).FontSize(13).Selectable()
 						})
 					})
 				})
@@ -980,6 +988,8 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 				}
 				ui.Row(c).
 					FillWidth().
+					MinWidth(0).
+					ClipX().
 					Background(th.Raised).
 					Border(1, th.Border).
 					Radius(8).
@@ -988,9 +998,9 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 					Gap(6).
 					Children(func() {
 						gui.IconView(c, gui.IconWrench, 12, th.TextSecondary)
-						ui.Text(c, b.Name).TextColor(th.ToolTitle).Font("monospace").FontSize(12)
+						ui.Text(c, b.Name).TextColor(th.ToolTitle).Font("monospace").FontSize(12).SingleLine().Shrink(1).MinWidth(0)
 						if b.Id != "" {
-							ui.Text(c, b.Id).TextColor(th.TextGhost).FontSize(11)
+							ui.Text(c, b.Id).TextColor(th.TextGhost).FontSize(11).SingleLine().Shrink(1).MinWidth(0)
 						}
 					})
 			}
@@ -1001,7 +1011,7 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 		case ai.StopReasonAborted:
 			errMsg := snap.errorMessage
 			if errMsg != "" && errMsg != "Request was aborted" {
-				ui.Text(c, "Aborted: "+errMsg).TextColor(th.Error).FontSize(13).Wrap()
+				ui.Text(c, "Aborted: "+errMsg).FillWidth().MinWidth(0).TextColor(th.Error).FontSize(13)
 			} else {
 				ui.Text(c, "Operation aborted").TextColor(th.Warning).FontSize(13)
 			}
@@ -1012,6 +1022,7 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 			}
 			ui.Row(c).
 				FillWidth().
+				MinWidth(0).
 				Background(th.ToolErrorBg).
 				Border(1, th.Error.Alpha(0.6)).
 				Radius(8).
@@ -1020,7 +1031,7 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 				Gap(8).
 				Children(func() {
 					gui.IconView(c, gui.IconAlert, 14, th.Error)
-					ui.Text(c, "Error: "+errMsg).TextColor(th.Error).FontSize(13).Selectable().Wrap()
+					ui.Text(c, "Error: "+errMsg).Grow(1).Shrink(1).MinWidth(0).TextColor(th.Error).FontSize(13).Selectable()
 				})
 		}
 
@@ -1448,6 +1459,8 @@ func (b *BashExecutionCard) View(c *ui.Context) ui.Element {
 
 	card := ui.Column(c).
 		FillWidth().
+		MinWidth(0).
+		ClipX().
 		Background(th.Raised).
 		Border(1, borderCol).
 		Radius(8).
@@ -1456,8 +1469,8 @@ func (b *BashExecutionCard) View(c *ui.Context) ui.Element {
 
 	card.Children(func() {
 		// Header row
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Children(func() {
-			ui.Row(c).Shrink(1).Grow(1).AlignItems(ui.Center).Gap(7).Children(func() {
+		ui.Row(c).FillWidth().MinWidth(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Children(func() {
+			ui.Row(c).Shrink(1).Grow(1).MinWidth(0).ClipX().AlignItems(ui.Center).Gap(7).Children(func() {
 				if status == BashRunning {
 					ui.Spinner(c).TextColor(prefixColor).Label("Running command")
 				} else {
@@ -1467,7 +1480,7 @@ func (b *BashExecutionCard) View(c *ui.Context) ui.Element {
 				if excluded {
 					prefix = "!! $ "
 				}
-				ui.Text(c, prefix+cmd).TextColor(prefixColor).FontWeight(600).Font("monospace").FontSize(12).Wrap()
+				ui.Text(c, prefix+cmd).Grow(1).Shrink(1).MinWidth(0).TextColor(prefixColor).FontWeight(600).Font("monospace").FontSize(12)
 			})
 			ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(6).Children(func() {
 				if excluded {
@@ -1525,6 +1538,8 @@ func (b *BashExecutionCard) View(c *ui.Context) ui.Element {
 			}
 			outBox := ui.Column(c).
 				FillWidth().
+				MinWidth(0).
+				ClipX().
 				Background(th.Inset).
 				Border(1, th.Border).
 				Radius(7).
@@ -1532,6 +1547,8 @@ func (b *BashExecutionCard) View(c *ui.Context) ui.Element {
 			if expanded {
 				outBox = ui.Scroll(c).
 					FillWidth().
+					MinWidth(0).
+					ClipX().
 					MaxHeight(360).
 					Background(th.Inset).
 					Border(1, th.Border).
@@ -1540,11 +1557,12 @@ func (b *BashExecutionCard) View(c *ui.Context) ui.Element {
 			}
 			outBox.Children(func() {
 				ui.Text(c, displayText).
+					FillWidth().
+					MinWidth(0).
 					TextColor(th.ToolOutput).
 					Font("monospace").
 					FontSize(12).
-					Selectable().
-					Wrap()
+					Selectable()
 			})
 		} else if status != BashRunning {
 			ui.Text(c, "(no output)").TextColor(th.TextGhost).FontSize(12)
@@ -1709,6 +1727,8 @@ func (m *msgCollapsibleMarkdownCard) view(c *ui.Context) ui.Element {
 
 	card := ui.Column(c).
 		FillWidth().
+		MinWidth(0).
+		ClipX().
 		Background(th.CustomMessageBg).
 		Border(1, th.BorderMuted).
 		Radius(th.Radius).
@@ -1718,9 +1738,9 @@ func (m *msgCollapsibleMarkdownCard) view(c *ui.Context) ui.Element {
 	var toggled bool
 	card.Children(func() {
 		cp := ui.CollapsibleBase(c, &open)
-		cp.Trigger.FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Cursor(ui.CursorPointer)
+		cp.Trigger.FillWidth().MinWidth(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Cursor(ui.CursorPointer)
 		cp.Trigger.Children(func() {
-			ui.Row(c).Shrink(1).Grow(1).AlignItems(ui.Center).Gap(8).Children(func() {
+			ui.Row(c).Shrink(1).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(8).Children(func() {
 				chev := "▸"
 				if open {
 					chev = "▾"
@@ -1728,7 +1748,7 @@ func (m *msgCollapsibleMarkdownCard) view(c *ui.Context) ui.Element {
 				ui.Text(c, chev).TextColor(th.Muted)
 				ui.Text(c, title).TextColor(th.CustomMessageLabel).FontWeight(700)
 				if subtitle != "" {
-					ui.Text(c, subtitle).TextColor(th.CustomMessageText).FontSize(12).SingleLine()
+					ui.Text(c, subtitle).TextColor(th.CustomMessageText).FontSize(12).SingleLine().Shrink(1).MinWidth(0)
 				}
 			})
 			if badge != "" {
@@ -1737,7 +1757,7 @@ func (m *msgCollapsibleMarkdownCard) view(c *ui.Context) ui.Element {
 		})
 		toggled = cp.Trigger.Changed()
 		cp.Panel(func() {
-			ui.Column(c).FillWidth().Padding(4, 0, 2, 14).Children(func() {
+			ui.Column(c).FillWidth().MinWidth(0).Padding(4, 0, 2, 14).Children(func() {
 				if md != nil {
 					md.View(c)
 				}
@@ -1967,6 +1987,8 @@ func (cm *CustomMessageCard) View(c *ui.Context) ui.Element {
 
 	card := ui.Column(c).
 		FillWidth().
+		MinWidth(0).
+		ClipX().
 		Background(th.CustomMessageBg).
 		Border(1, th.BorderMuted).
 		Radius(th.Radius).
@@ -1975,8 +1997,8 @@ func (cm *CustomMessageCard) View(c *ui.Context) ui.Element {
 
 	var toggleClicked bool
 	card.Children(func() {
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Children(func() {
-			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+		ui.Row(c).FillWidth().MinWidth(0).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Children(func() {
+			ui.Row(c).Shrink(1).MinWidth(0).AlignItems(ui.Center).Gap(8).Children(func() {
 				ui.Text(c, label).TextColor(th.CustomMessageLabel).FontWeight(700)
 				if msg != nil {
 					if ts := msgFormatTimestamp(msg.Timestamp); ts != "" {

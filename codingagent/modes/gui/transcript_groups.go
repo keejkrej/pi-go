@@ -53,10 +53,12 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 	var toggleTurnKey string
 	var openReviewFile string
 
-	wrap := ui.Column(c).FillWidth().AlignItems(ui.Center)
+	wrap := ui.Column(c).FillWidth().MinWidth(0).ClipX().AlignItems(ui.Center)
 	wrap.Children(func() {
 		col := ui.Column(c).
 			FillWidth().
+			MinWidth(0).
+			ClipX().
 			MaxWidth(wakuContentMaxWidth).
 			Padding(22, 20, 22, 20).
 			Gap(14)
@@ -91,7 +93,7 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 				if cur.kind != "assistant" && cur.kind != "tool" {
 					e := cur
 					if e.card != nil {
-						ui.Box(c).Key("entry-" + e.id).FillWidth().Children(func() {
+						ui.Box(c).Key("entry-" + e.id).FillWidth().MinWidth(0).Children(func() {
 							e.card.View(c)
 						})
 					}
@@ -155,7 +157,7 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 					}
 				}
 
-				turnCol := ui.Column(c).Key("turn-" + turnKey).FillWidth().Gap(8)
+				turnCol := ui.Column(c).Key("turn-" + turnKey).FillWidth().MinWidth(0).Gap(8)
 				turnCol.Children(func() {
 					if len(activity) > 0 {
 						elapsed := turnDurs[turnKey]
@@ -217,15 +219,16 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 							ui.Row(c).
 								Key("turn-body-"+turnKey).
 								FillWidth().
+								MinWidth(0).
 								Padding(2, 0, 2, 6).
 								Gap(10).
 								Children(func() {
-									ui.Box(c).Width(1).FillHeight().Background(th.BorderStrong)
-									ui.Column(c).Grow(1).Shrink(1).Gap(6).Children(func() {
+									ui.Box(c).Width(1).Shrink(0).FillHeight().Background(th.BorderStrong)
+									ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(6).Children(func() {
 										for aIdx, act := range activity {
 											if act.card != nil {
 												actEntry := act
-												ui.Box(c).Key(fmt.Sprintf("act-%s-%d", actEntry.id, aIdx)).FillWidth().Children(func() {
+												ui.Box(c).Key(fmt.Sprintf("act-%s-%d", actEntry.id, aIdx)).FillWidth().MinWidth(0).Children(func() {
 													actEntry.card.View(c)
 												})
 											}
@@ -237,7 +240,7 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 
 					if finalAsstIdx >= 0 && turnEntries[finalAsstIdx].card != nil {
 						finalEntry := turnEntries[finalAsstIdx]
-						ui.Box(c).Key("final-" + finalEntry.id).FillWidth().Children(func() {
+						ui.Box(c).Key("final-" + finalEntry.id).FillWidth().MinWidth(0).Children(func() {
 							finalEntry.card.View(c)
 						})
 					}
@@ -279,6 +282,7 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 				ui.Row(c).
 					Key("waku-live-working").
 					FillWidth().
+					MinWidth(0).
 					Padding(4, 2).
 					AlignItems(ui.Center).
 					Gap(8).
@@ -288,7 +292,7 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 							spinnerCol = th.Warning
 						}
 						ui.Spinner(c).TextColor(spinnerCol).Label("Working")
-						ui.Text(c, liveMsg).TextColor(th.TextSecondary).FontSize(12).SingleLine()
+						ui.Text(c, liveMsg).TextColor(th.TextSecondary).FontSize(12).SingleLine().Shrink(1).MinWidth(0)
 					})
 			}
 
@@ -312,6 +316,7 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 				ui.Row(c).
 					Key("waku-status-notice").
 					FillWidth().
+					MinWidth(0).
 					Background(th.Raised).
 					Border(1, nBorder).
 					Radius(8).
@@ -320,7 +325,7 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 					Gap(8).
 					Children(func() {
 						gui.IconView(c, nSvg, 13, nIconCol)
-						ui.Text(c, sbNotice).TextColor(nTextCol).FontSize(12).Wrap()
+						ui.Text(c, sbNotice).TextColor(nTextCol).FontSize(12).Grow(1).Shrink(1).MinWidth(0)
 					})
 			}
 
@@ -382,6 +387,7 @@ func renderWakuChangedFilesCard(c *ui.Context, th *gui.GuiTheme, turnKey string,
 	card := ui.Row(c).
 		Key("changed-files-"+turnKey).
 		FillWidth().
+		MinWidth(0).
 		Background(th.Raised).
 		Border(1, th.Border).
 		Radius(10).
@@ -391,7 +397,7 @@ func renderWakuChangedFilesCard(c *ui.Context, th *gui.GuiTheme, turnKey string,
 		Gap(10)
 
 	card.Children(func() {
-		ui.Row(c).Shrink(1).Grow(1).AlignItems(ui.Center).Wrap().Gap(8).Children(func() {
+		ui.Row(c).Shrink(1).Grow(1).MinWidth(0).AlignItems(ui.Center).Wrap().Gap(8).Children(func() {
 			gui.IconView(c, gui.IconFileDiff, 14, th.Accent)
 			ui.Textf(c, "%d %s modified", len(files), wakuPlural(len(files), "file", "files")).
 				TextColor(th.Text).FontSize(12).FontWeight(600).SingleLine()
@@ -432,6 +438,7 @@ func renderWakuChangedFilesCard(c *ui.Context, th *gui.GuiTheme, turnKey string,
 			Radius(7).
 			Background(th.Overlay).
 			Border(1, th.BorderStrong).
+			Shrink(0).
 			AlignItems(ui.Center).
 			Gap(5).
 			Cursor(ui.CursorPointer).

@@ -602,6 +602,8 @@ func (tc *ToolExecutionCard) View(c *ui.Context) ui.Element {
 
 	card := ui.Column(c).
 		FillWidth().
+		MinWidth(0).
+		ClipX().
 		Background(bg).
 		Border(1, border).
 		Radius(8).
@@ -610,17 +612,17 @@ func (tc *ToolExecutionCard) View(c *ui.Context) ui.Element {
 
 	card.Children(func() {
 		// Compact 28px header row
-		ui.Row(c).FillWidth().MinHeight(22).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Children(func() {
-			titleTrigger := ui.Row(c).Shrink(1).Grow(1).AlignItems(ui.Center).Gap(7).Cursor(ui.CursorPointer)
+		ui.Row(c).FillWidth().MinWidth(0).MinHeight(22).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Children(func() {
+			titleTrigger := ui.Row(c).Shrink(1).Grow(1).MinWidth(0).ClipX().AlignItems(ui.Center).Gap(7).Cursor(ui.CursorPointer)
 			titleTrigger.Children(func() {
 				if snap.Pending {
 					ui.Spinner(c).TextColor(th.Accent).Label(snap.ToolName)
 				} else {
 					gui.IconView(c, tvToolIcon(snap.ToolName), 13, iconCol)
 				}
-				ui.Text(c, title).TextColor(th.Text).FontWeight(600).FontSize(12).SingleLine()
+				ui.Text(c, title).TextColor(th.Text).FontWeight(600).FontSize(12).SingleLine().Shrink(0)
 				if subtitle != "" {
-					ui.Text(c, subtitle).TextColor(th.TextSecondary).Font("monospace").FontSize(12).SingleLine()
+					ui.Text(c, subtitle).TextColor(th.TextSecondary).Font("monospace").FontSize(12).SingleLine().Shrink(1).MinWidth(0)
 				}
 			})
 			if titleTrigger.Clicked() {
@@ -936,12 +938,14 @@ func (tc *ToolExecutionCard) renderBody(c *ui.Context, snap ToolExecutionSnapsho
 	if snap.IsError && textOut != "" {
 		ui.Box(c).
 			FillWidth().
+			MinWidth(0).
+			ClipX().
 			Background(th.Background).
 			Border(1, th.Error).
 			Radius(th.Radius-2).
 			Padding(8, 10).
 			Children(func() {
-				ui.Text(c, textOut).TextColor(th.Error).Font("monospace").FontSize(12).Selectable().Wrap()
+				ui.Text(c, textOut).FillWidth().MinWidth(0).TextColor(th.Error).Font("monospace").FontSize(12).Selectable()
 			})
 		if snap.ShowImages && len(imgs) > 0 {
 			tc.mu.Lock()
@@ -990,7 +994,9 @@ func (tc *ToolExecutionCard) renderReadBody(
 	filename := tvArgStr(snap.Args, "path", "file_path")
 	if snap.Expanded && textOut != "" {
 		cv := tc.ensureCodeViewer(filename, textOut, th)
-		cv.View(c)
+		ui.Box(c).FillWidth().MinWidth(0).ClipX().Children(func() {
+			cv.View(c)
+		})
 	} else {
 		tvRenderLinesBody(c, textOut, tvReadPreviewLines, false, false, "(empty file)", th)
 	}
@@ -1016,7 +1022,9 @@ func (tc *ToolExecutionCard) renderWriteBody(c *ui.Context, snap ToolExecutionSn
 	}
 	if snap.Expanded {
 		cv := tc.ensureCodeViewer(filename, content, th)
-		cv.View(c)
+		ui.Box(c).FillWidth().MinWidth(0).ClipX().Children(func() {
+			cv.View(c)
+		})
 		return
 	}
 	tvRenderLinesBody(c, content, tvWritePreviewLines, false, false, "", th)
@@ -1054,7 +1062,9 @@ func (tc *ToolExecutionCard) renderEditBody(c *ui.Context, snap ToolExecutionSna
 		if !snap.Expanded {
 			dv.SetHeight(200)
 		}
-		dv.View(c)
+		ui.Box(c).FillWidth().MinWidth(0).ClipX().Children(func() {
+			dv.View(c)
+		})
 		return
 	}
 
@@ -1095,6 +1105,8 @@ func (tc *ToolExecutionCard) renderGenericBody(
 		if pretty, err := jsonx.MarshalIndent(snap.Args, "  "); err == nil {
 			ui.Column(c).
 				FillWidth().
+				MinWidth(0).
+				ClipX().
 				Background(th.Inset).
 				Border(1, th.Border).
 				Radius(7).
@@ -1102,7 +1114,7 @@ func (tc *ToolExecutionCard) renderGenericBody(
 				Gap(4).
 				Children(func() {
 					ui.Text(c, "Arguments").TextColor(th.TextTertiary).FontSize(11).FontWeight(600)
-					ui.Text(c, string(pretty)).TextColor(th.ToolOutput).Font("monospace").FontSize(12).Selectable().Wrap()
+					ui.Text(c, string(pretty)).FillWidth().MinWidth(0).TextColor(th.ToolOutput).Font("monospace").FontSize(12).Selectable()
 				})
 		}
 	}
@@ -1114,6 +1126,8 @@ func (tc *ToolExecutionCard) renderGenericBody(
 			if pretty, err := jsonx.MarshalIndent(snap.Result.Details, "  "); err == nil && len(pretty) > 2 {
 				ui.Column(c).
 					FillWidth().
+					MinWidth(0).
+					ClipX().
 					Background(th.Inset).
 					Border(1, th.Border).
 					Radius(7).
@@ -1121,7 +1135,7 @@ func (tc *ToolExecutionCard) renderGenericBody(
 					Gap(4).
 					Children(func() {
 						ui.Text(c, "Details").TextColor(th.TextTertiary).FontSize(11).FontWeight(600)
-						ui.Text(c, string(pretty)).TextColor(th.TextSecondary).Font("monospace").FontSize(12).Selectable().Wrap()
+						ui.Text(c, string(pretty)).FillWidth().MinWidth(0).TextColor(th.TextSecondary).Font("monospace").FontSize(12).Selectable()
 					})
 			}
 		}
@@ -1146,6 +1160,8 @@ func tvRenderLinesBody(c *ui.Context, text string, maxLines int, fromTail, expan
 	}
 	box := ui.Column(c).
 		FillWidth().
+		MinWidth(0).
+		ClipX().
 		Background(th.Inset).
 		Border(1, th.Border).
 		Radius(7).
@@ -1153,6 +1169,8 @@ func tvRenderLinesBody(c *ui.Context, text string, maxLines int, fromTail, expan
 	if expanded {
 		box = ui.Scroll(c).
 			FillWidth().
+			MinWidth(0).
+			ClipX().
 			MaxHeight(340).
 			Background(th.Inset).
 			Border(1, th.Border).
@@ -1161,11 +1179,12 @@ func tvRenderLinesBody(c *ui.Context, text string, maxLines int, fromTail, expan
 	}
 	box.Children(func() {
 		ui.Text(c, shown).
+			FillWidth().
+			MinWidth(0).
 			TextColor(th.ToolOutput).
 			Font("monospace").
 			FontSize(12).
-			Selectable().
-			Wrap()
+			Selectable()
 	})
 	if hidden > 0 && !fromTail {
 		ui.Textf(c, "... (%d more lines, click Expand to show all)", hidden).TextColor(th.Muted).FontSize(12)
