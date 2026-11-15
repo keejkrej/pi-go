@@ -16,11 +16,11 @@ import (
 	"github.com/keejkrej/pi-go/internal/jsonx"
 )
 
-func tsvcObj(kv ...any) *jsonx.Object {
+func tservObj(kv ...any) *jsonx.Object {
 	return jsonx.ObjectOf(kv...)
 }
 
-func tsvcGet(v any, key string) any {
+func tservGet(v any, key string) any {
 	o, ok := v.(*jsonx.Object)
 	if !ok || o == nil {
 		return nil
@@ -29,12 +29,12 @@ func tsvcGet(v any, key string) any {
 	return val
 }
 
-func tsvcHasCode(err error, code RemoteServiceErrorCode) bool {
+func tservHasCode(err error, code RemoteServiceErrorCode) bool {
 	var rse *RemoteServiceError
 	return errors.As(err, &rse) && rse.Code == code
 }
 
-func tsvcMustJson(t *testing.T, v any) string {
+func tservMustJson(t *testing.T, v any) string {
 	t.Helper()
 	b, err := jsonx.Marshal(v)
 	if err != nil {
@@ -43,7 +43,7 @@ func tsvcMustJson(t *testing.T, v any) string {
 	return string(b)
 }
 
-func tsvcMustDefine[T any](t *testing.T, id string, opts ...*DefineServiceOptions) *Service[T] {
+func tservMustDefine[T any](t *testing.T, id string, opts ...*DefineServiceOptions) *Service[T] {
 	t.Helper()
 	var opt *DefineServiceOptions
 	if len(opts) > 0 {
@@ -56,7 +56,7 @@ func tsvcMustDefine[T any](t *testing.T, id string, opts ...*DefineServiceOption
 	return svc
 }
 
-func tsvcMustState[T any](t *testing.T, initial T) MutableReplicatedState[T] {
+func tservMustState[T any](t *testing.T, initial T) MutableReplicatedState[T] {
 	t.Helper()
 	st, err := NewReplicatedState(initial)
 	if err != nil {
@@ -65,7 +65,7 @@ func tsvcMustState[T any](t *testing.T, initial T) MutableReplicatedState[T] {
 	return st
 }
 
-func tsvcMustProvider(t *testing.T, entries ...RemoteServiceProviderEntry) *RemoteServiceProvider {
+func tservMustProvider(t *testing.T, entries ...RemoteServiceProviderEntry) *RemoteServiceProvider {
 	t.Helper()
 	p, err := NewRemoteServiceProvider(entries)
 	if err != nil {
@@ -74,7 +74,7 @@ func tsvcMustProvider(t *testing.T, entries ...RemoteServiceProviderEntry) *Remo
 	return p
 }
 
-func tsvcEntry(svc any, mode ...ServiceMode) RemoteServiceProviderEntry {
+func tservEntry(svc any, mode ...ServiceMode) RemoteServiceProviderEntry {
 	head, err := spExtractServiceHead(svc)
 	if err != nil {
 		panic(err)
@@ -91,7 +91,7 @@ func tsvcEntry(svc any, mode ...ServiceMode) RemoteServiceProviderEntry {
 	}
 }
 
-func tsvcCatchError(fn func()) (err error) {
+func tservCatchError(fn func()) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = ssToError(r)
@@ -101,7 +101,7 @@ func tsvcCatchError(fn func()) (err error) {
 	return nil
 }
 
-func tsvcWaitFor(t *testing.T, desc string, cond func() bool) {
+func tservWaitFor(t *testing.T, desc string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
@@ -113,7 +113,7 @@ func tsvcWaitFor(t *testing.T, desc string, cond func() bool) {
 	t.Fatalf("timed out waiting for %s", desc)
 }
 
-func tsvcMemberGet(t *testing.T, handle any, member string) any {
+func tservMemberGet(t *testing.T, handle any, member string) any {
 	t.Helper()
 	switch h := handle.(type) {
 	case *scServiceFacade:
@@ -134,7 +134,7 @@ func tsvcMemberGet(t *testing.T, handle any, member string) any {
 	}
 }
 
-func tsvcStateVal(t *testing.T, stateHandle any) (any, bool, error) {
+func tservStateVal(t *testing.T, stateHandle any) (any, bool, error) {
 	t.Helper()
 	switch s := stateHandle.(type) {
 	case *scMemberSlot:
@@ -147,7 +147,7 @@ func tsvcStateVal(t *testing.T, stateHandle any) (any, bool, error) {
 	}
 }
 
-func tsvcStateSubscribe(t *testing.T, stateHandle any, fn func(JsonValue, Context, ReplicatedStateDelivery) error) (func(), error) {
+func tservStateSubscribe(t *testing.T, stateHandle any, fn func(JsonValue, Context, ReplicatedStateDelivery) error) (func(), error) {
 	t.Helper()
 	switch s := stateHandle.(type) {
 	case *scMemberSlot:
@@ -160,7 +160,7 @@ func tsvcStateSubscribe(t *testing.T, stateHandle any, fn func(JsonValue, Contex
 	}
 }
 
-func tsvcCall(handle any, member string, args ...any) (any, error) {
+func tservCall(handle any, member string, args ...any) (any, error) {
 	switch h := handle.(type) {
 	case *scServiceFacade:
 		return h.Call(member, args...)
@@ -191,18 +191,18 @@ func tsvcCall(handle any, member string, args ...any) (any, error) {
 	}
 }
 
-type tsvcGatedTransport struct {
+type tservGatedTransport struct {
 	inner      RemoteServiceTransport
 	subscribed chan struct{}
 	release    chan struct{}
 	once       sync.Once
 }
 
-func (t *tsvcGatedTransport) Invoke(call ServiceCall, callContext Context) (JsonValue, bool, error) {
+func (t *tservGatedTransport) Invoke(call ServiceCall, callContext Context) (JsonValue, bool, error) {
 	return t.inner.Invoke(call, callContext)
 }
 
-func (t *tsvcGatedTransport) Subscribe(serviceId string, mode ServiceMode, listener func(ServiceProviderUpdate, Context), callContext Context) (ServiceSubscription, error) {
+func (t *tservGatedTransport) Subscribe(serviceId string, mode ServiceMode, listener func(ServiceProviderUpdate, Context), callContext Context) (ServiceSubscription, error) {
 	sub, err := t.inner.Subscribe(serviceId, mode, listener, callContext)
 	if err != nil {
 		return nil, err
@@ -216,56 +216,56 @@ func (t *tsvcGatedTransport) Subscribe(serviceId string, mode ServiceMode, liste
 	return sub, nil
 }
 
-type tsvcFuncTransport struct {
+type tservFuncTransport struct {
 	invoke    func(ServiceCall, Context) (JsonValue, bool, error)
 	subscribe func(string, ServiceMode, func(ServiceProviderUpdate, Context), Context) (ServiceSubscription, error)
 }
 
-func (t *tsvcFuncTransport) Invoke(call ServiceCall, callContext Context) (JsonValue, bool, error) {
+func (t *tservFuncTransport) Invoke(call ServiceCall, callContext Context) (JsonValue, bool, error) {
 	return t.invoke(call, callContext)
 }
 
-func (t *tsvcFuncTransport) Subscribe(serviceId string, mode ServiceMode, listener func(ServiceProviderUpdate, Context), callContext Context) (ServiceSubscription, error) {
+func (t *tservFuncTransport) Subscribe(serviceId string, mode ServiceMode, listener func(ServiceProviderUpdate, Context), callContext Context) (ServiceSubscription, error) {
 	return t.subscribe(serviceId, mode, listener, callContext)
 }
 
-type tsvcSubscriptionFuncs struct {
+type tservSubscriptionFuncs struct {
 	snapshot ServiceSubscriptionSnapshot
 	activate func() error
 	closeFn  func(Context) error
 }
 
-func (s *tsvcSubscriptionFuncs) Snapshot() ServiceSubscriptionSnapshot { return s.snapshot }
-func (s *tsvcSubscriptionFuncs) Activate() error                       { return s.activate() }
-func (s *tsvcSubscriptionFuncs) Close(c Context) error                 { return s.closeFn(c) }
+func (s *tservSubscriptionFuncs) Snapshot() ServiceSubscriptionSnapshot { return s.snapshot }
+func (s *tservSubscriptionFuncs) Activate() error                       { return s.activate() }
+func (s *tservSubscriptionFuncs) Close(c Context) error                 { return s.closeFn(c) }
 
 func TestRemoteServices(t *testing.T) {
-	modelsSvc := tsvcMustDefine[any](t, "test.models")
-	questionDialogsSvc := tsvcMustDefine[any](t, "test.question-dialog")
-	echoSvc := tsvcMustDefine[any](t, "test.echo")
-	timelineSvc := tsvcMustDefine[any](t, "test.timeline")
+	modelsSvc := tservMustDefine[any](t, "test.models")
+	questionDialogsSvc := tservMustDefine[any](t, "test.question-dialog")
+	echoSvc := tservMustDefine[any](t, "test.echo")
+	timelineSvc := tservMustDefine[any](t, "test.timeline")
 
 	t.Run("marks services remotable by default and reserves Chord service IDs", func(t *testing.T) {
 		localFlag := true
-		passthrough := tsvcMustDefine[any](t, "test.json-passthrough")
+		passthrough := tservMustDefine[any](t, "test.json-passthrough")
 		if passthrough.Local {
 			t.Fatal("expected remotable service by default")
 		}
-		local := tsvcMustDefine[any](t, "test.local", &DefineServiceOptions{Local: &localFlag})
+		local := tservMustDefine[any](t, "test.local", &DefineServiceOptions{Local: &localFlag})
 		if modelsSvc.Local || !local.Local {
 			t.Fatalf("unexpected Local flags: models=%v local=%v", modelsSvc.Local, local.Local)
 		}
 		if _, err := DefineService[any]("$chord.internal", &DefineServiceOptions{Local: &localFlag}); err == nil || !strings.Contains(err.Error(), "Service IDs beginning with $chord. are reserved") {
 			t.Fatalf("expected reserved ID error, got %v", err)
 		}
-		if _, err := NewRemoteServiceProvider([]RemoteServiceProviderEntry{tsvcEntry(local)}); err == nil || !strings.Contains(err.Error(), "cannot be published remotely") {
+		if _, err := NewRemoteServiceProvider([]RemoteServiceProviderEntry{tservEntry(local)}); err == nil || !strings.Contains(err.Error(), "cannot be published remotely") {
 			t.Fatalf("expected local rejection error, got %v", err)
 		}
 	})
 
 	t.Run("tracks mutable source state while publishing immutable revisions", func(t *testing.T) {
-		initial := tsvcObj("selected", nil, "revision", float64(0))
-		state := tsvcMustState(t, initial)
+		initial := tservObj("selected", nil, "revision", float64(0))
+		state := tservMustState(t, initial)
 		var delivered any
 		var deliveries []string
 		unsub := state.Subscribe(func(value *jsonx.Object, _ Context, delivery ReplicatedStateDelivery) error {
@@ -280,7 +280,7 @@ func TestRemoteServices(t *testing.T) {
 		hydrated := delivered.(*jsonx.Object)
 
 		if err := state.Change(BackgroundContext, func(draft Draft[*jsonx.Object]) error {
-			draft.Value.Set("selected", tsvcObj("provider", "test", "modelId", "one"))
+			draft.Value.Set("selected", tservObj("provider", "test", "modelId", "one"))
 			draft.Value.Set("revision", float64(1))
 			return nil
 		}); err != nil {
@@ -291,10 +291,10 @@ func TestRemoteServices(t *testing.T) {
 		if cur == initial || delivered != cur {
 			t.Fatal("expected new immutable revision on change")
 		}
-		if got := tsvcMustJson(t, cur); got != `{"selected":{"provider":"test","modelId":"one"},"revision":1}` {
+		if got := tservMustJson(t, cur); got != `{"selected":{"provider":"test","modelId":"one"},"revision":1}` {
 			t.Fatalf("got %s", got)
 		}
-		if got := tsvcMustJson(t, hydrated); got != `{"selected":null,"revision":0}` {
+		if got := tservMustJson(t, hydrated); got != `{"selected":null,"revision":0}` {
 			t.Fatalf("hydrated mutated: %s", got)
 		}
 		if len(deliveries) != 2 || deliveries[0] != "hydrate" || deliveries[1] != "update" {
@@ -304,7 +304,7 @@ func TestRemoteServices(t *testing.T) {
 	})
 
 	t.Run("does not publish when a transaction restores the prior value", func(t *testing.T) {
-		state := tsvcMustState(t, tsvcObj("value", float64(1)))
+		state := tservMustState(t, tservObj("value", float64(1)))
 		var deliveries []ReplicatedStateDelivery
 		state.Subscribe(func(_ *jsonx.Object, _ Context, delivery ReplicatedStateDelivery) error {
 			deliveries = append(deliveries, delivery)
@@ -317,8 +317,8 @@ func TestRemoteServices(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("Change failed: %v", err)
 		}
-		if cur, _ := state.Value(); tsvcMustJson(t, cur) != `{"value":1}` {
-			t.Fatalf("got %s", tsvcMustJson(t, cur))
+		if cur, _ := state.Value(); tservMustJson(t, cur) != `{"value":1}` {
+			t.Fatalf("got %s", tservMustJson(t, cur))
 		}
 		if len(deliveries) != 1 || deliveries[0].Kind != "hydrate" || deliveries[0].Sequence != 0 {
 			t.Fatalf("unexpected deliveries: %+v", deliveries)
@@ -326,22 +326,22 @@ func TestRemoteServices(t *testing.T) {
 	})
 
 	t.Run("hydrates a new subscriber from the latest atomic revision", func(t *testing.T) {
-		state := tsvcMustState(t, tsvcObj("entries", []any{tsvcObj("id", "one")}))
+		state := tservMustState(t, tservObj("entries", []any{tservObj("id", "one")}))
 		var first []string
 		state.Subscribe(func(v *jsonx.Object, _ Context, _ ReplicatedStateDelivery) error {
-			first = append(first, tsvcMustJson(t, v))
+			first = append(first, tservMustJson(t, v))
 			return nil
 		})
 		if err := state.Change(BackgroundContext, func(draft Draft[*jsonx.Object]) error {
 			arr, _ := draft.Value.Get("entries")
-			draft.Value.Set("entries", append(arr.([]any), tsvcObj("id", "two")))
+			draft.Value.Set("entries", append(arr.([]any), tservObj("id", "two")))
 			return nil
 		}); err != nil {
 			t.Fatalf("Change failed: %v", err)
 		}
 		var second []string
 		state.Subscribe(func(v *jsonx.Object, _ Context, _ ReplicatedStateDelivery) error {
-			second = append(second, tsvcMustJson(t, v))
+			second = append(second, tservMustJson(t, v))
 			return nil
 		})
 		if len(first) != 2 || len(second) != 1 || second[0] != first[1] {
@@ -350,10 +350,10 @@ func TestRemoteServices(t *testing.T) {
 	})
 
 	t.Run("does not defensively clone method arguments or results", func(t *testing.T) {
-		provider := tsvcMustProvider(t, tsvcEntry(echoSvc))
+		provider := tservMustProvider(t, tservEntry(echoSvc))
 		var received *jsonx.Object
-		response := tsvcObj("value", "response")
-		if err := provider.Provide(echoSvc, tsvcObj("echo", func(payload *jsonx.Object, _ Context) (*jsonx.Object, error) {
+		response := tservObj("value", "response")
+		if err := provider.Provide(echoSvc, tservObj("echo", func(payload *jsonx.Object, _ Context) (*jsonx.Object, error) {
 			received = payload
 			return response, nil
 		})); err != nil {
@@ -370,8 +370,8 @@ func TestRemoteServices(t *testing.T) {
 		if err := namespace.Ready(BackgroundContext); err != nil {
 			t.Fatalf("Ready failed: %v", err)
 		}
-		request := tsvcObj("value", "request")
-		res, err := tsvcCall(echo, "echo", request, BackgroundContext)
+		request := tservObj("value", "request")
+		res, err := tservCall(echo, "echo", request, BackgroundContext)
 		if err != nil {
 			t.Fatalf("echo call failed: %v", err)
 		}
@@ -387,14 +387,14 @@ func TestRemoteServices(t *testing.T) {
 	})
 
 	t.Run("provides and consumes one singleton with replicated state", func(t *testing.T) {
-		provider := tsvcMustProvider(t, tsvcEntry(modelsSvc))
+		provider := tservMustProvider(t, tservEntry(modelsSvc))
 		if cat := provider.Catalogue(); len(cat) != 1 || cat[0].ServiceId != modelsSvc.Id || cat[0].Mode != ServiceModeSingleton {
 			t.Fatalf("unexpected catalogue: %+v", cat)
 		}
-		initialState := tsvcObj("selected", nil, "revision", float64(0))
-		state := tsvcMustState(t, initialState)
+		initialState := tservObj("selected", nil, "revision", float64(0))
+		state := tservMustState(t, initialState)
 		var publishedState *jsonx.Object
-		if err := provider.Provide(modelsSvc, tsvcObj(
+		if err := provider.Provide(modelsSvc, tservObj(
 			"state", state,
 			"select", func(model *jsonx.Object, call Context) error {
 				if err := state.Change(call, func(draft Draft[*jsonx.Object]) error {
@@ -413,7 +413,7 @@ func TestRemoteServices(t *testing.T) {
 			t.Fatalf("Provide failed: %v", err)
 		}
 		var errs []error
-		gated := &tsvcGatedTransport{
+		gated := &tservGatedTransport{
 			inner:   CreateLoopbackServiceTransport(provider),
 			release: make(chan struct{}),
 		}
@@ -430,33 +430,33 @@ func TestRemoteServices(t *testing.T) {
 		if first != second {
 			t.Fatal("expected identical singleton proxy handle")
 		}
-		stateHandle := tsvcMemberGet(t, first, "state")
-		if _, ok, err := tsvcStateVal(t, stateHandle); err != nil || ok {
+		stateHandle := tservMemberGet(t, first, "state")
+		if _, ok, err := tservStateVal(t, stateHandle); err != nil || ok {
 			t.Fatalf("expected unhydrated before ready, got ok=%v err=%v", ok, err)
 		}
 		close(gated.release)
 		if err := namespace.Ready(BackgroundContext); err != nil {
 			t.Fatalf("Ready failed: %v", err)
 		}
-		val, ok, err := tsvcStateVal(t, stateHandle)
-		if err != nil || !ok || tsvcMustJson(t, val) != tsvcMustJson(t, initialState) {
+		val, ok, err := tservStateVal(t, stateHandle)
+		if err != nil || !ok || tservMustJson(t, val) != tservMustJson(t, initialState) {
 			t.Fatalf("expected hydrated initial state, got ok=%v val=%v err=%v", ok, val, err)
 		}
 
 		var updates []string
-		unsub, err := tsvcStateSubscribe(t, tsvcMemberGet(t, second, "state"), func(v JsonValue, _ Context, _ ReplicatedStateDelivery) error {
-			updates = append(updates, tsvcMustJson(t, v))
+		unsub, err := tservStateSubscribe(t, tservMemberGet(t, second, "state"), func(v JsonValue, _ Context, _ ReplicatedStateDelivery) error {
+			updates = append(updates, tservMustJson(t, v))
 			return nil
 		})
 		if err != nil {
 			t.Fatalf("Subscribe failed: %v", err)
 		}
-		if _, err := tsvcCall(first, "select", tsvcObj("provider", "test", "modelId", "one"), BackgroundContext); err != nil {
+		if _, err := tservCall(first, "select", tservObj("provider", "test", "modelId", "one"), BackgroundContext); err != nil {
 			t.Fatalf("select call failed: %v", err)
 		}
-		curVal, ok, err := tsvcStateVal(t, stateHandle)
-		if err != nil || !ok || tsvcMustJson(t, curVal) != tsvcMustJson(t, publishedState) {
-			t.Fatalf("unexpected state after select: ok=%v val=%s err=%v", ok, tsvcMustJson(t, curVal), err)
+		curVal, ok, err := tservStateVal(t, stateHandle)
+		if err != nil || !ok || tservMustJson(t, curVal) != tservMustJson(t, publishedState) {
+			t.Fatalf("unexpected state after select: ok=%v val=%s err=%v", ok, tservMustJson(t, curVal), err)
 		}
 		if len(updates) != 2 || updates[0] != `{"selected":null,"revision":0}` || updates[1] != `{"selected":{"provider":"test","modelId":"one"},"revision":1}` {
 			t.Fatalf("unexpected updates: %v", updates)
@@ -476,7 +476,7 @@ func TestRemoteServices(t *testing.T) {
 		if err := lateNamespace.Ready(BackgroundContext); err != nil {
 			t.Fatalf("late Ready failed: %v", err)
 		}
-		lateVal, ok, err := tsvcStateVal(t, tsvcMemberGet(t, lateModels, "state"))
+		lateVal, ok, err := tservStateVal(t, tservMemberGet(t, lateModels, "state"))
 		if err != nil || !ok {
 			t.Fatalf("expected late state ok, err=%v", err)
 		}
@@ -492,10 +492,10 @@ func TestRemoteServices(t *testing.T) {
 	})
 
 	t.Run("publishes compact tracked operations through the remote provider", func(t *testing.T) {
-		provider := tsvcMustProvider(t, tsvcEntry(timelineSvc))
-		initial := tsvcObj("entries", []any{tsvcObj("id", "one")}, "retained", tsvcObj("value", float64(1)))
-		source := tsvcMustState(t, initial)
-		if err := provider.Provide(timelineSvc, tsvcObj("state", source)); err != nil {
+		provider := tservMustProvider(t, tservEntry(timelineSvc))
+		initial := tservObj("entries", []any{tservObj("id", "one")}, "retained", tservObj("value", float64(1)))
+		source := tservMustState(t, initial)
+		if err := provider.Provide(timelineSvc, tservObj("state", source)); err != nil {
 			t.Fatalf("Provide failed: %v", err)
 		}
 		var updates []ServiceProviderUpdate
@@ -521,10 +521,10 @@ func TestRemoteServices(t *testing.T) {
 		if err := namespace.Ready(BackgroundContext); err != nil {
 			t.Fatalf("Ready failed: %v", err)
 		}
-		prevVal, _, _ := tsvcStateVal(t, tsvcMemberGet(t, timeline, "state"))
+		prevVal, _, _ := tservStateVal(t, tservMemberGet(t, timeline, "state"))
 		if err := source.Change(BackgroundContext, func(draft Draft[*jsonx.Object]) error {
 			arr, _ := draft.Value.Get("entries")
-			draft.Value.Set("entries", append(arr.([]any), tsvcObj("id", "two")))
+			draft.Value.Set("entries", append(arr.([]any), tservObj("id", "two")))
 			return nil
 		}); err != nil {
 			t.Fatalf("Change 1 failed: %v", err)
@@ -536,17 +536,17 @@ func TestRemoteServices(t *testing.T) {
 		if lastUpdate.Sequence != 1 || lastUpdate.Ops[0].Verb() != "p" {
 			t.Fatalf("expected splice op seq 1, got %+v", lastUpdate)
 		}
-		if tsvcMustJson(t, prevVal) != `{"entries":[{"id":"one"}],"retained":{"value":1}}` {
-			t.Fatalf("previous mutated: %s", tsvcMustJson(t, prevVal))
+		if tservMustJson(t, prevVal) != `{"entries":[{"id":"one"}],"retained":{"value":1}}` {
+			t.Fatalf("previous mutated: %s", tservMustJson(t, prevVal))
 		}
-		nextVal, _, _ := tsvcStateVal(t, tsvcMemberGet(t, timeline, "state"))
-		if tsvcMustJson(t, nextVal) != `{"entries":[{"id":"one"},{"id":"two"}],"retained":{"value":1}}` {
-			t.Fatalf("unexpected timeline value: %s", tsvcMustJson(t, nextVal))
+		nextVal, _, _ := tservStateVal(t, tservMemberGet(t, timeline, "state"))
+		if tservMustJson(t, nextVal) != `{"entries":[{"id":"one"},{"id":"two"}],"retained":{"value":1}}` {
+			t.Fatalf("unexpected timeline value: %s", tservMustJson(t, nextVal))
 		}
 
 		if err := source.Change(BackgroundContext, func(draft Draft[*jsonx.Object]) error {
 			arr, _ := draft.Value.Get("entries")
-			draft.Value.Set("entries", append(arr.([]any), tsvcObj("id", "three")))
+			draft.Value.Set("entries", append(arr.([]any), tservObj("id", "three")))
 			return nil
 		}); err != nil {
 			t.Fatalf("Change 2 failed: %v", err)
@@ -566,12 +566,12 @@ func TestRemoteServices(t *testing.T) {
 	})
 
 	t.Run("publishes authoritative source references through services without re-diffing", func(t *testing.T) {
-		initial := tsvcObj("entries", []any{tsvcObj("id", "one")}, "retained", tsvcObj("value", float64(1)))
+		initial := tservObj("entries", []any{tservObj("id", "one")}, "retained", tservObj("value", float64(1)))
 		var publish func(ReplicatedStateSourceFrame[*jsonx.Object])
 		disposed := false
-		src := &tsvcSource[*jsonx.Object]{
+		src := &tservSource[*jsonx.Object]{
 			attachFn: func() ReplicatedStateSourceAttachment[*jsonx.Object] {
-				return &tsvcAttachment[*jsonx.Object]{
+				return &tservAttachment[*jsonx.Object]{
 					snap:     ReplicatedStateSourceSnapshot[*jsonx.Object]{Value: initial, Cursor: 20},
 					activate: func(l func(ReplicatedStateSourceFrame[*jsonx.Object])) { publish = l },
 					dispose:  func() { disposed = true },
@@ -582,8 +582,8 @@ func TestRemoteServices(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewReplicatedStateSource failed: %v", err)
 		}
-		provider := tsvcMustProvider(t, tsvcEntry(timelineSvc))
-		if err := provider.Provide(timelineSvc, tsvcObj("state", state)); err != nil {
+		provider := tservMustProvider(t, tservEntry(timelineSvc))
+		if err := provider.Provide(timelineSvc, tservObj("state", state)); err != nil {
 			t.Fatalf("Provide failed: %v", err)
 		}
 		var updates []ServiceProviderUpdate
@@ -601,8 +601,8 @@ func TestRemoteServices(t *testing.T) {
 		if err := sub.Activate(); err != nil {
 			t.Fatalf("Activate failed: %v", err)
 		}
-		next := tsvcObj("entries", []any{tsvcObj("id", "one"), tsvcObj("id", "two")}, "retained", tsvcObj("value", float64(1)))
-		ops := OpList{OpSplice{Path: Path{SegString("entries")}, Index: 1, Remove: 0, Items: []JsonValue{tsvcObj("id", "two")}}}
+		next := tservObj("entries", []any{tservObj("id", "one"), tservObj("id", "two")}, "retained", tservObj("value", float64(1)))
+		ops := OpList{OpSplice{Path: Path{SegString("entries")}, Index: 1, Remove: 0, Items: []JsonValue{tservObj("id", "two")}}}
 		publish(ReplicatedStateSourceFrame[*jsonx.Object]{
 			Cursor:  21,
 			Value:   next,
@@ -625,9 +625,9 @@ func TestRemoteServices(t *testing.T) {
 	})
 
 	t.Run("keeps singleton facades stable when their provider is replaced", func(t *testing.T) {
-		provider := tsvcMustProvider(t, tsvcEntry(modelsSvc))
-		if err := provider.Provide(modelsSvc, tsvcObj(
-			"state", tsvcMustState(t, tsvcObj("selected", nil, "revision", float64(1))),
+		provider := tservMustProvider(t, tservEntry(modelsSvc))
+		if err := provider.Provide(modelsSvc, tservObj(
+			"state", tservMustState(t, tservObj("selected", nil, "revision", float64(1))),
 			"select", func(_ any, _ Context) error { return nil },
 		)); err != nil {
 			t.Fatalf("Provide failed: %v", err)
@@ -640,29 +640,29 @@ func TestRemoteServices(t *testing.T) {
 			t.Fatalf("CreateRemoteServiceBinding failed: %v", err)
 		}
 		models := namespace.Use(modelsSvc)
-		stateMember := tsvcMemberGet(t, models, "state")
-		selectMember := tsvcMemberGet(t, models, "select")
+		stateMember := tservMemberGet(t, models, "state")
+		selectMember := tservMemberGet(t, models, "select")
 		if err := namespace.Ready(BackgroundContext); err != nil {
 			t.Fatalf("Ready failed: %v", err)
 		}
-		v, ok, _ := tsvcStateVal(t, stateMember)
-		if !ok || tsvcGet(v, "revision") != float64(1) {
+		v, ok, _ := tservStateVal(t, stateMember)
+		if !ok || tservGet(v, "revision") != float64(1) {
 			t.Fatalf("expected revision 1, got %v %v", v, ok)
 		}
 
 		if err := provider.Withdraw(modelsSvc); err != nil {
 			t.Fatalf("Withdraw failed: %v", err)
 		}
-		if _, ok, _ := tsvcStateVal(t, stateMember); ok {
+		if _, ok, _ := tservStateVal(t, stateMember); ok {
 			t.Fatal("expected state unavailable after Withdraw")
 		}
-		if _, err := tsvcCall(selectMember, "", tsvcObj("provider", "test", "modelId", "unavailable"), BackgroundContext); !tsvcHasCode(err, RemoteServiceErrorCodeServiceNotFound) {
+		if _, err := tservCall(selectMember, "", tservObj("provider", "test", "modelId", "unavailable"), BackgroundContext); !tservHasCode(err, RemoteServiceErrorCodeServiceNotFound) {
 			t.Fatalf("expected service_not_found after Withdraw, got %v", err)
 		}
 
 		called := 0
-		if err := provider.Replace(modelsSvc, tsvcObj(
-			"state", tsvcMustState(t, tsvcObj("selected", nil, "revision", float64(2))),
+		if err := provider.Replace(modelsSvc, tservObj(
+			"state", tservMustState(t, tservObj("selected", nil, "revision", float64(2))),
 			"select", func(_ any, _ Context) error {
 				called++
 				return nil
@@ -670,24 +670,24 @@ func TestRemoteServices(t *testing.T) {
 		)); err != nil {
 			t.Fatalf("Replace failed: %v", err)
 		}
-		if namespace.Use(modelsSvc) != models || tsvcMemberGet(t, models, "state") != stateMember {
+		if namespace.Use(modelsSvc) != models || tservMemberGet(t, models, "state") != stateMember {
 			t.Fatal("expected stable singleton facade and member slot across Replace")
 		}
-		v, ok, _ = tsvcStateVal(t, stateMember)
-		if !ok || tsvcGet(v, "revision") != float64(2) {
+		v, ok, _ = tservStateVal(t, stateMember)
+		if !ok || tservGet(v, "revision") != float64(2) {
 			t.Fatalf("expected revision 2, got %v %v", v, ok)
 		}
-		if _, err := tsvcCall(selectMember, "", tsvcObj("provider", "test", "modelId", "replacement"), BackgroundContext); err != nil || called != 1 {
+		if _, err := tservCall(selectMember, "", tservObj("provider", "test", "modelId", "replacement"), BackgroundContext); err != nil || called != 1 {
 			t.Fatalf("expected replacement select called once, called=%d err=%v", called, err)
 		}
-		if err := provider.Replace(modelsSvc, tsvcObj("select", func(_ Context) error { return nil })); err == nil || !strings.Contains(err.Error(), "replacement must preserve its member shape") {
+		if err := provider.Replace(modelsSvc, tservObj("select", func(_ Context) error { return nil })); err == nil || !strings.Contains(err.Error(), "replacement must preserve its member shape") {
 			t.Fatalf("expected shape mismatch error, got %v", err)
 		}
-		if err := provider.Replace(modelsSvc, tsvcObj("state", func(_ Context) error { return nil }, "select", func(_ Context) error { return nil })); err == nil || !strings.Contains(err.Error(), "replacement must preserve its member shape") {
+		if err := provider.Replace(modelsSvc, tservObj("state", func(_ Context) error { return nil }, "select", func(_ Context) error { return nil })); err == nil || !strings.Contains(err.Error(), "replacement must preserve its member shape") {
 			t.Fatalf("expected shape mismatch error on kind change, got %v", err)
 		}
-		v, ok, _ = tsvcStateVal(t, stateMember)
-		if !ok || tsvcGet(v, "revision") != float64(2) {
+		v, ok, _ = tservStateVal(t, stateMember)
+		if !ok || tservGet(v, "revision") != float64(2) {
 			t.Fatalf("expected revision still 2 after rejected Replace")
 		}
 
@@ -697,9 +697,9 @@ func TestRemoteServices(t *testing.T) {
 
 	t.Run("delivers active subscriber updates before reporting listener failures", func(t *testing.T) {
 		failure := errors.New("listener failed")
-		provider := tsvcMustProvider(t, tsvcEntry(modelsSvc))
-		if err := provider.Provide(modelsSvc, tsvcObj(
-			"state", tsvcMustState(t, tsvcObj("selected", nil, "revision", float64(1))),
+		provider := tservMustProvider(t, tservEntry(modelsSvc))
+		if err := provider.Provide(modelsSvc, tservObj(
+			"state", tservMustState(t, tservObj("selected", nil, "revision", float64(1))),
 			"select", func(_ Context) error { return nil },
 		)); err != nil {
 			t.Fatalf("Provide failed: %v", err)
@@ -714,8 +714,8 @@ func TestRemoteServices(t *testing.T) {
 		})
 		_ = failing.Activate()
 		_ = succeeding.Activate()
-		err := provider.Replace(modelsSvc, tsvcObj(
-			"state", tsvcMustState(t, tsvcObj("selected", nil, "revision", float64(2))),
+		err := provider.Replace(modelsSvc, tservObj(
+			"state", tservMustState(t, tservObj("selected", nil, "revision", float64(2))),
 			"select", func(_ Context) error { return nil },
 		))
 		if !errors.Is(err, failure) || delivered != 1 {
@@ -727,9 +727,9 @@ func TestRemoteServices(t *testing.T) {
 	})
 
 	t.Run("does not replay a queued revision already covered by a new subscription snapshot", func(t *testing.T) {
-		provider := tsvcMustProvider(t, tsvcEntry(modelsSvc))
-		state := tsvcMustState(t, tsvcObj("selected", nil, "revision", float64(0)))
-		if err := provider.Provide(modelsSvc, tsvcObj("state", state, "select", func(_ Context) error { return nil })); err != nil {
+		provider := tservMustProvider(t, tservEntry(modelsSvc))
+		state := tservMustState(t, tservObj("selected", nil, "revision", float64(0)))
+		if err := provider.Provide(modelsSvc, tservObj("state", state, "select", func(_ Context) error { return nil })); err != nil {
 			t.Fatalf("Provide failed: %v", err)
 		}
 		var lateUpdates []int
@@ -774,9 +774,9 @@ func TestRemoteServices(t *testing.T) {
 
 	t.Run("replays every buffered update before reporting listener failures", func(t *testing.T) {
 		failure := errors.New("listener failed")
-		provider := tsvcMustProvider(t, tsvcEntry(modelsSvc))
-		state := tsvcMustState(t, tsvcObj("selected", nil, "revision", float64(0)))
-		if err := provider.Provide(modelsSvc, tsvcObj("state", state, "select", func(_ Context) error { return nil })); err != nil {
+		provider := tservMustProvider(t, tservEntry(modelsSvc))
+		state := tservMustState(t, tservObj("selected", nil, "revision", float64(0)))
+		if err := provider.Provide(modelsSvc, tservObj("state", state, "select", func(_ Context) error { return nil })); err != nil {
 			t.Fatalf("Provide failed: %v", err)
 		}
 		delivered := 0
@@ -800,9 +800,9 @@ func TestRemoteServices(t *testing.T) {
 	})
 
 	t.Run("clears retained facades when providers and bindings are disposed", func(t *testing.T) {
-		provider := tsvcMustProvider(t, tsvcEntry(modelsSvc))
-		_ = provider.Provide(modelsSvc, tsvcObj(
-			"state", tsvcMustState(t, tsvcObj("selected", nil, "revision", float64(1))),
+		provider := tservMustProvider(t, tservEntry(modelsSvc))
+		_ = provider.Provide(modelsSvc, tservObj(
+			"state", tservMustState(t, tservObj("selected", nil, "revision", float64(1))),
 			"select", func(_ Context) error { return nil },
 		))
 		namespace, err := CreateRemoteServiceBinding(&RemoteServiceBindingOptions{
@@ -813,40 +813,40 @@ func TestRemoteServices(t *testing.T) {
 			t.Fatalf("CreateRemoteServiceBinding failed: %v", err)
 		}
 		models := namespace.Use(modelsSvc)
-		stateMember := tsvcMemberGet(t, models, "state")
+		stateMember := tservMemberGet(t, models, "state")
 		_ = namespace.Ready(BackgroundContext)
-		v, ok, _ := tsvcStateVal(t, stateMember)
-		if !ok || tsvcGet(v, "revision") != float64(1) {
+		v, ok, _ := tservStateVal(t, stateMember)
+		if !ok || tservGet(v, "revision") != float64(1) {
 			t.Fatalf("expected revision 1")
 		}
 		_ = provider.Dispose()
-		if _, ok, err := tsvcStateVal(t, stateMember); err != nil || ok {
+		if _, ok, err := tservStateVal(t, stateMember); err != nil || ok {
 			t.Fatalf("expected state cleared after provider dispose, ok=%v err=%v", ok, err)
 		}
-		if _, err := tsvcCall(models, "select", tsvcObj("provider", "test", "modelId", "one"), BackgroundContext); err == nil || !strings.Contains(err.Error(), "Remote service provider is disposed") {
+		if _, err := tservCall(models, "select", tservObj("provider", "test", "modelId", "one"), BackgroundContext); err == nil || !strings.Contains(err.Error(), "Remote service provider is disposed") {
 			t.Fatalf("expected provider disposed error, got %v", err)
 		}
 		_ = namespace.Dispose(BackgroundContext)
-		if _, _, err := tsvcStateVal(t, stateMember); err == nil || !strings.Contains(err.Error(), "Remote service binding is disposed") {
+		if _, _, err := tservStateVal(t, stateMember); err == nil || !strings.Contains(err.Error(), "Remote service binding is disposed") {
 			t.Fatalf("expected binding disposed error, got %v", err)
 		}
 	})
 
 	t.Run("applies provider disposal buffered while subscriptions are starting", func(t *testing.T) {
-		provider := tsvcMustProvider(t, tsvcEntry(modelsSvc), tsvcEntry(questionDialogsSvc, ServiceModeKeyed))
-		_ = provider.Provide(modelsSvc, tsvcObj(
-			"state", tsvcMustState(t, tsvcObj("selected", nil, "revision", float64(1))),
+		provider := tservMustProvider(t, tservEntry(modelsSvc), tservEntry(questionDialogsSvc, ServiceModeKeyed))
+		_ = provider.Provide(modelsSvc, tservObj(
+			"state", tservMustState(t, tservObj("selected", nil, "revision", float64(1))),
 			"select", func(_ Context) error { return nil },
 		))
-		_, _ = provider.Spawn(questionDialogsSvc, "pending", tsvcObj(
-			"request", tsvcMustState(t, tsvcObj("question", "Pending?")),
-			"submit", func(_ string, _ Context) (*jsonx.Object, error) { return tsvcObj("accepted", true), nil },
+		_, _ = provider.Spawn(questionDialogsSvc, "pending", tservObj(
+			"request", tservMustState(t, tservObj("question", "Pending?")),
+			"submit", func(_ string, _ Context) (*jsonx.Object, error) { return tservObj("accepted", true), nil },
 		))
 
 		subscribedCount := atomic.Int32{}
 		bothSubscribed := make(chan struct{})
 		release := make(chan struct{})
-		transport := &tsvcFuncTransport{
+		transport := &tservFuncTransport{
 			invoke: provider.Invoke,
 			subscribe: func(serviceId string, mode ServiceMode, listener func(ServiceProviderUpdate, Context), callContext Context) (ServiceSubscription, error) {
 				sub, err := provider.Subscribe(serviceId, mode, func(u ServiceProviderUpdate, c Context) error {
@@ -885,7 +885,7 @@ func TestRemoteServices(t *testing.T) {
 		if err := namespace.Ready(BackgroundContext); err != nil {
 			t.Fatalf("Ready failed: %v", err)
 		}
-		if _, ok, err := tsvcStateVal(t, tsvcMemberGet(t, models, "state")); err != nil || ok {
+		if _, ok, err := tservStateVal(t, tservMemberGet(t, models, "state")); err != nil || ok {
 			t.Fatalf("expected models state cleared, ok=%v err=%v", ok, err)
 		}
 		obsMu.Lock()
@@ -897,9 +897,9 @@ func TestRemoteServices(t *testing.T) {
 	})
 
 	t.Run("keeps deferred service handles inaccessible until host activation", func(t *testing.T) {
-		provider := tsvcMustProvider(t, tsvcEntry(modelsSvc))
-		_ = provider.Provide(modelsSvc, tsvcObj(
-			"state", tsvcMustState(t, tsvcObj("selected", nil, "revision", float64(0))),
+		provider := tservMustProvider(t, tservEntry(modelsSvc))
+		_ = provider.Provide(modelsSvc, tservObj(
+			"state", tservMustState(t, tservObj("selected", nil, "revision", float64(0))),
 			"select", func(_ Context) error { return nil },
 		))
 		var active atomic.Bool
@@ -915,15 +915,15 @@ func TestRemoteServices(t *testing.T) {
 			},
 		})
 		models := namespace.Use(modelsSvc)
-		stateMember := tsvcMemberGet(t, models, "state")
+		stateMember := tservMemberGet(t, models, "state")
 
-		if _, _, err := tsvcStateVal(t, stateMember); err == nil || !strings.Contains(err.Error(), "Service handles are not active") {
+		if _, _, err := tservStateVal(t, stateMember); err == nil || !strings.Contains(err.Error(), "Service handles are not active") {
 			t.Fatalf("expected access guard on value, got %v", err)
 		}
-		if _, err := tsvcStateSubscribe(t, stateMember, func(JsonValue, Context, ReplicatedStateDelivery) error { return nil }); err == nil || !strings.Contains(err.Error(), "Service handles are not active") {
+		if _, err := tservStateSubscribe(t, stateMember, func(JsonValue, Context, ReplicatedStateDelivery) error { return nil }); err == nil || !strings.Contains(err.Error(), "Service handles are not active") {
 			t.Fatalf("expected access guard on subscribe, got %v", err)
 		}
-		if _, err := tsvcCall(models, "select", tsvcObj("provider", "test", "modelId", "one"), BackgroundContext); err == nil || !strings.Contains(err.Error(), "Service handles are not active") {
+		if _, err := tservCall(models, "select", tservObj("provider", "test", "modelId", "one"), BackgroundContext); err == nil || !strings.Contains(err.Error(), "Service handles are not active") {
 			t.Fatalf("expected access guard on method, got %v", err)
 		}
 
@@ -934,8 +934,8 @@ func TestRemoteServices(t *testing.T) {
 		if err := namespace.Ready(BackgroundContext); err != nil {
 			t.Fatalf("Ready failed: %v", err)
 		}
-		v, ok, err := tsvcStateVal(t, stateMember)
-		if err != nil || !ok || tsvcGet(v, "revision") != float64(0) {
+		v, ok, err := tservStateVal(t, stateMember)
+		if err != nil || !ok || tservGet(v, "revision") != float64(0) {
 			t.Fatalf("expected revision 0, got %v %v %v", v, ok, err)
 		}
 		_ = namespace.Dispose(BackgroundContext)
@@ -948,7 +948,7 @@ func TestRemoteServices(t *testing.T) {
 		var errs []error
 		namespace, _ := CreateRemoteServiceBinding(&RemoteServiceBindingOptions{
 			Services: []ServiceRef{{Id: modelsSvc.Id}},
-			Transport: &tsvcFuncTransport{
+			Transport: &tservFuncTransport{
 				invoke: func(ServiceCall, Context) (JsonValue, bool, error) {
 					return nil, false, errors.New("unexpected invocation")
 				},
@@ -966,10 +966,10 @@ func TestRemoteServices(t *testing.T) {
 		if err := namespace.Ready(BackgroundContext); !errors.Is(err, failure) {
 			t.Fatalf("expected hydration failure, got %v", err)
 		}
-		if _, ok, _ := tsvcStateVal(t, tsvcMemberGet(t, models, "state")); ok {
+		if _, ok, _ := tservStateVal(t, tservMemberGet(t, models, "state")); ok {
 			t.Fatal("expected unhydrated state")
 		}
-		tsvcWaitFor(t, "reported hydration failure", func() bool {
+		tservWaitFor(t, "reported hydration failure", func() bool {
 			errsMu.Lock()
 			defer errsMu.Unlock()
 			return len(errs) == 1 && errors.Is(errs[0], failure)
@@ -978,10 +978,10 @@ func TestRemoteServices(t *testing.T) {
 	})
 
 	t.Run("buffers state updates that race subscription hydration", func(t *testing.T) {
-		provider := tsvcMustProvider(t, tsvcEntry(modelsSvc))
-		state := tsvcMustState(t, tsvcObj("selected", nil, "revision", float64(0)))
-		_ = provider.Provide(modelsSvc, tsvcObj("state", state, "select", func(_ Context) error { return nil }))
-		transport := &tsvcFuncTransport{
+		provider := tservMustProvider(t, tservEntry(modelsSvc))
+		state := tservMustState(t, tservObj("selected", nil, "revision", float64(0)))
+		_ = provider.Provide(modelsSvc, tservObj("state", state, "select", func(_ Context) error { return nil }))
+		transport := &tservFuncTransport{
 			invoke: provider.Invoke,
 			subscribe: func(serviceId string, mode ServiceMode, listener func(ServiceProviderUpdate, Context), _ Context) (ServiceSubscription, error) {
 				sub, err := provider.Subscribe(serviceId, mode, func(u ServiceProviderUpdate, c Context) error {
@@ -1007,22 +1007,22 @@ func TestRemoteServices(t *testing.T) {
 		models := namespace.Use(modelsSvc)
 		var revMu sync.Mutex
 		var revisions []float64
-		_, err := tsvcStateSubscribe(t, tsvcMemberGet(t, models, "state"), func(v JsonValue, _ Context, _ ReplicatedStateDelivery) error {
+		_, err := tservStateSubscribe(t, tservMemberGet(t, models, "state"), func(v JsonValue, _ Context, _ ReplicatedStateDelivery) error {
 			revMu.Lock()
-			revisions = append(revisions, tsvcGet(v, "revision").(float64))
+			revisions = append(revisions, tservGet(v, "revision").(float64))
 			revMu.Unlock()
 			return nil
 		})
 		if err != nil {
 			t.Fatalf("Subscribe failed: %v", err)
 		}
-		tsvcWaitFor(t, "revisions [0, 1]", func() bool {
+		tservWaitFor(t, "revisions [0, 1]", func() bool {
 			revMu.Lock()
 			defer revMu.Unlock()
 			return len(revisions) == 2 && revisions[0] == 0 && revisions[1] == 1
 		})
-		v, ok, _ := tsvcStateVal(t, tsvcMemberGet(t, models, "state"))
-		if !ok || tsvcGet(v, "revision") != float64(1) {
+		v, ok, _ := tservStateVal(t, tservMemberGet(t, models, "state"))
+		if !ok || tservGet(v, "revision") != float64(1) {
 			t.Fatalf("expected revision 1")
 		}
 		_ = namespace.Dispose(BackgroundContext)
@@ -1042,7 +1042,7 @@ func TestRemoteServices(t *testing.T) {
 			var errs []error
 			namespace, _ := CreateRemoteServiceBinding(&RemoteServiceBindingOptions{
 				Services: []ServiceRef{{Id: modelsSvc.Id}},
-				Transport: &tsvcFuncTransport{
+				Transport: &tservFuncTransport{
 					invoke: func(ServiceCall, Context) (JsonValue, bool, error) {
 						return nil, false, errors.New("unexpected invocation")
 					},
@@ -1050,14 +1050,14 @@ func TestRemoteServices(t *testing.T) {
 						sendUpdate = func(u ServiceProviderUpdate) {
 							listener(u, BackgroundContext)
 						}
-						return &tsvcSubscriptionFuncs{
+						return &tservSubscriptionFuncs{
 							snapshot: ServiceSubscriptionSnapshot{
 								ServiceId: modelsSvc.Id,
 								Mode:      ServiceModeSingleton,
 								Instances: []ServiceInstanceSnapshot{{
 									Members: ServiceMemberSnapshotList{
 										ServiceMemberSnapshotMethod{Name: "select", Kind: "method"},
-										ServiceMemberSnapshotState{Name: "state", Kind: "state", Sequence: 0, Ops: OpList{OpReplace{Value: tsvcObj("selected", nil, "revision", float64(0))}}},
+										ServiceMemberSnapshotState{Name: "state", Kind: "state", Sequence: 0, Ops: OpList{OpReplace{Value: tservObj("selected", nil, "revision", float64(0))}}},
 									},
 								}},
 							},
@@ -1080,9 +1080,9 @@ func TestRemoteServices(t *testing.T) {
 				Type:     "state",
 				Member:   "state",
 				Sequence: tc.seq,
-				Ops:      OpList{OpReplace{Value: tsvcObj("selected", nil, "revision", float64(tc.seq))}},
+				Ops:      OpList{OpReplace{Value: tservObj("selected", nil, "revision", float64(tc.seq))}},
 			})
-			if _, ok, _ := tsvcStateVal(t, tsvcMemberGet(t, models, "state")); ok {
+			if _, ok, _ := tservStateVal(t, tservMemberGet(t, models, "state")); ok {
 				t.Fatal("expected state cleared")
 			}
 			errsMu.Lock()
@@ -1095,9 +1095,9 @@ func TestRemoteServices(t *testing.T) {
 	}
 
 	t.Run("hydrates cold ReplicatedState replicas and replaces them across rebinds", func(t *testing.T) {
-		provider := tsvcMustProvider(t, tsvcEntry(modelsSvc))
-		state := tsvcMustState(t, tsvcObj("selected", nil, "revision", float64(0)))
-		_ = provider.Provide(modelsSvc, tsvcObj("state", state, "select", func(_ Context) error { return nil }))
+		provider := tservMustProvider(t, tservEntry(modelsSvc))
+		state := tservMustState(t, tservObj("selected", nil, "revision", float64(0)))
+		_ = provider.Provide(modelsSvc, tservObj("state", state, "select", func(_ Context) error { return nil }))
 		boundFalse := false
 		namespace, _ := CreateRemoteServiceBinding(&RemoteServiceBindingOptions{
 			Services:  []ServiceRef{{Id: modelsSvc.Id}},
@@ -1105,16 +1105,16 @@ func TestRemoteServices(t *testing.T) {
 			Bound:     &boundFalse,
 		})
 		models := namespace.Use(modelsSvc)
-		stateMember := tsvcMemberGet(t, models, "state")
+		stateMember := tservMemberGet(t, models, "state")
 		var revMu sync.Mutex
 		var revisions []float64
-		_, _ = tsvcStateSubscribe(t, stateMember, func(v JsonValue, _ Context, _ ReplicatedStateDelivery) error {
+		_, _ = tservStateSubscribe(t, stateMember, func(v JsonValue, _ Context, _ ReplicatedStateDelivery) error {
 			revMu.Lock()
-			revisions = append(revisions, tsvcGet(v, "revision").(float64))
+			revisions = append(revisions, tservGet(v, "revision").(float64))
 			revMu.Unlock()
 			return nil
 		})
-		if _, ok, _ := tsvcStateVal(t, stateMember); ok {
+		if _, ok, _ := tservStateVal(t, stateMember); ok {
 			t.Fatal("expected cold replica unhydrated")
 		}
 		_ = state.Change(BackgroundContext, func(draft Draft[*jsonx.Object]) error {
@@ -1131,7 +1131,7 @@ func TestRemoteServices(t *testing.T) {
 		if err := namespace.Rebind(false, BackgroundContext); err != nil {
 			t.Fatalf("Rebind(false) failed: %v", err)
 		}
-		if _, ok, _ := tsvcStateVal(t, stateMember); ok {
+		if _, ok, _ := tservStateVal(t, stateMember); ok {
 			t.Fatal("expected cleared after Rebind(false)")
 		}
 		_ = state.Change(BackgroundContext, func(draft Draft[*jsonx.Object]) error {
@@ -1151,7 +1151,7 @@ func TestRemoteServices(t *testing.T) {
 	})
 
 	t.Run("hydrates keyed state before observe handlers and fences reused keys", func(t *testing.T) {
-		provider := tsvcMustProvider(t, tsvcEntry(questionDialogsSvc, ServiceModeKeyed))
+		provider := tservMustProvider(t, tservEntry(questionDialogsSvc, ServiceModeKeyed))
 		var errsMu sync.Mutex
 		var errs []error
 		namespace, _ := CreateRemoteServiceBinding(&RemoteServiceBindingOptions{
@@ -1171,13 +1171,13 @@ func TestRemoteServices(t *testing.T) {
 		var obsMu sync.Mutex
 		var observed []obsEntry
 		stop := namespace.Observe(questionDialogsSvc, func(service any, call Context) error {
-			reqVal, _, err := tsvcStateVal(t, tsvcMemberGet(t, service, "request"))
+			reqVal, _, err := tservStateVal(t, tservMemberGet(t, service, "request"))
 			if err != nil {
 				return err
 			}
 			obsMu.Lock()
 			observed = append(observed, obsEntry{
-				question: tsvcGet(reqVal, "question").(string),
+				question: tservGet(reqVal, "question").(string),
 				service:  service,
 				ctx:      call,
 			})
@@ -1185,16 +1185,16 @@ func TestRemoteServices(t *testing.T) {
 			return nil
 		})
 
-		firstRequest := tsvcMustState(t, tsvcObj("question", "First?"))
+		firstRequest := tservMustState(t, tservObj("question", "First?"))
 		var submitted []string
-		closeFirst, _ := provider.Spawn(questionDialogsSvc, "invocation-1", tsvcObj(
+		closeFirst, _ := provider.Spawn(questionDialogsSvc, "invocation-1", tservObj(
 			"request", firstRequest,
 			"submit", func(answer string, call Context) (*jsonx.Object, error) {
 				submitted = append(submitted, answer)
-				return tsvcObj("accepted", true), nil
+				return tservObj("accepted", true), nil
 			},
 		))
-		tsvcWaitFor(t, "first observed", func() bool {
+		tservWaitFor(t, "first observed", func() bool {
 			obsMu.Lock()
 			defer obsMu.Unlock()
 			return len(observed) == 1
@@ -1209,16 +1209,16 @@ func TestRemoteServices(t *testing.T) {
 			draft.Value.Set("question", "Updated?")
 			return nil
 		})
-		reqVal, _, _ := tsvcStateVal(t, tsvcMemberGet(t, firstEntry.service, "request"))
-		if tsvcGet(reqVal, "question") != "Updated?" {
+		reqVal, _, _ := tservStateVal(t, tservMemberGet(t, firstEntry.service, "request"))
+		if tservGet(reqVal, "question") != "Updated?" {
 			t.Fatalf("expected Updated?")
 		}
-		ans, err := tsvcCall(firstEntry.service, "submit", "yes", BackgroundContext)
-		if err != nil || tsvcMustJson(t, ans) != `{"accepted":true}` {
+		ans, err := tservCall(firstEntry.service, "submit", "yes", BackgroundContext)
+		if err != nil || tservMustJson(t, ans) != `{"accepted":true}` {
 			t.Fatalf("submit failed: ans=%v err=%v", ans, err)
 		}
-		retainedRequest := tsvcMemberGet(t, firstEntry.service, "request")
-		retainedSubmit := tsvcMemberGet(t, firstEntry.service, "submit")
+		retainedRequest := tservMemberGet(t, firstEntry.service, "request")
+		retainedSubmit := tservMemberGet(t, firstEntry.service, "submit")
 		_ = closeFirst()
 		if firstEntry.ctx.AbortSignal() == nil || firstEntry.ctx.AbortSignal().Err() == nil {
 			t.Fatal("expected first context aborted")
@@ -1226,21 +1226,21 @@ func TestRemoteServices(t *testing.T) {
 		if _, err := firstEntry.service.(*shServiceView).Get("request"); err == nil || !strings.Contains(err.Error(), "observation is closed") {
 			t.Fatalf("expected observation closed on first service view, got %v", err)
 		}
-		if _, _, err := tsvcStateVal(t, retainedRequest); err == nil || !strings.Contains(err.Error(), "observation is closed") {
+		if _, _, err := tservStateVal(t, retainedRequest); err == nil || !strings.Contains(err.Error(), "observation is closed") {
 			t.Fatalf("expected observation closed on request, got %v", err)
 		}
-		if _, err := tsvcCall(retainedSubmit, "", "late", BackgroundContext); err == nil || !strings.Contains(err.Error(), "observation is closed") {
+		if _, err := tservCall(retainedSubmit, "", "late", BackgroundContext); err == nil || !strings.Contains(err.Error(), "observation is closed") {
 			t.Fatalf("expected observation closed on retained submit, got %v", err)
 		}
 
-		secondRequest := tsvcMustState(t, tsvcObj("question", "Again?"))
-		closeSecond, _ := provider.Spawn(questionDialogsSvc, "invocation-1", tsvcObj(
+		secondRequest := tservMustState(t, tservObj("question", "Again?"))
+		closeSecond, _ := provider.Spawn(questionDialogsSvc, "invocation-1", tservObj(
 			"request", secondRequest,
 			"submit", func(_ string, _ Context) (*jsonx.Object, error) {
-				return tsvcObj("accepted", false), nil
+				return tservObj("accepted", false), nil
 			},
 		))
-		tsvcWaitFor(t, "second observed", func() bool {
+		tservWaitFor(t, "second observed", func() bool {
 			obsMu.Lock()
 			defer obsMu.Unlock()
 			return len(observed) == 2
@@ -1251,8 +1251,8 @@ func TestRemoteServices(t *testing.T) {
 		if secondEntry.question != "Again?" || secondEntry.service == firstEntry.service {
 			t.Fatalf("unexpected second entry: %+v", secondEntry)
 		}
-		retainedSecondRequest := tsvcMemberGet(t, secondEntry.service, "request")
-		retainedSecondSubmit := tsvcMemberGet(t, secondEntry.service, "submit")
+		retainedSecondRequest := tservMemberGet(t, secondEntry.service, "request")
+		retainedSecondSubmit := tservMemberGet(t, secondEntry.service, "submit")
 		stop()
 		if secondEntry.ctx.AbortSignal() == nil || secondEntry.ctx.AbortSignal().Err() == nil {
 			t.Fatal("expected second context aborted after stop")
@@ -1260,10 +1260,10 @@ func TestRemoteServices(t *testing.T) {
 		if _, err := secondEntry.service.(*shServiceView).Get("request"); err == nil || !strings.Contains(err.Error(), "observation is closed") {
 			t.Fatalf("expected observation closed on second service view, got %v", err)
 		}
-		if _, _, err := tsvcStateVal(t, retainedSecondRequest); err == nil || !strings.Contains(err.Error(), "observation is closed") {
+		if _, _, err := tservStateVal(t, retainedSecondRequest); err == nil || !strings.Contains(err.Error(), "observation is closed") {
 			t.Fatalf("expected observation closed on second request, got %v", err)
 		}
-		if _, err := tsvcCall(retainedSecondSubmit, "", "late", BackgroundContext); err == nil || !strings.Contains(err.Error(), "observation is closed") {
+		if _, err := tservCall(retainedSecondSubmit, "", "late", BackgroundContext); err == nil || !strings.Contains(err.Error(), "observation is closed") {
 			t.Fatalf("expected observation closed on second submit, got %v", err)
 		}
 		_ = closeSecond()
@@ -1278,17 +1278,17 @@ func TestRemoteServices(t *testing.T) {
 	})
 
 	t.Run("rejects mode mixing and unsupported members", func(t *testing.T) {
-		provider := tsvcMustProvider(t, tsvcEntry(modelsSvc), tsvcEntry(questionDialogsSvc, ServiceModeKeyed))
-		_ = provider.Provide(modelsSvc, tsvcObj(
-			"state", tsvcMustState(t, tsvcObj("selected", nil, "revision", float64(0))),
+		provider := tservMustProvider(t, tservEntry(modelsSvc), tservEntry(questionDialogsSvc, ServiceModeKeyed))
+		_ = provider.Provide(modelsSvc, tservObj(
+			"state", tservMustState(t, tservObj("selected", nil, "revision", float64(0))),
 			"select", func(_ Context) error { return nil },
 		))
-		if _, err := provider.Spawn(modelsSvc, "wrong", tsvcObj()); err == nil || !strings.Contains(err.Error(), "singleton") {
+		if _, err := provider.Spawn(modelsSvc, "wrong", tservObj()); err == nil || !strings.Contains(err.Error(), "singleton") {
 			t.Fatalf("expected singleton mismatch error, got %v", err)
 		}
-		if _, err := provider.Spawn(questionDialogsSvc, "invalid", tsvcObj(
+		if _, err := provider.Spawn(questionDialogsSvc, "invalid", tservObj(
 			"request", time.Now(),
-			"submit", func(_ Context) (*jsonx.Object, error) { return tsvcObj("accepted", true), nil },
+			"submit", func(_ Context) (*jsonx.Object, error) { return tservObj("accepted", true), nil },
 		)); err == nil || !strings.Contains(err.Error(), "not remotely exposable") {
 			t.Fatalf("expected not remotely exposable error, got %v", err)
 		}
@@ -1296,27 +1296,27 @@ func TestRemoteServices(t *testing.T) {
 	})
 }
 
-type tsvcSource[T any] struct {
+type tservSource[T any] struct {
 	attachFn func() ReplicatedStateSourceAttachment[T]
 }
 
-func (s *tsvcSource[T]) Attach() ReplicatedStateSourceAttachment[T] {
+func (s *tservSource[T]) Attach() ReplicatedStateSourceAttachment[T] {
 	return s.attachFn()
 }
 
-type tsvcAttachment[T any] struct {
+type tservAttachment[T any] struct {
 	snap     ReplicatedStateSourceSnapshot[T]
 	activate func(func(ReplicatedStateSourceFrame[T]))
 	dispose  func()
 }
 
-func (a *tsvcAttachment[T]) Snapshot() ReplicatedStateSourceSnapshot[T] { return a.snap }
-func (a *tsvcAttachment[T]) Activate(l func(ReplicatedStateSourceFrame[T])) {
+func (a *tservAttachment[T]) Snapshot() ReplicatedStateSourceSnapshot[T] { return a.snap }
+func (a *tservAttachment[T]) Activate(l func(ReplicatedStateSourceFrame[T])) {
 	if a.activate != nil {
 		a.activate(l)
 	}
 }
-func (a *tsvcAttachment[T]) Dispose() {
+func (a *tservAttachment[T]) Dispose() {
 	if a.dispose != nil {
 		a.dispose()
 	}

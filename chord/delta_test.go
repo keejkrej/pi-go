@@ -10,11 +10,11 @@ import (
 	"github.com/keejkrej/pi-go/internal/jsonx"
 )
 
-func tdelObj(kv ...any) *jsonx.Object {
+func tdeltaObj(kv ...any) *jsonx.Object {
 	return jsonx.ObjectOf(kv...)
 }
 
-func tdelMustJson(v any) string {
+func tdeltaMustJson(v any) string {
 	b, err := jsonx.Marshal(v)
 	if err != nil {
 		panic(err)
@@ -22,7 +22,7 @@ func tdelMustJson(v any) string {
 	return string(b)
 }
 
-func tdelCloneJson(v any) any {
+func tdeltaCloneJson(v any) any {
 	c, err := CopyJson(v, nil)
 	if err != nil {
 		panic(err)
@@ -32,9 +32,9 @@ func tdelCloneJson(v any) any {
 
 func TestDeltaTrackerLifecycle(t *testing.T) {
 	t.Run("adopts an immutable next revision by pointer swap", func(t *testing.T) {
-		input := tdelObj(
+		input := tdeltaObj(
 			"count", float64(1),
-			"nested", tdelObj("text", "a"),
+			"nested", tdeltaObj("text", "a"),
 			"values", []any{float64(1)},
 		)
 		tracker := Track(input)
@@ -55,7 +55,7 @@ func TestDeltaTrackerLifecycle(t *testing.T) {
 		vals, _ := draft.Value.Get("values")
 		draft.Value.Set("values", append(vals.([]any), float64(2)))
 
-		if tdelMustJson(tracker.Value()) != tdelMustJson(input) {
+		if tdeltaMustJson(tracker.Value()) != tdeltaMustJson(input) {
 			t.Fatalf("input mutated unexpectedly")
 		}
 
@@ -67,11 +67,11 @@ func TestDeltaTrackerLifecycle(t *testing.T) {
 			t.Fatalf("expected prepared.Base() == input")
 		}
 		wantNext := `{"count":2,"nested":{"text":"ab"},"values":[1,2]}`
-		if got := tdelMustJson(prepared.Value()); got != wantNext {
+		if got := tdeltaMustJson(prepared.Value()); got != wantNext {
 			t.Fatalf("prepared.Value mismatch: got %s, want %s", got, wantNext)
 		}
 		wantOps := `[["s",["count"],2],["a",["nested","text"],"b"],["p",["values"],1,0,[2]]]`
-		if got := tdelMustJson(OpList(prepared.Ops())); got != wantOps {
+		if got := tdeltaMustJson(OpList(prepared.Ops())); got != wantOps {
 			t.Fatalf("prepared.Ops mismatch: got %s, want %s", got, wantOps)
 		}
 		if _, err := change.State(); err == nil {
@@ -89,7 +89,7 @@ func TestDeltaTrackerLifecycle(t *testing.T) {
 	})
 
 	t.Run("aborts and revokes without changing the committed value", func(t *testing.T) {
-		tracker := Track(tdelObj("child", tdelObj("value", float64(1))))
+		tracker := Track(tdeltaObj("child", tdeltaObj("value", float64(1))))
 		change := tracker.BeginChange()
 		draft, err := change.State()
 		if err != nil {
@@ -115,7 +115,7 @@ func TestDeltaTrackerLifecycle(t *testing.T) {
 	})
 
 	t.Run("grows arrays with explicit nulls and revokes drafts after preparation", func(t *testing.T) {
-		tracker := Track(tdelObj("values", []any{float64(1), float64(2)}))
+		tracker := Track(tdeltaObj("values", []any{float64(1), float64(2)}))
 		change := tracker.BeginChange()
 		draft, err := change.State()
 		if err != nil {
@@ -127,7 +127,7 @@ func TestDeltaTrackerLifecycle(t *testing.T) {
 			t.Fatalf("Prepare failed: %v", err)
 		}
 		vals, _ := prepared.Value().Get("values")
-		if got := tdelMustJson(vals); got != `[1,2,null,null]` {
+		if got := tdeltaMustJson(vals); got != `[1,2,null,null]` {
 			t.Fatalf("got %s", got)
 		}
 		if _, err := change.State(); err == nil {
@@ -139,10 +139,10 @@ func TestDeltaTrackerLifecycle(t *testing.T) {
 	})
 
 	t.Run("normalizes a deep no-op to exact previous identity", func(t *testing.T) {
-		tracker := Track(tdelObj("value", tdelObj("nested", []any{float64(1), float64(2)})))
+		tracker := Track(tdeltaObj("value", tdeltaObj("nested", []any{float64(1), float64(2)})))
 		change := tracker.BeginChange()
 		draft, _ := change.State()
-		draft.Value.Set("value", tdelObj("nested", []any{float64(1), float64(2)}))
+		draft.Value.Set("value", tdeltaObj("nested", []any{float64(1), float64(2)}))
 		prepared, err := change.Prepare()
 		if err != nil {
 			t.Fatalf("Prepare failed: %v", err)
@@ -162,8 +162,8 @@ func TestDeltaTrackerLifecycle(t *testing.T) {
 	})
 
 	t.Run("takes immutable ownership of replacement input and applies no-op normalization", func(t *testing.T) {
-		tracker := Track(tdelObj("nested", tdelObj("value", float64(1))))
-		replacement := tdelObj("nested", tdelObj("value", float64(2)))
+		tracker := Track(tdeltaObj("nested", tdeltaObj("value", float64(1))))
+		replacement := tdeltaObj("nested", tdeltaObj("value", float64(2)))
 		prepared, err := tracker.PrepareReplace(replacement)
 		if err != nil {
 			t.Fatalf("PrepareReplace failed: %v", err)
@@ -178,7 +178,7 @@ func TestDeltaTrackerLifecycle(t *testing.T) {
 			t.Fatalf("Adopt failed: %v", err)
 		}
 
-		noOp, err := tracker.PrepareReplace(tdelObj("nested", tdelObj("value", float64(2))))
+		noOp, err := tracker.PrepareReplace(tdeltaObj("nested", tdeltaObj("value", float64(2))))
 		if err != nil {
 			t.Fatalf("PrepareReplace noOp failed: %v", err)
 		}
@@ -191,10 +191,10 @@ func TestDeltaTrackerLifecycle(t *testing.T) {
 	})
 
 	t.Run("shares immutable operation placements with the prepared candidate", func(t *testing.T) {
-		tracker := Track(tdelObj("rows", []any{}))
+		tracker := Track(tdeltaObj("rows", []any{}))
 		change := tracker.BeginChange()
 		draft, _ := change.State()
-		draft.Value.Set("rows", []any{tdelObj("id", float64(1))})
+		draft.Value.Set("rows", []any{tdeltaObj("id", float64(1))})
 		prepared, err := change.Prepare()
 		if err != nil {
 			t.Fatalf("Prepare failed: %v", err)
@@ -214,8 +214,8 @@ func TestDeltaTrackerLifecycle(t *testing.T) {
 	})
 
 	t.Run("rejects foreign, stale, and repeated preparations while allowing competing changes", func(t *testing.T) {
-		first := Track(tdelObj("value", float64(0)))
-		second := Track(tdelObj("value", float64(0)))
+		first := Track(tdeltaObj("value", float64(0)))
+		second := Track(tdeltaObj("value", float64(0)))
 		change := first.BeginChange()
 		competing := first.BeginChange()
 		d1, _ := change.State()
@@ -238,8 +238,8 @@ func TestDeltaTrackerLifecycle(t *testing.T) {
 			t.Fatalf("expected stale error, got %v", err)
 		}
 
-		stale, _ := first.PrepareReplace(tdelObj("value", float64(2)))
-		winner, _ := first.PrepareReplace(tdelObj("value", float64(3)))
+		stale, _ := first.PrepareReplace(tdeltaObj("value", float64(2)))
+		winner, _ := first.PrepareReplace(tdeltaObj("value", float64(3)))
 		if err := first.Adopt(winner); err != nil {
 			t.Fatalf("Adopt winner failed: %v", err)
 		}
@@ -252,7 +252,7 @@ func TestDeltaTrackerLifecycle(t *testing.T) {
 	})
 
 	t.Run("invalidates a prepared result when its change is aborted", func(t *testing.T) {
-		tracker := Track(tdelObj("value", float64(0)))
+		tracker := Track(tdeltaObj("value", float64(0)))
 		change := tracker.BeginChange()
 		d, _ := change.State()
 		d.Value.Set("value", float64(1))
@@ -265,9 +265,9 @@ func TestDeltaTrackerLifecycle(t *testing.T) {
 	})
 
 	t.Run("makes competing same-base preparations stale after adopting a no-op", func(t *testing.T) {
-		tracker := Track(tdelObj("value", tdelObj("count", float64(1))))
-		first, _ := tracker.PrepareReplace(tdelObj("value", tdelObj("count", float64(1))))
-		competing, _ := tracker.PrepareReplace(tdelObj("value", tdelObj("count", float64(1))))
+		tracker := Track(tdeltaObj("value", tdeltaObj("count", float64(1))))
+		first, _ := tracker.PrepareReplace(tdeltaObj("value", tdeltaObj("count", float64(1))))
+		competing, _ := tracker.PrepareReplace(tdeltaObj("value", tdeltaObj("count", float64(1))))
 		if first.Value() != first.Base() || competing.Value() != competing.Base() {
 			t.Fatalf("expected base identity on no-op")
 		}
@@ -285,14 +285,14 @@ func TestDeltaTrackerLifecycle(t *testing.T) {
 	t.Run("emits an owned root replacement without traversing large replacement input", func(t *testing.T) {
 		rows := make([]any, 10000)
 		for i := range rows {
-			rows[i] = tdelObj("value", float64(i), "stable", tdelObj("value", float64(i)))
+			rows[i] = tdeltaObj("value", float64(i), "stable", tdeltaObj("value", float64(i)))
 		}
-		tracker := Track(tdelObj("rows", rows))
+		tracker := Track(tdeltaObj("rows", rows))
 		replacementRows := make([]any, len(rows))
 		copy(replacementRows, rows)
 		midStable, _ := replacementRows[5000].(*jsonx.Object).Get("stable")
-		replacementRows[5000] = tdelObj("value", float64(-1), "stable", midStable)
-		replacement := tdelObj("rows", replacementRows)
+		replacementRows[5000] = tdeltaObj("value", float64(-1), "stable", midStable)
+		replacement := tdeltaObj("rows", replacementRows)
 
 		prepared, err := tracker.PrepareReplace(replacement)
 		if err != nil {
@@ -308,7 +308,7 @@ func TestDeltaTrackerLifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ApplyImmutable failed: %v", err)
 		}
-		if tdelMustJson(applied) != tdelMustJson(prepared.Value()) {
+		if tdeltaMustJson(applied) != tdeltaMustJson(prepared.Value()) {
 			t.Fatalf("applied mismatch")
 		}
 	})
@@ -316,13 +316,13 @@ func TestDeltaTrackerLifecycle(t *testing.T) {
 
 func TestCanonicalStrings(t *testing.T) {
 	t.Run("emits append and rolling-window operations", func(t *testing.T) {
-		tracker := Track(tdelObj("text", "abcdefgh"))
+		tracker := Track(tdeltaObj("text", "abcdefgh"))
 		change := tracker.BeginChange()
 		d, _ := change.State()
 		s, _ := d.Value.Get("text")
 		d.Value.Set("text", s.(string)+"ij")
 		prepared, _ := change.Prepare()
-		if got := tdelMustJson(OpList(prepared.Ops())); got != `[["a",["text"],"ij"]]` {
+		if got := tdeltaMustJson(OpList(prepared.Ops())); got != `[["a",["text"],"ij"]]` {
 			t.Fatalf("got %s", got)
 		}
 		_ = tracker.Adopt(prepared)
@@ -332,7 +332,7 @@ func TestCanonicalStrings(t *testing.T) {
 		s, _ = d.Value.Get("text")
 		d.Value.Set("text", s.(string)[3:]+"xyz")
 		prepared, _ = change.Prepare()
-		if got := tdelMustJson(OpList(prepared.Ops())); got != `[["t",["text"],3],["a",["text"],"xyz"]]` {
+		if got := tdeltaMustJson(OpList(prepared.Ops())); got != `[["t",["text"],3],["a",["text"],"xyz"]]` {
 			t.Fatalf("got %s", got)
 		}
 	})
@@ -354,11 +354,11 @@ func TestOperationApplicationAndValidation(t *testing.T) {
 			OpSplice{Path: Path{SegString("values")}, Index: 1, Remove: 1, Items: []JsonValue{float64(3), float64(4)}},
 			OpSet{Path: Path{SegString("nested"), SegString("value")}, Value: float64(2)},
 		}
-		stable := tdelObj("value", float64(9))
-		base := tdelObj(
+		stable := tdeltaObj("value", float64(9))
+		base := tdeltaObj(
 			"text", "a",
 			"values", []any{float64(1), float64(2)},
-			"nested", tdelObj("value", float64(1)),
+			"nested", tdeltaObj("value", float64(1)),
 			"stable", stable,
 		)
 		immutable, err := ApplyImmutable(base, ops)
@@ -366,17 +366,17 @@ func TestOperationApplicationAndValidation(t *testing.T) {
 			t.Fatalf("ApplyImmutable failed: %v", err)
 		}
 		want := `{"text":"ab","values":[1,3,4],"nested":{"value":2},"stable":{"value":9}}`
-		if got := tdelMustJson(immutable); got != want {
+		if got := tdeltaMustJson(immutable); got != want {
 			t.Fatalf("got %s, want %s", got, want)
 		}
 		if gotStable, _ := immutable.Get("stable"); gotStable != stable {
 			t.Fatalf("expected stable subtree pointer shared")
 		}
-		mutated, err := Apply(tdelCloneJson(base).(*jsonx.Object), ops)
+		mutated, err := Apply(tdeltaCloneJson(base).(*jsonx.Object), ops)
 		if err != nil {
 			t.Fatalf("Apply failed: %v", err)
 		}
-		if tdelMustJson(mutated) != want {
+		if tdeltaMustJson(mutated) != want {
 			t.Fatalf("mutable apply mismatch")
 		}
 	})
@@ -398,23 +398,23 @@ func TestOperationApplicationAndValidation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Apply move failed: %v", err)
 		}
-		if got := tdelMustJson(val); got != `[3,1,4]` {
+		if got := tdeltaMustJson(val); got != `[3,1,4]` {
 			t.Fatalf("got %s", got)
 		}
 	})
 
 	t.Run("rejects unsafe and malformed paths", func(t *testing.T) {
-		if _, err := Apply(tdelObj(), OpList{OpSet{Path: Path{SegString("constructor"), SegString("prototype"), SegString("x")}, Value: true}}); err == nil {
+		if _, err := Apply(tdeltaObj(), OpList{OpSet{Path: Path{SegString("constructor"), SegString("prototype"), SegString("x")}, Value: true}}); err == nil {
 			t.Fatalf("expected UnsafePathError")
 		} else if _, ok := err.(*UnsafePathError); !ok {
 			t.Fatalf("expected *UnsafePathError, got %T", err)
 		}
-		if _, err := Apply(tdelObj("values", []any{float64(1)}), OpList{OpSet{Path: Path{SegString("values"), SegNumber(3)}, Value: float64(2)}}); err == nil {
+		if _, err := Apply(tdeltaObj("values", []any{float64(1)}), OpList{OpSet{Path: Path{SegString("values"), SegNumber(3)}, Value: float64(2)}}); err == nil {
 			t.Fatalf("expected UnsafePathError for array gap")
 		} else if _, ok := err.(*UnsafePathError); !ok {
 			t.Fatalf("expected *UnsafePathError, got %T", err)
 		}
-		if _, err := Apply(tdelObj("value", float64(1)), OpList{OpAppend{Path: Path{SegString("value")}, Text: "x"}}); err == nil {
+		if _, err := Apply(tdeltaObj("value", float64(1)), OpList{OpAppend{Path: Path{SegString("value")}, Text: "x"}}); err == nil {
 			t.Fatalf("expected error appending to number")
 		}
 		if _, err := AssertValidOp([]any{"s", "value", float64(1)}); err == nil {
@@ -454,19 +454,19 @@ func TestDeltaCodec(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Decode first failed: %v", err)
 		}
-		if tdelMustJson(gotFirst) != tdelMustJson(first) {
+		if tdeltaMustJson(gotFirst) != tdeltaMustJson(first) {
 			t.Fatalf("first roundtrip mismatch")
 		}
 		second := OpList{OpAppend{Path: path, Text: "y"}}
 		wire := enc.Encode(second)
-		if got := tdelMustJson(wire); got != `[["#",0,["nested","text"]],["a",0,"y"]]` {
+		if got := tdeltaMustJson(wire); got != `[["#",0,["nested","text"]],["a",0,"y"]]` {
 			t.Fatalf("wire mismatch: %s", got)
 		}
 		gotSecond, err := dec.Decode(wire)
 		if err != nil {
 			t.Fatalf("Decode second failed: %v", err)
 		}
-		if tdelMustJson(gotSecond) != tdelMustJson(second) {
+		if tdeltaMustJson(gotSecond) != tdeltaMustJson(second) {
 			t.Fatalf("second roundtrip mismatch")
 		}
 	})
@@ -476,10 +476,10 @@ func TestDeltaCodec(t *testing.T) {
 		path := Path{SegString("value")}
 		enc.Encode(OpList{OpSet{Path: path, Value: float64(1)}})
 		enc.Encode(OpList{OpSet{Path: path, Value: float64(2)}})
-		if got := tdelMustJson(enc.Encode(OpList{OpReplace{Value: tdelObj("value", float64(3))}})); got != `[["r",{"value":3}]]` {
+		if got := tdeltaMustJson(enc.Encode(OpList{OpReplace{Value: tdeltaObj("value", float64(3))}})); got != `[["r",{"value":3}]]` {
 			t.Fatalf("got %s", got)
 		}
-		if got := tdelMustJson(enc.Encode(OpList{OpSet{Path: path, Value: float64(4)}})); got != `[["s",["value"],4]]` {
+		if got := tdeltaMustJson(enc.Encode(OpList{OpSet{Path: path, Value: float64(4)}})); got != `[["s",["value"],4]]` {
 			t.Fatalf("got %s", got)
 		}
 	})
@@ -502,13 +502,13 @@ func TestDeltaCodec(t *testing.T) {
 	t.Run("omits an adjacent repeated path and interns on second use", func(t *testing.T) {
 		enc := NewEncoder()
 		path := Path{SegString("a"), SegString("deep")}
-		if got := tdelMustJson(enc.Encode(OpList{OpAppend{Path: path, Text: "1"}})); got != `[["a",["a","deep"],"1"]]` {
+		if got := tdeltaMustJson(enc.Encode(OpList{OpAppend{Path: path, Text: "1"}})); got != `[["a",["a","deep"],"1"]]` {
 			t.Fatalf("got %s", got)
 		}
-		if got := tdelMustJson(enc.Encode(OpList{OpAppend{Path: path, Text: "2"}})); got != `[["#",0,["a","deep"]],["a",0,"2"]]` {
+		if got := tdeltaMustJson(enc.Encode(OpList{OpAppend{Path: path, Text: "2"}})); got != `[["#",0,["a","deep"]],["a",0,"2"]]` {
 			t.Fatalf("got %s", got)
 		}
-		if got := tdelMustJson(NewEncoder().Encode(OpList{
+		if got := tdeltaMustJson(NewEncoder().Encode(OpList{
 			OpSet{Path: Path{SegString("value")}, Value: float64(1)},
 			OpSet{Path: Path{SegString("value")}, Value: float64(2)},
 		})); got != `[["s",["value"],1],["s",2]]` {
@@ -525,7 +525,7 @@ func TestDeltaCodec(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Decode failed: %v", err)
 		}
-		if tdelMustJson(dec) != tdelMustJson(ops) {
+		if tdeltaMustJson(dec) != tdeltaMustJson(ops) {
 			t.Fatalf("roundtrip mismatch")
 		}
 	})
@@ -536,7 +536,7 @@ func TestDeltaCodec(t *testing.T) {
 			WireOpDefine{Id: 0, Path: Path{SegString("a")}},
 			WireOpAppend{Ref: PathRef{Id: 0, IsId: true}, Text: "1"},
 		})
-		_, _ = dec.Decode(WireOpList{WireOpReplace{Value: tdelObj("a", "")}})
+		_, _ = dec.Decode(WireOpList{WireOpReplace{Value: tdeltaObj("a", "")}})
 		if _, err := dec.Decode(WireOpList{WireOpAppend{Ref: PathRef{Id: 0, IsId: true}, Text: "2"}}); err == nil {
 			t.Fatalf("expected cleared id error")
 		}
@@ -545,18 +545,18 @@ func TestDeltaCodec(t *testing.T) {
 		path := Path{SegString("a"), SegString("deep")}
 		enc.Encode(OpList{OpAppend{Path: path, Text: "1"}})
 		enc.Encode(OpList{OpAppend{Path: path, Text: "2"}})
-		base := enc.Encode(OpList{OpReplace{Value: tdelObj("a", tdelObj("deep", "x"))}})
+		base := enc.Encode(OpList{OpReplace{Value: tdeltaObj("a", tdeltaObj("deep", "x"))}})
 		after := enc.Encode(OpList{OpAppend{Path: path, Text: "3"}})
-		if tdelMustJson(after) != `[["a",["a","deep"],"3"]]` {
-			t.Fatalf("got %s", tdelMustJson(after))
+		if tdeltaMustJson(after) != `[["a",["a","deep"],"3"]]` {
+			t.Fatalf("got %s", tdeltaMustJson(after))
 		}
 		freshDec := NewDecoder()
 		if _, err := freshDec.Decode(base); err != nil {
 			t.Fatalf("Decode base failed: %v", err)
 		}
 		gotAfter, err := freshDec.Decode(after)
-		if err != nil || tdelMustJson(gotAfter) != `[["a",["a","deep"],"3"]]` {
-			t.Fatalf("got=%s err=%v", tdelMustJson(gotAfter), err)
+		if err != nil || tdeltaMustJson(gotAfter) != `[["a",["a","deep"],"3"]]` {
+			t.Fatalf("got=%s err=%v", tdeltaMustJson(gotAfter), err)
 		}
 	})
 
@@ -576,7 +576,7 @@ func TestDeltaCodec(t *testing.T) {
 			if err != nil {
 				t.Fatalf("batch %d failed: %v", i, err)
 			}
-			if tdelMustJson(got) != tdelMustJson(batch) {
+			if tdeltaMustJson(got) != tdeltaMustJson(batch) {
 				t.Fatalf("batch %d mismatch", i)
 			}
 		}
@@ -585,7 +585,7 @@ func TestDeltaCodec(t *testing.T) {
 
 func TestImmutableApplicationOwnership(t *testing.T) {
 	t.Run("does not mutate a replacement payload targeted by a later operation", func(t *testing.T) {
-		replacement := tdelObj("nested", tdelObj("value", float64(1)))
+		replacement := tdeltaObj("nested", tdeltaObj("value", float64(1)))
 		next, err := ApplyImmutable[any](nil, OpList{
 			OpReplace{Value: replacement},
 			OpSet{Path: Path{SegString("nested"), SegString("value")}, Value: float64(2)},
@@ -604,7 +604,7 @@ func TestImmutableApplicationOwnership(t *testing.T) {
 	})
 
 	t.Run("adopts a mutable replacement payload rather than copying it", func(t *testing.T) {
-		batch := OpList{OpReplace{Value: tdelObj("value", float64(0))}}
+		batch := OpList{OpReplace{Value: tdeltaObj("value", float64(0))}}
 		first, _ := Apply[*jsonx.Object](nil, batch)
 		second, _ := Apply[*jsonx.Object](nil, batch)
 		first.Set("value", float64(1))
@@ -620,7 +620,7 @@ func TestPathAndPrototypeSafety(t *testing.T) {
 		if err != nil {
 			t.Fatalf("UnmarshalOp failed: %v", err)
 		}
-		if _, err := Apply(tdelObj(), OpList{op}); err == nil {
+		if _, err := Apply(tdeltaObj(), OpList{op}); err == nil {
 			t.Fatalf("expected error")
 		}
 		wire := WireOpList{
@@ -637,7 +637,7 @@ func TestPathAndPrototypeSafety(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Parse failed: %v", err)
 		}
-		out, err := Apply(tdelObj(), OpList{OpSet{Path: Path{SegString("value")}, Value: val}})
+		out, err := Apply(tdeltaObj(), OpList{OpSet{Path: Path{SegString("value")}, Value: val}})
 		if err != nil {
 			t.Fatalf("Apply failed: %v", err)
 		}
@@ -650,37 +650,37 @@ func TestPathAndPrototypeSafety(t *testing.T) {
 
 func TestArrayIndexSafety(t *testing.T) {
 	t.Run("writes an existing index and appends exactly one past the end", func(t *testing.T) {
-		got1, err := Apply(tdelObj("values", []any{float64(1), float64(2), float64(3)}), OpList{
+		got1, err := Apply(tdeltaObj("values", []any{float64(1), float64(2), float64(3)}), OpList{
 			OpSet{Path: Path{SegString("values"), SegNumber(1)}, Value: float64(9)},
 		})
-		if err != nil || tdelMustJson(got1) != `{"values":[1,9,3]}` {
-			t.Fatalf("got=%s err=%v", tdelMustJson(got1), err)
+		if err != nil || tdeltaMustJson(got1) != `{"values":[1,9,3]}` {
+			t.Fatalf("got=%s err=%v", tdeltaMustJson(got1), err)
 		}
-		got2, err := Apply(tdelObj("values", []any{float64(1), float64(2), float64(3)}), OpList{
+		got2, err := Apply(tdeltaObj("values", []any{float64(1), float64(2), float64(3)}), OpList{
 			OpSet{Path: Path{SegString("values"), SegNumber(3)}, Value: float64(9)},
 		})
-		if err != nil || tdelMustJson(got2) != `{"values":[1,2,3,9]}` {
-			t.Fatalf("got=%s err=%v", tdelMustJson(got2), err)
+		if err != nil || tdeltaMustJson(got2) != `{"values":[1,2,3,9]}` {
+			t.Fatalf("got=%s err=%v", tdeltaMustJson(got2), err)
 		}
 	})
 
 	t.Run("rejects gaps, huge indices, and string-spelled indices", func(t *testing.T) {
-		if _, err := Apply(tdelObj("values", []any{float64(1), float64(2), float64(3)}), OpList{
+		if _, err := Apply(tdeltaObj("values", []any{float64(1), float64(2), float64(3)}), OpList{
 			OpSet{Path: Path{SegString("values"), SegNumber(5)}, Value: float64(9)},
 		}); err == nil {
 			t.Fatalf("expected error")
 		}
-		if _, err := Apply(tdelObj("values", []any{}), OpList{
+		if _, err := Apply(tdeltaObj("values", []any{}), OpList{
 			OpSet{Path: Path{SegString("values"), SegNumber(4294967290)}, Value: float64(1)},
 		}); err == nil {
 			t.Fatalf("expected error")
 		}
-		if _, err := Apply(tdelObj("values", []any{float64(1)}), OpList{
+		if _, err := Apply(tdeltaObj("values", []any{float64(1)}), OpList{
 			OpSet{Path: Path{SegString("values"), SegString("0")}, Value: float64(9)},
 		}); err == nil {
 			t.Fatalf("expected error")
 		}
-		if _, err := Apply(tdelObj("values", []any{"a"}), OpList{
+		if _, err := Apply(tdeltaObj("values", []any{"a"}), OpList{
 			OpAppend{Path: Path{SegString("values"), SegString("0")}, Text: "b"},
 		}); err == nil {
 			t.Fatalf("expected error")
@@ -688,13 +688,13 @@ func TestArrayIndexSafety(t *testing.T) {
 	})
 
 	t.Run("allows explicit growth values and rejects deletion past the end", func(t *testing.T) {
-		got, err := Apply(tdelObj("values", []any{float64(1)}), OpList{
+		got, err := Apply(tdeltaObj("values", []any{float64(1)}), OpList{
 			OpSplice{Path: Path{SegString("values")}, Index: 1, Remove: 0, Items: []JsonValue{nil, nil, float64(9)}},
 		})
-		if err != nil || tdelMustJson(got) != `{"values":[1,null,null,9]}` {
-			t.Fatalf("got=%s err=%v", tdelMustJson(got), err)
+		if err != nil || tdeltaMustJson(got) != `{"values":[1,null,null,9]}` {
+			t.Fatalf("got=%s err=%v", tdeltaMustJson(got), err)
 		}
-		if _, err := Apply(tdelObj("values", []any{float64(1)}), OpList{
+		if _, err := Apply(tdeltaObj("values", []any{float64(1)}), OpList{
 			OpDelete{Path: Path{SegString("values"), SegNumber(1)}},
 		}); err == nil {
 			t.Fatalf("expected error")
@@ -703,7 +703,7 @@ func TestArrayIndexSafety(t *testing.T) {
 
 	t.Run("applies large splice payloads without overflow", func(t *testing.T) {
 		items := make([]JsonValue, 300000)
-		got, err := Apply(tdelObj("values", []any{}), OpList{
+		got, err := Apply(tdeltaObj("values", []any{}), OpList{
 			OpSplice{Path: Path{SegString("values")}, Index: 0, Remove: 0, Items: items},
 		})
 		if err != nil {
@@ -718,13 +718,13 @@ func TestArrayIndexSafety(t *testing.T) {
 
 func TestOperationStructureSafety(t *testing.T) {
 	t.Run("rejects invalid append and truncation operations", func(t *testing.T) {
-		if _, err := Apply(tdelObj("value", float64(1)), OpList{OpAppend{Path: Path{SegString("missing")}, Text: "x"}}); err == nil {
+		if _, err := Apply(tdeltaObj("value", float64(1)), OpList{OpAppend{Path: Path{SegString("missing")}, Text: "x"}}); err == nil {
 			t.Fatalf("expected error")
 		}
-		if _, err := Apply(tdelObj("value", float64(1)), OpList{OpAppend{Path: Path{SegString("value")}, Text: "x"}}); err == nil {
+		if _, err := Apply(tdeltaObj("value", float64(1)), OpList{OpAppend{Path: Path{SegString("value")}, Text: "x"}}); err == nil {
 			t.Fatalf("expected error")
 		}
-		if _, err := Apply(tdelObj("value", "abc"), OpList{OpTruncate{Path: Path{SegString("value")}, Count: -1}}); err == nil {
+		if _, err := Apply(tdeltaObj("value", "abc"), OpList{OpTruncate{Path: Path{SegString("value")}, Count: -1}}); err == nil {
 			t.Fatalf("expected error")
 		}
 		if _, err := NewDecoder().Decode(WireOpList{WireOpTruncate{Ref: PathRef{Path: Path{SegString("value")}}, Count: -1}}); err == nil {
@@ -733,18 +733,18 @@ func TestOperationStructureSafety(t *testing.T) {
 	})
 
 	t.Run("clamps splice removal past the end", func(t *testing.T) {
-		got, err := Apply(tdelObj("values", []any{float64(1), float64(2)}), OpList{
+		got, err := Apply(tdeltaObj("values", []any{float64(1), float64(2)}), OpList{
 			OpSplice{Path: Path{SegString("values")}, Index: 0, Remove: 1_000_000_000, Items: []JsonValue{}},
 		})
-		if err != nil || tdelMustJson(got) != `{"values":[]}` {
-			t.Fatalf("got=%s err=%v", tdelMustJson(got), err)
+		if err != nil || tdeltaMustJson(got) != `{"values":[]}` {
+			t.Fatalf("got=%s err=%v", tdeltaMustJson(got), err)
 		}
 	})
 }
 
 func TestOperationAssertions(t *testing.T) {
 	validOps := []any{
-		[]any{"r", tdelObj("value", float64(1))},
+		[]any{"r", tdeltaObj("value", float64(1))},
 		[]any{"s", []any{"value"}, float64(1)},
 		[]any{"d", []any{"value"}},
 		[]any{"a", []any{"value"}, "x"},

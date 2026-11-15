@@ -27,8 +27,8 @@ type tflRenamedImpl struct {
 
 func TestFacetLoader(t *testing.T) {
 	localTrue := true
-	localGenSvc := tsvcMustDefine[any](t, "test.experimental.local-generation-value", &DefineServiceOptions{Local: &localTrue})
-	remoteGenSvc := tsvcMustDefine[any](t, "test.experimental.remote-generation-value")
+	localGenSvc := tservMustDefine[any](t, "test.experimental.local-generation-value", &DefineServiceOptions{Local: &localTrue})
+	remoteGenSvc := tservMustDefine[any](t, "test.experimental.remote-generation-value")
 	firstFacet := DefineFacet(Facet{Id: "first", Setup: func(FacetEnvironment) error { return nil }})
 	secondFacet := DefineFacet(Facet{Id: "second", Setup: func(FacetEnvironment) error { return nil }})
 
@@ -115,7 +115,7 @@ func TestFacetLoader(t *testing.T) {
 				pushTrace("setup consumer")
 				localValue = env.Use(localGenSvc)
 				env.OnActivate(func() error {
-					res, err := tsvcCall(localValue, "read", BackgroundContext)
+					res, err := tservCall(localValue, "read", BackgroundContext)
 					if err != nil {
 						return err
 					}
@@ -181,7 +181,7 @@ func TestFacetLoader(t *testing.T) {
 			t.Fatalf("CreateFacetHost failed: %v", err)
 		}
 		originalLocalHandle := localValue
-		localRead := tsvcMemberGet(t, originalLocalHandle, "read")
+		localRead := tservMemberGet(t, originalLocalHandle, "read")
 		remoteServices, err := CreateRemoteServiceBinding(&RemoteServiceBindingOptions{
 			Services:  []ServiceRef{{Id: remoteGenSvc.Id}},
 			Transport: CreateLoopbackServiceTransport(host.Services()),
@@ -190,14 +190,14 @@ func TestFacetLoader(t *testing.T) {
 			t.Fatalf("CreateRemoteServiceBinding failed: %v", err)
 		}
 		originalRemoteHandle := remoteServices.Use(remoteGenSvc)
-		remoteRead := tsvcMemberGet(t, originalRemoteHandle, "read")
+		remoteRead := tservMemberGet(t, originalRemoteHandle, "read")
 		if err := remoteServices.Ready(BackgroundContext); err != nil {
 			t.Fatalf("remoteServices.Ready failed: %v", err)
 		}
-		if res, err := tsvcCall(localRead, "", BackgroundContext); err != nil || res != "A" {
+		if res, err := tservCall(localRead, "", BackgroundContext); err != nil || res != "A" {
 			t.Fatalf("expected A from localRead, got %v %v", res, err)
 		}
-		if res, err := tsvcCall(remoteRead, "", BackgroundContext); err != nil || res != "A" {
+		if res, err := tservCall(remoteRead, "", BackgroundContext); err != nil || res != "A" {
 			t.Fatalf("expected A from remoteRead, got %v %v", res, err)
 		}
 
@@ -211,10 +211,10 @@ func TestFacetLoader(t *testing.T) {
 		if err := host.Reload([]Facet{invalidFacet}); err == nil || !strings.Contains(err.Error(), "Reloaded facet provider must preserve its service requirements and provisions") {
 			t.Fatalf("expected shape/provision error, got %v", err)
 		}
-		if res, err := tsvcCall(localRead, "", BackgroundContext); err != nil || res != "A" {
+		if res, err := tservCall(localRead, "", BackgroundContext); err != nil || res != "A" {
 			t.Fatalf("expected A preserved after invalid reload, got %v %v", res, err)
 		}
-		if res, err := tsvcCall(remoteRead, "", BackgroundContext); err != nil || res != "A" {
+		if res, err := tservCall(remoteRead, "", BackgroundContext); err != nil || res != "A" {
 			t.Fatalf("expected A preserved after invalid reload, got %v %v", res, err)
 		}
 
@@ -227,10 +227,10 @@ func TestFacetLoader(t *testing.T) {
 			reloadDone <- host.Reload(loadedB.Facets)
 		}()
 		<-replacementStarted
-		if res, err := tsvcCall(localRead, "", BackgroundContext); err != nil || res != "A" {
+		if res, err := tservCall(localRead, "", BackgroundContext); err != nil || res != "A" {
 			t.Fatalf("expected A while B activating, got %v %v", res, err)
 		}
-		if res, err := tsvcCall(remoteRead, "", BackgroundContext); err != nil || res != "A" {
+		if res, err := tservCall(remoteRead, "", BackgroundContext); err != nil || res != "A" {
 			t.Fatalf("expected A while B activating, got %v %v", res, err)
 		}
 		close(replacementCanContinue)
@@ -245,10 +245,10 @@ func TestFacetLoader(t *testing.T) {
 		if remoteServices.Use(remoteGenSvc) != originalRemoteHandle {
 			t.Fatal("expected remote handle preserved")
 		}
-		if res, err := tsvcCall(localRead, "", BackgroundContext); err != nil || res != "B" {
+		if res, err := tservCall(localRead, "", BackgroundContext); err != nil || res != "B" {
 			t.Fatalf("expected B from localRead, got %v %v", res, err)
 		}
-		if res, err := tsvcCall(remoteRead, "", BackgroundContext); err != nil || res != "B" {
+		if res, err := tservCall(remoteRead, "", BackgroundContext); err != nil || res != "B" {
 			t.Fatalf("expected B from remoteRead, got %v %v", res, err)
 		}
 
@@ -317,7 +317,7 @@ func TestFacetLoader(t *testing.T) {
 		if providerDisposed {
 			t.Fatal("expected old provider not disposed before cutover")
 		}
-		if res, err := tsvcCall(retained, "read", BackgroundContext); err != nil || res != "A" {
+		if res, err := tservCall(retained, "read", BackgroundContext); err != nil || res != "A" {
 			t.Fatalf("expected A retained, got %v %v", res, err)
 		}
 		_ = host.Dispose()
@@ -488,7 +488,7 @@ func TestFacetLoader(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateFacetHost failed: %v", err)
 		}
-		if res, err := tsvcCall(retained, "read", BackgroundContext); err != nil || res != "A" {
+		if res, err := tservCall(retained, "read", BackgroundContext); err != nil || res != "A" {
 			t.Fatalf("expected A, got %v %v", res, err)
 		}
 		if err := host.Reload([]Facet{provider("B", true)}); !errors.Is(err, failure) {
@@ -497,7 +497,7 @@ func TestFacetLoader(t *testing.T) {
 		if !reflect.DeepEqual(trace, []string{"activate A", "activate B", "deactivate B"}) {
 			t.Fatalf("unexpected trace %v", trace)
 		}
-		if res, err := tsvcCall(retained, "read", BackgroundContext); err != nil || res != "A" {
+		if res, err := tservCall(retained, "read", BackgroundContext); err != nil || res != "A" {
 			t.Fatalf("expected A retained after failed reload, got %v %v", res, err)
 		}
 		if err := host.Reload(nil); err != nil {

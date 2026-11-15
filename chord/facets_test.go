@@ -14,54 +14,54 @@ import (
 	"github.com/keejkrej/pi-go/internal/omap"
 )
 
-type tfHostValues struct {
+type tfacetsHostValues struct {
 	Name string `json:"name"`
 	Use  string `json:"use"`
 }
 
-func tfBoolPtr(b bool) *bool { return &b }
+func tfacetsBoolPtr(b bool) *bool { return &b }
 
-type tfSource struct {
+type tfacetsSource struct {
 	acceptsUnavailable bool
 	catalogueFn        func(call Context) ([]ServiceCatalogueEntry, error)
 	openFn             func(options *RemoteServiceSourceOpenOptions) RemoteServices
 }
 
-func (s *tfSource) AcceptsUnavailableServices() bool { return s.acceptsUnavailable }
+func (s *tfacetsSource) AcceptsUnavailableServices() bool { return s.acceptsUnavailable }
 
-func (s *tfSource) Catalogue(call Context) ([]ServiceCatalogueEntry, error) {
+func (s *tfacetsSource) Catalogue(call Context) ([]ServiceCatalogueEntry, error) {
 	return s.catalogueFn(call)
 }
 
-func (s *tfSource) Open(options *RemoteServiceSourceOpenOptions) RemoteServices {
+func (s *tfacetsSource) Open(options *RemoteServiceSourceOpenOptions) RemoteServices {
 	return s.openFn(options)
 }
 
-type tfCustomRemoteServices struct {
+type tfacetsCustomRemoteServices struct {
 	RemoteServices
 	readyFn   func(call Context) error
 	disposeFn func(call Context) error
 }
 
-func (s *tfCustomRemoteServices) Ready(call Context) error {
+func (s *tfacetsCustomRemoteServices) Ready(call Context) error {
 	if s.readyFn != nil {
 		return s.readyFn(call)
 	}
 	return s.RemoteServices.Ready(call)
 }
 
-func (s *tfCustomRemoteServices) Dispose(call Context) error {
+func (s *tfacetsCustomRemoteServices) Dispose(call Context) error {
 	if s.disposeFn != nil {
 		return s.disposeFn(call)
 	}
 	return s.RemoteServices.Dispose(call)
 }
 
-type tfReadImpl struct {
+type tfacetsReadImpl struct {
 	Read func(call Context) (string, error) `json:"read"`
 }
 
-func tfProviderUse(host FacetHost, svc any) (res any, err error) {
+func tfacetsProviderUse(host FacetHost, svc any) (res any, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = ssToError(r)
@@ -71,16 +71,16 @@ func tfProviderUse(host FacetHost, svc any) (res any, err error) {
 }
 
 func TestFacetHost(t *testing.T) {
-	sourceSvc := tsvcMustDefine[any](t, "test.experimental.source")
-	projectionSvc := tsvcMustDefine[any](t, "test.experimental.projection")
-	keyedValueSvc := tsvcMustDefine[any](t, "test.experimental.keyed-value")
-	watchedSvc := tsvcMustDefine[any](t, "test.experimental.watched")
+	sourceSvc := tservMustDefine[any](t, "test.experimental.source")
+	projectionSvc := tservMustDefine[any](t, "test.experimental.projection")
+	keyedValueSvc := tservMustDefine[any](t, "test.experimental.keyed-value")
+	watchedSvc := tservMustDefine[any](t, "test.experimental.watched")
 	localTrue := true
-	hostValuesSvc := tsvcMustDefine[any](t, "test.experimental.host-values", &DefineServiceOptions{Local: &localTrue})
-	localKeyedValueSvc := tsvcMustDefine[any](t, "test.experimental.local-keyed-value", &DefineServiceOptions{Local: &localTrue})
-	leftValueSvc := tsvcMustDefine[any](t, "test.experimental.left-value")
-	rightValueSvc := tsvcMustDefine[any](t, "test.experimental.right-value")
-	combinedValueSvc := tsvcMustDefine[any](t, "test.experimental.combined-value")
+	hostValuesSvc := tservMustDefine[any](t, "test.experimental.host-values", &DefineServiceOptions{Local: &localTrue})
+	localKeyedValueSvc := tservMustDefine[any](t, "test.experimental.local-keyed-value", &DefineServiceOptions{Local: &localTrue})
+	leftValueSvc := tservMustDefine[any](t, "test.experimental.left-value")
+	rightValueSvc := tservMustDefine[any](t, "test.experimental.right-value")
+	combinedValueSvc := tservMustDefine[any](t, "test.experimental.combined-value")
 
 	t.Run("discovers setup dependencies before connecting stable service handles", func(t *testing.T) {
 		var traceMu sync.Mutex
@@ -96,12 +96,12 @@ func TestFacetHost(t *testing.T) {
 			Setup: func(env FacetEnvironment) error {
 				pushTrace("setup projection")
 				sourceHandle = env.Use(sourceSvc)
-				if _, err := tsvcCall(sourceHandle, "read", BackgroundContext); err == nil || !strings.Contains(err.Error(), "Facet projection service handles cannot be used while setting_up") {
+				if _, err := tservCall(sourceHandle, "read", BackgroundContext); err == nil || !strings.Contains(err.Error(), "Facet projection service handles cannot be used while setting_up") {
 					t.Fatalf("expected setting_up guard error, got %v", err)
 				}
-				env.Provide(projectionSvc, tfReadImpl{
+				env.Provide(projectionSvc, tfacetsReadImpl{
 					Read: func(ctx Context) (string, error) {
-						res, err := tsvcCall(sourceHandle, "read", ctx)
+						res, err := tservCall(sourceHandle, "read", ctx)
 						if err != nil {
 							return "", err
 						}
@@ -123,7 +123,7 @@ func TestFacetHost(t *testing.T) {
 			Id: "source",
 			Setup: func(env FacetEnvironment) error {
 				pushTrace("setup source")
-				env.Provide(sourceSvc, tfReadImpl{
+				env.Provide(sourceSvc, tfacetsReadImpl{
 					Read: func(_ Context) (string, error) {
 						return "value", nil
 					},
@@ -151,14 +151,14 @@ func TestFacetHost(t *testing.T) {
 		if !reflect.DeepEqual(got, expected) {
 			t.Fatalf("expected trace %v, got %v", expected, got)
 		}
-		if res, err := tsvcCall(sourceHandle, "read", BackgroundContext); err != nil || res != "value" {
+		if res, err := tservCall(sourceHandle, "read", BackgroundContext); err != nil || res != "value" {
 			t.Fatalf("expected value from sourceHandle, got %v %v", res, err)
 		}
-		projSvc, err := tfProviderUse(host, projectionSvc)
+		projSvc, err := tfacetsProviderUse(host, projectionSvc)
 		if err != nil {
 			t.Fatalf("host.Services().Use failed: %v", err)
 		}
-		if res, err := tsvcCall(projSvc, "read", BackgroundContext); err != nil || res != "value" {
+		if res, err := tservCall(projSvc, "read", BackgroundContext); err != nil || res != "value" {
 			t.Fatalf("expected value from host.Services().Use, got %v %v", res, err)
 		}
 
@@ -185,7 +185,7 @@ func TestFacetHost(t *testing.T) {
 			Id: "observer",
 			Setup: func(env FacetEnvironment) error {
 				env.Observe(keyedValueSvc, func(service any, call Context) error {
-					res, err := tsvcCall(service, "read", call)
+					res, err := tservCall(service, "read", call)
 					if err != nil {
 						return err
 					}
@@ -205,7 +205,7 @@ func TestFacetHost(t *testing.T) {
 				values := env.ProvideMany(keyedValueSvc).(ServiceSpawner[any])
 				env.OnActivate(func() error {
 					pushTrace("activate provider")
-					values.Spawn("one", tfReadImpl{
+					values.Spawn("one", tfacetsReadImpl{
 						Read: func(_ Context) (string, error) {
 							return "one", nil
 						},
@@ -219,7 +219,7 @@ func TestFacetHost(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateFacetHost failed: %v", err)
 		}
-		tsvcWaitFor(t, "observe one", func() bool {
+		tservWaitFor(t, "observe one", func() bool {
 			traceMu.Lock()
 			defer traceMu.Unlock()
 			return slices.Contains(trace, "observe one")
@@ -241,7 +241,7 @@ func TestFacetHost(t *testing.T) {
 		var remoteMu sync.Mutex
 		var remoteValues []string
 		remoteServices.Observe(keyedValueSvc, func(service any, call Context) error {
-			res, err := tsvcCall(service, "read", call)
+			res, err := tservCall(service, "read", call)
 			if err != nil {
 				return err
 			}
@@ -253,7 +253,7 @@ func TestFacetHost(t *testing.T) {
 		if err := remoteServices.Ready(BackgroundContext); err != nil {
 			t.Fatalf("remoteServices.Ready failed: %v", err)
 		}
-		tsvcWaitFor(t, "remote observed one", func() bool {
+		tservWaitFor(t, "remote observed one", func() bool {
 			remoteMu.Lock()
 			defer remoteMu.Unlock()
 			return reflect.DeepEqual(remoteValues, []string{"one"})
@@ -287,7 +287,7 @@ func TestFacetHost(t *testing.T) {
 				Setup: func(env FacetEnvironment) error {
 					values := env.ProvideMany(keyedValueSvc).(ServiceSpawner[any])
 					env.OnActivate(func() error {
-						values.Spawn("current", tfReadImpl{
+						values.Spawn("current", tfacetsReadImpl{
 							Read: func(_ Context) (string, error) {
 								return value, nil
 							},
@@ -302,7 +302,7 @@ func TestFacetHost(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateFacetHost failed: %v", err)
 		}
-		tsvcWaitFor(t, "first remote keyed observed", func() bool {
+		tservWaitFor(t, "first remote keyed observed", func() bool {
 			obsMu.Lock()
 			defer obsMu.Unlock()
 			return len(observed) == 1
@@ -310,14 +310,14 @@ func TestFacetHost(t *testing.T) {
 		obsMu.Lock()
 		first := observed[0]
 		obsMu.Unlock()
-		if res, err := tsvcCall(first.service, "read", first.ctx); err != nil || res != "A" {
+		if res, err := tservCall(first.service, "read", first.ctx); err != nil || res != "A" {
 			t.Fatalf("expected A, got %v %v", res, err)
 		}
 
 		if err := host.Reload([]Facet{provider("B")}); err != nil {
 			t.Fatalf("Reload failed: %v", err)
 		}
-		tsvcWaitFor(t, "second remote keyed observed", func() bool {
+		tservWaitFor(t, "second remote keyed observed", func() bool {
 			obsMu.Lock()
 			defer obsMu.Unlock()
 			return len(observed) == 2
@@ -325,13 +325,13 @@ func TestFacetHost(t *testing.T) {
 		if first.ctx.AbortSignal() == nil || first.ctx.AbortSignal().Err() == nil {
 			t.Fatal("expected first context aborted")
 		}
-		if _, err := tsvcCall(first.service, "read", first.ctx); err == nil || !strings.Contains(err.Error(), "observation is closed") {
+		if _, err := tservCall(first.service, "read", first.ctx); err == nil || !strings.Contains(err.Error(), "observation is closed") {
 			t.Fatalf("expected observation closed error, got %v", err)
 		}
 		obsMu.Lock()
 		second := observed[1]
 		obsMu.Unlock()
-		if res, err := tsvcCall(second.service, "read", second.ctx); err != nil || res != "B" {
+		if res, err := tservCall(second.service, "read", second.ctx); err != nil || res != "B" {
 			t.Fatalf("expected B, got %v %v", res, err)
 		}
 
@@ -349,7 +349,7 @@ func TestFacetHost(t *testing.T) {
 				Setup: func(env FacetEnvironment) error {
 					values := env.ProvideMany(keyedValueSvc).(ServiceSpawner[any])
 					env.OnActivate(func() error {
-						values.Spawn("current", tfReadImpl{
+						values.Spawn("current", tfacetsReadImpl{
 							Read: func(_ Context) (string, error) {
 								return value, nil
 							},
@@ -381,7 +381,7 @@ func TestFacetHost(t *testing.T) {
 		if err := host.Reload(nil); err == nil || !strings.Contains(err.Error(), "Facet host cannot reload while dead") {
 			t.Fatalf("expected dead host error, got %v", err)
 		}
-		if _, err := tfProviderUse(host, keyedValueSvc); err == nil || !strings.Contains(err.Error(), "disposed") {
+		if _, err := tfacetsProviderUse(host, keyedValueSvc); err == nil || !strings.Contains(err.Error(), "disposed") {
 			t.Fatalf("expected disposed error from host.Services().Use, got %v", err)
 		}
 		_ = host.Dispose()
@@ -395,7 +395,7 @@ func TestFacetHost(t *testing.T) {
 				Setup: func(env FacetEnvironment) error {
 					values := env.ProvideMany(keyedValueSvc).(ServiceSpawner[any])
 					env.OnActivate(func() error {
-						values.Spawn("current", tfReadImpl{
+						values.Spawn("current", tfacetsReadImpl{
 							Read: func(_ Context) (string, error) {
 								return value, nil
 							},
@@ -471,7 +471,7 @@ func TestFacetHost(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateFacetHost failed: %v", err)
 		}
-		tsvcWaitFor(t, "local keyed observed", func() bool {
+		tservWaitFor(t, "local keyed observed", func() bool {
 			obsMu.Lock()
 			defer obsMu.Unlock()
 			return len(observed) == 1
@@ -479,10 +479,10 @@ func TestFacetHost(t *testing.T) {
 		obsMu.Lock()
 		first := observed[0]
 		obsMu.Unlock()
-		if res, err := tsvcCall(first.service, "read"); err != nil || res != "A" {
+		if res, err := tservCall(first.service, "read"); err != nil || res != "A" {
 			t.Fatalf("expected A, got %v %v", res, err)
 		}
-		meta1, ok := tsvcMemberGet(t, first.service, "metadata").(*omap.Map[string, string])
+		meta1, ok := tservMemberGet(t, first.service, "metadata").(*omap.Map[string, string])
 		if !ok {
 			t.Fatalf("expected *omap.Map metadata")
 		}
@@ -494,14 +494,14 @@ func TestFacetHost(t *testing.T) {
 				t.Fatalf("did not expect local service in catalogue: %+v", entry)
 			}
 		}
-		if _, err := tfProviderUse(host, localKeyedValueSvc); err == nil || !strings.Contains(err.Error(), "process-local") {
+		if _, err := tfacetsProviderUse(host, localKeyedValueSvc); err == nil || !strings.Contains(err.Error(), "process-local") {
 			t.Fatalf("expected process-local error on host.Services().Use, got %v", err)
 		}
 
 		if err := host.Reload([]Facet{provider("B")}); err != nil {
 			t.Fatalf("Reload failed: %v", err)
 		}
-		tsvcWaitFor(t, "local keyed reloaded", func() bool {
+		tservWaitFor(t, "local keyed reloaded", func() bool {
 			obsMu.Lock()
 			defer obsMu.Unlock()
 			return len(observed) == 2
@@ -510,16 +510,16 @@ func TestFacetHost(t *testing.T) {
 			t.Fatal("expected first context aborted")
 		}
 		expectedClosed := "Keyed service " + localKeyedValueSvc.Id + " observation is closed"
-		if _, err := tsvcCall(first.service, "read"); err == nil || !strings.Contains(err.Error(), expectedClosed) {
+		if _, err := tservCall(first.service, "read"); err == nil || !strings.Contains(err.Error(), expectedClosed) {
 			t.Fatalf("expected %q, got %v", expectedClosed, err)
 		}
 		obsMu.Lock()
 		second := observed[1]
 		obsMu.Unlock()
-		if res, err := tsvcCall(second.service, "read"); err != nil || res != "B" {
+		if res, err := tservCall(second.service, "read"); err != nil || res != "B" {
 			t.Fatalf("expected B, got %v %v", res, err)
 		}
-		meta2, ok := tsvcMemberGet(t, second.service, "metadata").(*omap.Map[string, string])
+		meta2, ok := tservMemberGet(t, second.service, "metadata").(*omap.Map[string, string])
 		if !ok {
 			t.Fatalf("expected *omap.Map metadata")
 		}
@@ -541,8 +541,8 @@ func TestFacetHost(t *testing.T) {
 			Setup: func(env FacetEnvironment) error {
 				watched = env.Use(watchedSvc)
 				env.OnActivate(func() error {
-					unsub, err := tsvcStateSubscribe(t, tsvcMemberGet(t, watched, "state"), func(v JsonValue, _ Context, _ ReplicatedStateDelivery) error {
-						revisions = append(revisions, tsvcGet(v, "value").(float64))
+					unsub, err := tservStateSubscribe(t, tservMemberGet(t, watched, "state"), func(v JsonValue, _ Context, _ ReplicatedStateDelivery) error {
+						revisions = append(revisions, tservGet(v, "value").(float64))
 						return nil
 					})
 					if err != nil {
@@ -561,9 +561,9 @@ func TestFacetHost(t *testing.T) {
 			return DefineFacet(Facet{
 				Id: "state-provider",
 				Setup: func(env FacetEnvironment) error {
-					st := env.ReplicatedState(tsvcObj("value", value))
+					st := env.ReplicatedState(tservObj("value", value))
 					sources = append(sources, st)
-					env.Provide(watchedSvc, tsvcObj("state", st))
+					env.Provide(watchedSvc, tservObj("state", st))
 					return nil
 				},
 			})
@@ -572,8 +572,8 @@ func TestFacetHost(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateFacetHost failed: %v", err)
 		}
-		retainedState := tsvcMemberGet(t, watched, "state")
-		if v, ok, _ := tsvcStateVal(t, retainedState); !ok || tsvcGet(v, "value") != float64(1) {
+		retainedState := tservMemberGet(t, watched, "state")
+		if v, ok, _ := tservStateVal(t, retainedState); !ok || tservGet(v, "value") != float64(1) {
 			t.Fatalf("expected value 1, got %v %v", v, ok)
 		}
 		if !reflect.DeepEqual(revisions, []float64{1}) {
@@ -583,10 +583,10 @@ func TestFacetHost(t *testing.T) {
 		if err := host.Reload([]Facet{provider(2)}); err != nil {
 			t.Fatalf("Reload failed: %v", err)
 		}
-		if tsvcMemberGet(t, watched, "state") != retainedState {
+		if tservMemberGet(t, watched, "state") != retainedState {
 			t.Fatal("expected retainedState identity preserved across reload")
 		}
-		if v, ok, _ := tsvcStateVal(t, retainedState); !ok || tsvcGet(v, "value") != float64(2) {
+		if v, ok, _ := tservStateVal(t, retainedState); !ok || tservGet(v, "value") != float64(2) {
 			t.Fatalf("expected value 2, got %v %v", v, ok)
 		}
 		if !reflect.DeepEqual(revisions, []float64{1, 2}) {
@@ -596,7 +596,7 @@ func TestFacetHost(t *testing.T) {
 			draft.Value.(*jsonx.Object).Set("value", float64(3))
 			return nil
 		})
-		if v, ok, _ := tsvcStateVal(t, retainedState); !ok || tsvcGet(v, "value") != float64(2) {
+		if v, ok, _ := tservStateVal(t, retainedState); !ok || tservGet(v, "value") != float64(2) {
 			t.Fatalf("expected detached source not to affect value 2, got %v", v)
 		}
 		if !reflect.DeepEqual(revisions, []float64{1, 2}) {
@@ -604,7 +604,7 @@ func TestFacetHost(t *testing.T) {
 		}
 
 		_ = host.Dispose()
-		if _, _, err := tsvcStateVal(t, retainedState); err == nil || !strings.Contains(err.Error(), "Facet state-consumer service handles cannot be used while dead") {
+		if _, _, err := tservStateVal(t, retainedState); err == nil || !strings.Contains(err.Error(), "Facet state-consumer service handles cannot be used while dead") {
 			t.Fatalf("expected dead guard error, got %v", err)
 		}
 	})
@@ -622,11 +622,11 @@ func TestFacetHost(t *testing.T) {
 						t.Fatal("expected memoized env.Use view within same setup")
 					}
 					consumerHandles = append(consumerHandles, src)
-					if _, err := tsvcCall(src, "read", BackgroundContext); err == nil || !strings.Contains(err.Error(), "Facet scoped-consumer service handles cannot be used while setting_up") {
+					if _, err := tservCall(src, "read", BackgroundContext); err == nil || !strings.Contains(err.Error(), "Facet scoped-consumer service handles cannot be used while setting_up") {
 						t.Fatalf("expected setting_up guard error, got %v", err)
 					}
 					env.OnDeactivate(func() error {
-						res, err := tsvcCall(src, "read", BackgroundContext)
+						res, err := tservCall(src, "read", BackgroundContext)
 						if err != nil {
 							return err
 						}
@@ -647,7 +647,7 @@ func TestFacetHost(t *testing.T) {
 		provider := DefineFacet(Facet{
 			Id: "scoped-provider",
 			Setup: func(env FacetEnvironment) error {
-				env.Provide(sourceSvc, tfReadImpl{
+				env.Provide(sourceSvc, tfacetsReadImpl{
 					Read: func(_ Context) (string, error) {
 						return "value", nil
 					},
@@ -662,7 +662,7 @@ func TestFacetHost(t *testing.T) {
 		if consumerHandles[0] == peerHandle {
 			t.Fatal("expected separate service view per facet")
 		}
-		retainedOldRead := tsvcMemberGet(t, consumerHandles[0], "read")
+		retainedOldRead := tservMemberGet(t, consumerHandles[0], "read")
 
 		if err := host.Reload([]Facet{consumer("B")}); err != nil {
 			t.Fatalf("Reload failed: %v", err)
@@ -673,16 +673,16 @@ func TestFacetHost(t *testing.T) {
 		if consumerHandles[1] == consumerHandles[0] {
 			t.Fatal("expected new view on consumer reload")
 		}
-		if _, err := tsvcCall(consumerHandles[0], "read", BackgroundContext); err == nil || !strings.Contains(err.Error(), "Facet scoped-consumer service handles cannot be used while dead") {
+		if _, err := tservCall(consumerHandles[0], "read", BackgroundContext); err == nil || !strings.Contains(err.Error(), "Facet scoped-consumer service handles cannot be used while dead") {
 			t.Fatalf("expected dead guard on old consumer view, got %v", err)
 		}
-		if _, err := tsvcCall(retainedOldRead, "", BackgroundContext); err == nil || !strings.Contains(err.Error(), "Facet scoped-consumer service handles cannot be used while dead") {
+		if _, err := tservCall(retainedOldRead, "", BackgroundContext); err == nil || !strings.Contains(err.Error(), "Facet scoped-consumer service handles cannot be used while dead") {
 			t.Fatalf("expected dead guard on retained old read, got %v", err)
 		}
-		if res, err := tsvcCall(consumerHandles[1], "read", BackgroundContext); err != nil || res != "value" {
+		if res, err := tservCall(consumerHandles[1], "read", BackgroundContext); err != nil || res != "value" {
 			t.Fatalf("expected value on new view, got %v %v", res, err)
 		}
-		if res, err := tsvcCall(peerHandle, "read", BackgroundContext); err != nil || res != "value" {
+		if res, err := tservCall(peerHandle, "read", BackgroundContext); err != nil || res != "value" {
 			t.Fatalf("expected value on peer view, got %v %v", res, err)
 		}
 
@@ -690,10 +690,10 @@ func TestFacetHost(t *testing.T) {
 		if !reflect.DeepEqual(cleanupValues, []string{"A:value", "B:value"}) {
 			t.Fatalf("expected [A:value B:value], got %v", cleanupValues)
 		}
-		if _, err := tsvcCall(consumerHandles[1], "read", BackgroundContext); err == nil || !strings.Contains(err.Error(), "Facet scoped-consumer service handles cannot be used while dead") {
+		if _, err := tservCall(consumerHandles[1], "read", BackgroundContext); err == nil || !strings.Contains(err.Error(), "Facet scoped-consumer service handles cannot be used while dead") {
 			t.Fatalf("expected dead guard on consumerHandles[1], got %v", err)
 		}
-		if _, err := tsvcCall(peerHandle, "read", BackgroundContext); err == nil || !strings.Contains(err.Error(), "Facet peer-consumer service handles cannot be used while dead") {
+		if _, err := tservCall(peerHandle, "read", BackgroundContext); err == nil || !strings.Contains(err.Error(), "Facet peer-consumer service handles cannot be used while dead") {
 			t.Fatalf("expected dead guard on peerHandle, got %v", err)
 		}
 	})
@@ -706,7 +706,7 @@ func TestFacetHost(t *testing.T) {
 			Setup: func(env FacetEnvironment) error {
 				watched := env.Use(watchedSvc)
 				env.OnActivate(func() error {
-					unsub, err := tsvcStateSubscribe(t, tsvcMemberGet(t, watched, "state"), func(_ JsonValue, _ Context, _ ReplicatedStateDelivery) error {
+					unsub, err := tservStateSubscribe(t, tservMemberGet(t, watched, "state"), func(_ JsonValue, _ Context, _ ReplicatedStateDelivery) error {
 						deliveries++
 						return nil
 					})
@@ -725,8 +725,8 @@ func TestFacetHost(t *testing.T) {
 		provider := DefineFacet(Facet{
 			Id: "provider",
 			Setup: func(env FacetEnvironment) error {
-				st = env.ReplicatedState(tsvcObj("value", float64(0)))
-				env.Provide(watchedSvc, tsvcObj("state", st))
+				st = env.ReplicatedState(tservObj("value", float64(0)))
+				env.Provide(watchedSvc, tservObj("state", st))
 				return nil
 			},
 		})
@@ -755,7 +755,7 @@ func TestFacetHost(t *testing.T) {
 	})
 
 	t.Run("provides arbitrary host services through the facet graph", func(t *testing.T) {
-		values := &tfHostValues{Name: "session", Use: "host value"}
+		values := &tfacetsHostValues{Name: "session", Use: "host value"}
 		var checked bool
 		consumer := DefineFacet(Facet{
 			Id: "host-service-consumer",
@@ -796,25 +796,25 @@ func TestFacetHost(t *testing.T) {
 		if !checked {
 			t.Fatal("expected activation check to run")
 		}
-		if _, err := tfProviderUse(host, hostValuesSvc); err == nil || !strings.Contains(err.Error(), "Service test.experimental.host-values is process-local") {
+		if _, err := tfacetsProviderUse(host, hostValuesSvc); err == nil || !strings.Contains(err.Error(), "Service test.experimental.host-values is process-local") {
 			t.Fatalf("expected process-local error on host.Services().Use, got %v", err)
 		}
 		_ = host.Dispose()
 	})
 
 	t.Run("combines connected services and facet-provided services in one host", func(t *testing.T) {
-		leftProvider := tsvcMustProvider(t, tsvcEntry(leftValueSvc))
-		_ = leftProvider.Provide(leftValueSvc, tfReadImpl{
+		leftProvider := tservMustProvider(t, tservEntry(leftValueSvc))
+		_ = leftProvider.Provide(leftValueSvc, tfacetsReadImpl{
 			Read: func(_ Context) (string, error) { return "left", nil },
 		})
-		rightProvider := tsvcMustProvider(t, tsvcEntry(rightValueSvc))
-		_ = rightProvider.Provide(rightValueSvc, tfReadImpl{
+		rightProvider := tservMustProvider(t, tservEntry(rightValueSvc))
+		_ = rightProvider.Provide(rightValueSvc, tfacetsReadImpl{
 			Read: func(_ Context) (string, error) { return "right", nil },
 		})
 		leftNamespace, err := CreateRemoteServiceBinding(&RemoteServiceBindingOptions{
 			Services:  []ServiceRef{{Id: leftValueSvc.Id}},
 			Transport: CreateLoopbackServiceTransport(leftProvider),
-			Bound:     tfBoolPtr(false),
+			Bound:     tfacetsBoolPtr(false),
 		})
 		if err != nil {
 			t.Fatalf("leftNamespace failed: %v", err)
@@ -822,19 +822,19 @@ func TestFacetHost(t *testing.T) {
 		rightNamespace, err := CreateRemoteServiceBinding(&RemoteServiceBindingOptions{
 			Services:  []ServiceRef{{Id: rightValueSvc.Id}},
 			Transport: CreateLoopbackServiceTransport(rightProvider),
-			Bound:     tfBoolPtr(false),
+			Bound:     tfacetsBoolPtr(false),
 		})
 		if err != nil {
 			t.Fatalf("rightNamespace failed: %v", err)
 		}
 		wrapSource := func(ns RemoteServiceBinding, p *RemoteServiceProvider) RemoteServiceSource {
-			return &tfSource{
+			return &tfacetsSource{
 				acceptsUnavailable: false,
 				catalogueFn: func(_ Context) ([]ServiceCatalogueEntry, error) {
 					return p.Catalogue(), nil
 				},
 				openFn: func(_ *RemoteServiceSourceOpenOptions) RemoteServices {
-					return &tfCustomRemoteServices{
+					return &tfacetsCustomRemoteServices{
 						RemoteServices: ns,
 						readyFn: func(call Context) error {
 							if err := ns.Rebind(true, call); err != nil {
@@ -851,13 +851,13 @@ func TestFacetHost(t *testing.T) {
 			Setup: func(env FacetEnvironment) error {
 				left := env.Use(leftValueSvc)
 				right := env.Use(rightValueSvc)
-				env.Provide(combinedValueSvc, tfReadImpl{
+				env.Provide(combinedValueSvc, tfacetsReadImpl{
 					Read: func(ctx Context) (string, error) {
-						lv, err := tsvcCall(left, "read", ctx)
+						lv, err := tservCall(left, "read", ctx)
 						if err != nil {
 							return "", err
 						}
-						rv, err := tsvcCall(right, "read", ctx)
+						rv, err := tservCall(right, "read", ctx)
 						if err != nil {
 							return "", err
 						}
@@ -874,11 +874,11 @@ func TestFacetHost(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateFacetHost failed: %v", err)
 		}
-		combSvc, err := tfProviderUse(host, combinedValueSvc)
+		combSvc, err := tfacetsProviderUse(host, combinedValueSvc)
 		if err != nil {
 			t.Fatalf("host.Services().Use failed: %v", err)
 		}
-		if res, err := tsvcCall(combSvc, "read", BackgroundContext); err != nil || res != "left right" {
+		if res, err := tservCall(combSvc, "read", BackgroundContext); err != nil || res != "left right" {
 			t.Fatalf("expected 'left right', got %v %v", res, err)
 		}
 		_ = host.Dispose()
@@ -889,7 +889,7 @@ func TestFacetHost(t *testing.T) {
 	})
 
 	t.Run("rejects a service offered by multiple sources", func(t *testing.T) {
-		duplicate := &tfSource{
+		duplicate := &tfacetsSource{
 			acceptsUnavailable: false,
 			catalogueFn: func(_ Context) ([]ServiceCatalogueEntry, error) {
 				return []ServiceCatalogueEntry{{ServiceId: leftValueSvc.Id, Mode: ServiceModeSingleton}}, nil
@@ -913,14 +913,14 @@ func TestFacetHost(t *testing.T) {
 	})
 
 	t.Run("reopens source bindings from changed catalogues for a replacement generation", func(t *testing.T) {
-		leftProvider := tsvcMustProvider(t, tsvcEntry(leftValueSvc))
-		_ = leftProvider.Provide(leftValueSvc, tfReadImpl{Read: func(_ Context) (string, error) { return "left", nil }})
-		rightProvider := tsvcMustProvider(t, tsvcEntry(rightValueSvc))
-		_ = rightProvider.Provide(rightValueSvc, tfReadImpl{Read: func(_ Context) (string, error) { return "right", nil }})
+		leftProvider := tservMustProvider(t, tservEntry(leftValueSvc))
+		_ = leftProvider.Provide(leftValueSvc, tfacetsReadImpl{Read: func(_ Context) (string, error) { return "left", nil }})
+		rightProvider := tservMustProvider(t, tservEntry(rightValueSvc))
+		_ = rightProvider.Provide(rightValueSvc, tfacetsReadImpl{Read: func(_ Context) (string, error) { return "right", nil }})
 		currentProvider := leftProvider
 		opened := 0
 		disposed := 0
-		src := &tfSource{
+		src := &tfacetsSource{
 			acceptsUnavailable: false,
 			catalogueFn: func(_ Context) ([]ServiceCatalogueEntry, error) {
 				return currentProvider.Catalogue(), nil
@@ -930,14 +930,14 @@ func TestFacetHost(t *testing.T) {
 				ns, err := CreateRemoteServiceBinding(&RemoteServiceBindingOptions{
 					Services:     options.Services,
 					Transport:    CreateLoopbackServiceTransport(currentProvider),
-					Bound:        tfBoolPtr(false),
+					Bound:        tfacetsBoolPtr(false),
 					AssertAccess: options.AssertAccess,
 					OnError:      options.OnError,
 				})
 				if err != nil {
 					panic(err)
 				}
-				return &tfCustomRemoteServices{
+				return &tfacetsCustomRemoteServices{
 					RemoteServices: ns,
 					readyFn: func(call Context) error {
 						if err := ns.Rebind(true, call); err != nil {
@@ -958,7 +958,7 @@ func TestFacetHost(t *testing.T) {
 			Setup: func(env FacetEnvironment) error {
 				left := env.Use(leftValueSvc)
 				env.OnActivate(func() error {
-					res, err := tsvcCall(left, "read", BackgroundContext)
+					res, err := tservCall(left, "read", BackgroundContext)
 					if err != nil {
 						return err
 					}
@@ -980,7 +980,7 @@ func TestFacetHost(t *testing.T) {
 			Setup: func(env FacetEnvironment) error {
 				right := env.Use(rightValueSvc)
 				env.OnActivate(func() error {
-					res, err := tsvcCall(right, "read", BackgroundContext)
+					res, err := tservCall(right, "read", BackgroundContext)
 					if err != nil {
 						return err
 					}
@@ -1031,7 +1031,7 @@ func TestFacetHost(t *testing.T) {
 			Id: "first",
 			Setup: func(env FacetEnvironment) error {
 				env.Use(projectionSvc)
-				env.Provide(sourceSvc, tfReadImpl{Read: func(_ Context) (string, error) { return "first", nil }})
+				env.Provide(sourceSvc, tfacetsReadImpl{Read: func(_ Context) (string, error) { return "first", nil }})
 				return nil
 			},
 		})
@@ -1039,7 +1039,7 @@ func TestFacetHost(t *testing.T) {
 			Id: "second",
 			Setup: func(env FacetEnvironment) error {
 				env.Use(sourceSvc)
-				env.Provide(projectionSvc, tfReadImpl{Read: func(_ Context) (string, error) { return "second", nil }})
+				env.Provide(projectionSvc, tfacetsReadImpl{Read: func(_ Context) (string, error) { return "second", nil }})
 				return nil
 			},
 		})

@@ -11,11 +11,11 @@ import (
 	"github.com/keejkrej/pi-go/internal/omap"
 )
 
-func tsObj(kv ...any) *jsonx.Object {
+func tstateObj(kv ...any) *jsonx.Object {
 	return jsonx.ObjectOf(kv...)
 }
 
-func tsMustJson(t *testing.T, v any) string {
+func tstateMustJson(t *testing.T, v any) string {
 	t.Helper()
 	b, err := jsonx.Marshal(v)
 	if err != nil {
@@ -24,7 +24,7 @@ func tsMustJson(t *testing.T, v any) string {
 	return string(b)
 }
 
-func tsMustState(t *testing.T, initial any) MutableReplicatedState[any] {
+func tstateMustState(t *testing.T, initial any) MutableReplicatedState[any] {
 	t.Helper()
 	s, err := NewReplicatedState(initial)
 	if err != nil {
@@ -34,8 +34,8 @@ func tsMustState(t *testing.T, initial any) MutableReplicatedState[any] {
 }
 
 func TestReplicatedStatePublishAndStructuralSharing(t *testing.T) {
-	initial := tsObj("changed", tsObj("value", float64(1)), "retained", tsObj("value", float64(2)))
-	state := tsMustState(t, initial)
+	initial := tstateObj("changed", tstateObj("value", float64(1)), "retained", tstateObj("value", float64(2)))
+	state := tstateMustState(t, initial)
 	prevRaw, ok := state.Value()
 	if !ok {
 		t.Fatal("expected state Value() ok")
@@ -63,7 +63,7 @@ func TestReplicatedStatePublishAndStructuralSharing(t *testing.T) {
 
 	curRaw, _ := state.Value()
 	cur := curRaw.(*jsonx.Object)
-	if got := tsMustJson(t, cur); got != `{"changed":{"value":4},"retained":{"value":2}}` {
+	if got := tstateMustJson(t, cur); got != `{"changed":{"value":4},"retained":{"value":2}}` {
 		t.Fatalf("unexpected value JSON: %s", got)
 	}
 	if cur == prev {
@@ -83,7 +83,7 @@ func TestReplicatedStatePublishAndStructuralSharing(t *testing.T) {
 }
 
 func TestReplicatedStateRollbackAndDraftRevocation(t *testing.T) {
-	state := tsMustState(t, tsObj("nested", tsObj("value", float64(1))))
+	state := tstateMustState(t, tstateObj("nested", tstateObj("value", float64(1))))
 	prev, _ := state.Value()
 	var escaped *jsonx.Object
 	err := state.Change(BackgroundContext, func(draft Draft[any]) error {
@@ -100,7 +100,7 @@ func TestReplicatedStateRollbackAndDraftRevocation(t *testing.T) {
 	if cur != prev {
 		t.Fatal("expected exact previous root after rollback")
 	}
-	if got := tsMustJson(t, cur); got != `{"nested":{"value":1}}` {
+	if got := tstateMustJson(t, cur); got != `{"nested":{"value":1}}` {
 		t.Fatalf("expected untouched previous JSON, got %s", got)
 	}
 	// Escaped draft is detached/revoked from further state mutation; Verify Set on escaped does not alter state.
@@ -108,13 +108,13 @@ func TestReplicatedStateRollbackAndDraftRevocation(t *testing.T) {
 		escaped.Set("value", float64(999))
 	}
 	afterCur, _ := state.Value()
-	if got := tsMustJson(t, afterCur); got != `{"nested":{"value":1}}` {
+	if got := tstateMustJson(t, afterCur); got != `{"nested":{"value":1}}` {
 		t.Fatalf("escaped draft write mutated committed state: %s", got)
 	}
 }
 
 func TestReplicatedStateRejectsNestedChangesAndReplacements(t *testing.T) {
-	state := tsMustState(t, tsObj("left", float64(0), "right", float64(0)))
+	state := tstateMustState(t, tstateObj("left", float64(0), "right", float64(0)))
 
 	err := state.Change(BackgroundContext, func(draft Draft[any]) error {
 		root := draft.Value.(*jsonx.Object)
@@ -128,24 +128,24 @@ func TestReplicatedStateRejectsNestedChangesAndReplacements(t *testing.T) {
 		t.Fatalf("expected reentrant change error, got %v", err)
 	}
 	val, _ := state.Value()
-	if got := tsMustJson(t, val); got != `{"left":0,"right":0}` {
+	if got := tstateMustJson(t, val); got != `{"left":0,"right":0}` {
 		t.Fatalf("expected rollback on nested change, got %s", got)
 	}
 
 	err = state.Change(BackgroundContext, func(_ Draft[any]) error {
-		return state.Replace(BackgroundContext, tsObj("left", float64(1), "right", float64(2)))
+		return state.Replace(BackgroundContext, tstateObj("left", float64(1), "right", float64(2)))
 	})
 	if err == nil || !strings.Contains(err.Error(), "change callback") {
 		t.Fatalf("expected replace-in-change error, got %v", err)
 	}
 	val, _ = state.Value()
-	if got := tsMustJson(t, val); got != `{"left":0,"right":0}` {
+	if got := tstateMustJson(t, val); got != `{"left":0,"right":0}` {
 		t.Fatalf("expected rollback on nested replace, got %s", got)
 	}
 }
 
 func TestReplicatedStateQueuesListenerTriggeredChangesInSequenceOrder(t *testing.T) {
-	state := tsMustState(t, tsObj("value", float64(0)))
+	state := tstateMustState(t, tstateObj("value", float64(0)))
 	var sourceSequences []int
 	type delivRec struct {
 		value    float64
@@ -210,7 +210,7 @@ func TestReplicatedStateQueuesListenerTriggeredChangesInSequenceOrder(t *testing
 }
 
 func TestReplicatedStateIsolatesListenerFailuresAfterCommit(t *testing.T) {
-	state := tsMustState(t, tsObj("value", float64(0)))
+	state := tstateMustState(t, tstateObj("value", float64(0)))
 	var received []int
 	internals := GetReplicatedStateInternals(state)
 	internals.Subscribe(func(_ OpList, _ int, _ Context) error {
@@ -229,7 +229,7 @@ func TestReplicatedStateIsolatesListenerFailuresAfterCommit(t *testing.T) {
 		t.Fatalf("expected listener failed error, got %v", err)
 	}
 	val, _ := state.Value()
-	if got := tsMustJson(t, val); got != `{"value":1}` {
+	if got := tstateMustJson(t, val); got != `{"value":1}` {
 		t.Fatalf("expected state value 1 after listener error, got %s", got)
 	}
 	if len(received) != 1 || received[0] != 1 {
@@ -238,8 +238,8 @@ func TestReplicatedStateIsolatesListenerFailuresAfterCommit(t *testing.T) {
 }
 
 func TestReplicatedStateCopiesAssignedValuesByValue(t *testing.T) {
-	external := tsObj("value", float64(1))
-	state := tsMustState(t, tsObj("left", nil, "right", nil))
+	external := tstateObj("value", float64(1))
+	state := tstateMustState(t, tstateObj("left", nil, "right", nil))
 	if err := state.Change(BackgroundContext, func(draft Draft[any]) error {
 		root := draft.Value.(*jsonx.Object)
 		root.Set("left", external)
@@ -257,7 +257,7 @@ func TestReplicatedStateCopiesAssignedValuesByValue(t *testing.T) {
 		t.Fatalf("Change 2 failed: %v", err)
 	}
 	val, _ := state.Value()
-	if got := tsMustJson(t, val); got != `{"left":{"value":2},"right":{"value":1}}` {
+	if got := tstateMustJson(t, val); got != `{"left":{"value":2},"right":{"value":1}}` {
 		t.Fatalf("unexpected state JSON: %s", got)
 	}
 	leftPtr, _ := val.(*jsonx.Object).Get("left")
@@ -268,11 +268,11 @@ func TestReplicatedStateCopiesAssignedValuesByValue(t *testing.T) {
 }
 
 func TestReplicatedStateTakesImmutableOwnershipOfAliasFreeReplacements(t *testing.T) {
-	state := tsMustState(t, tsObj("left", tsObj("value", float64(1)), "right", tsObj("value", float64(2))))
+	state := tstateMustState(t, tstateObj("left", tstateObj("value", float64(1)), "right", tstateObj("value", float64(2))))
 	curRaw, _ := state.Value()
 	curLeft, _ := curRaw.(*jsonx.Object).Get("left")
 	curLeftVal, _ := curLeft.(*jsonx.Object).Get("value")
-	replacement := tsObj("left", tsObj("value", curLeftVal), "right", tsObj("value", curLeftVal))
+	replacement := tstateObj("left", tstateObj("value", curLeftVal), "right", tstateObj("value", curLeftVal))
 
 	if err := state.Replace(BackgroundContext, replacement); err != nil {
 		t.Fatalf("Replace failed: %v", err)
@@ -294,19 +294,19 @@ func TestReplicatedStateTakesImmutableOwnershipOfAliasFreeReplacements(t *testin
 		t.Fatalf("Change failed: %v", err)
 	}
 	after, _ := state.Value()
-	if got := tsMustJson(t, after); got != `{"left":{"value":9},"right":{"value":1}}` {
+	if got := tstateMustJson(t, after); got != `{"left":{"value":9},"right":{"value":1}}` {
 		t.Fatalf("unexpected state after change: %s", got)
 	}
 }
 
 func TestReplicatedStatePreservesCompactOps(t *testing.T) {
-	a := tsObj("id", "a")
-	b := tsObj("id", "b")
-	c := tsObj("id", "c")
-	state := tsMustState(t, tsObj("text", "abcdefgh", "values", []any{a, b, c}))
+	a := tstateObj("id", "a")
+	b := tstateObj("id", "b")
+	c := tstateObj("id", "c")
+	state := tstateMustState(t, tstateObj("text", "abcdefgh", "values", []any{a, b, c}))
 	var batches []string
 	GetReplicatedStateInternals(state).Subscribe(func(ops OpList, _ int, _ Context) error {
-		batches = append(batches, tsMustJson(t, ops))
+		batches = append(batches, tstateMustJson(t, ops))
 		return nil
 	})
 	if err := state.Change(BackgroundContext, func(draft Draft[any]) error {
@@ -337,8 +337,8 @@ func TestReplicatedStatePreservesCompactOps(t *testing.T) {
 
 func TestReplicatedStateReplicaValidatesWithoutCopy(t *testing.T) {
 	replica := NewReplicatedStateReplica[any](func(error) {})
-	row0 := tsObj("value", float64(1))
-	initial := tsObj("rows", []any{row0})
+	row0 := tstateObj("value", float64(1))
+	initial := tstateObj("rows", []any{row0})
 	if err := replica.Hydrate(0, OpList{OpReplace{Value: initial}}, BackgroundContext); err != nil {
 		t.Fatalf("Hydrate failed: %v", err)
 	}
@@ -347,7 +347,7 @@ func TestReplicatedStateReplicaValidatesWithoutCopy(t *testing.T) {
 		t.Fatal("expected exact initial root on replica")
 	}
 
-	inserted := tsObj("value", float64(2))
+	inserted := tstateObj("value", float64(2))
 	if err := replica.Update(1, OpList{
 		OpSplice{Path: Path{SegString("rows")}, Index: 1, Remove: 0, Items: []JsonValue{inserted}},
 	}, BackgroundContext); err != nil {
@@ -372,7 +372,7 @@ func TestReplicatedStateReplicaValidatesWithoutCopy(t *testing.T) {
 func TestReplicatedStateReplicaClearsOnInvalidUpdate(t *testing.T) {
 	var reported []error
 	replica := NewReplicatedStateReplica[any](func(err error) { reported = append(reported, err) })
-	if err := replica.Hydrate(0, OpList{OpReplace{Value: tsObj("value", float64(0))}}, BackgroundContext); err != nil {
+	if err := replica.Hydrate(0, OpList{OpReplace{Value: tstateObj("value", float64(0))}}, BackgroundContext); err != nil {
 		t.Fatalf("Hydrate failed: %v", err)
 	}
 	err := replica.Update(1, OpList{OpSet{Path: Path{SegString("value")}, Value: math.NaN()}}, BackgroundContext)
@@ -388,7 +388,7 @@ func TestReplicatedStateReplicaClearsOnInvalidUpdate(t *testing.T) {
 	}
 
 	malformed := NewReplicatedStateReplica[any](func(err error) { reported = append(reported, err) })
-	if err := malformed.Hydrate(0, OpList{OpReplace{Value: tsObj("values", []any{float64(1), float64(2)})}}, BackgroundContext); err != nil {
+	if err := malformed.Hydrate(0, OpList{OpReplace{Value: tstateObj("values", []any{float64(1), float64(2)})}}, BackgroundContext); err != nil {
 		t.Fatalf("Hydrate failed: %v", err)
 	}
 	if err := malformed.Update(1, OpList{OpMove{Path: Path{SegString("values")}, Permutation: []int{0}}}, BackgroundContext); err == nil {
@@ -403,22 +403,22 @@ func TestReplicatedStateReplicaClearsOnInvalidUpdate(t *testing.T) {
 }
 
 func TestReplicatedStateReplacesAtomicallyAndIgnoresDeepEqual(t *testing.T) {
-	retained := tsObj("nested", float64(2))
-	state := tsMustState(t, tsObj("value", tsObj("nested", float64(1)), "retained", retained))
+	retained := tstateObj("nested", float64(2))
+	state := tstateMustState(t, tstateObj("value", tstateObj("nested", float64(1)), "retained", retained))
 	prev, _ := state.Value()
-	if err := state.Replace(BackgroundContext, tsObj("value", tsObj("nested", float64(1)), "retained", tsObj("nested", float64(2)))); err != nil {
+	if err := state.Replace(BackgroundContext, tstateObj("value", tstateObj("nested", float64(1)), "retained", tstateObj("nested", float64(2)))); err != nil {
 		t.Fatalf("deep-equal Replace failed: %v", err)
 	}
 	cur, _ := state.Value()
 	if cur != prev {
 		t.Fatal("expected deep-equal replacement to keep exact previous root")
 	}
-	if err := state.Replace(BackgroundContext, tsObj("value", tsObj("nested", float64(2)), "retained", retained)); err != nil {
+	if err := state.Replace(BackgroundContext, tstateObj("value", tstateObj("nested", float64(2)), "retained", retained)); err != nil {
 		t.Fatalf("Replace failed: %v", err)
 	}
 	afterRaw, _ := state.Value()
 	after := afterRaw.(*jsonx.Object)
-	if got := tsMustJson(t, after); got != `{"value":{"nested":2},"retained":{"nested":2}}` {
+	if got := tstateMustJson(t, after); got != `{"value":{"nested":2},"retained":{"nested":2}}` {
 		t.Fatalf("unexpected replaced JSON: %s", got)
 	}
 	afterRetained, _ := after.Get("retained")
@@ -427,23 +427,23 @@ func TestReplicatedStateReplacesAtomicallyAndIgnoresDeepEqual(t *testing.T) {
 	}
 }
 
-type tsSourceValue = *jsonx.Object
+type tstateSourceValue = *jsonx.Object
 
-type tsTestSourceAttachment struct {
+type tstateTestSourceAttachment struct {
 	mu        sync.Mutex
-	snapshot  ReplicatedStateSourceSnapshot[tsSourceValue]
+	snapshot  ReplicatedStateSourceSnapshot[tstateSourceValue]
 	onDispose func()
-	buffer    []ReplicatedStateSourceFrame[tsSourceValue]
-	listener  func(ReplicatedStateSourceFrame[tsSourceValue])
+	buffer    []ReplicatedStateSourceFrame[tstateSourceValue]
+	listener  func(ReplicatedStateSourceFrame[tstateSourceValue])
 	activated bool
 	disposed  bool
 }
 
-func (a *tsTestSourceAttachment) Snapshot() ReplicatedStateSourceSnapshot[tsSourceValue] {
+func (a *tstateTestSourceAttachment) Snapshot() ReplicatedStateSourceSnapshot[tstateSourceValue] {
 	return a.snapshot
 }
 
-func (a *tsTestSourceAttachment) Activate(listener func(frame ReplicatedStateSourceFrame[tsSourceValue])) {
+func (a *tstateTestSourceAttachment) Activate(listener func(frame ReplicatedStateSourceFrame[tstateSourceValue])) {
 	a.mu.Lock()
 	if a.activated {
 		a.mu.Unlock()
@@ -460,7 +460,7 @@ func (a *tsTestSourceAttachment) Activate(listener func(frame ReplicatedStateSou
 	}
 }
 
-func (a *tsTestSourceAttachment) publish(frame ReplicatedStateSourceFrame[tsSourceValue]) {
+func (a *tstateTestSourceAttachment) publish(frame ReplicatedStateSourceFrame[tstateSourceValue]) {
 	a.mu.Lock()
 	if a.disposed {
 		a.mu.Unlock()
@@ -476,7 +476,7 @@ func (a *tsTestSourceAttachment) publish(frame ReplicatedStateSourceFrame[tsSour
 	l(frame)
 }
 
-func (a *tsTestSourceAttachment) Dispose() {
+func (a *tstateTestSourceAttachment) Dispose() {
 	a.mu.Lock()
 	if a.disposed {
 		a.mu.Unlock()
@@ -491,27 +491,27 @@ func (a *tsTestSourceAttachment) Dispose() {
 	}
 }
 
-type tsTestSource struct {
+type tstateTestSource struct {
 	mu          sync.Mutex
-	attachments *omap.Set[*tsTestSourceAttachment]
+	attachments *omap.Set[*tstateTestSourceAttachment]
 	onAttach    func()
-	value       tsSourceValue
+	value       tstateSourceValue
 	cursor      int
 }
 
-func tsNewTestSource(value tsSourceValue, cursor int) *tsTestSource {
-	return &tsTestSource{
-		attachments: omap.NewSet[*tsTestSourceAttachment](),
+func tstateNewTestSource(value tstateSourceValue, cursor int) *tstateTestSource {
+	return &tstateTestSource{
+		attachments: omap.NewSet[*tstateTestSourceAttachment](),
 		value:       value,
 		cursor:      cursor,
 	}
 }
 
-func (s *tsTestSource) Attach() ReplicatedStateSourceAttachment[tsSourceValue] {
+func (s *tstateTestSource) Attach() ReplicatedStateSourceAttachment[tstateSourceValue] {
 	s.mu.Lock()
-	var att *tsTestSourceAttachment
-	att = &tsTestSourceAttachment{
-		snapshot: ReplicatedStateSourceSnapshot[tsSourceValue]{Value: s.value, Cursor: s.cursor},
+	var att *tstateTestSourceAttachment
+	att = &tstateTestSourceAttachment{
+		snapshot: ReplicatedStateSourceSnapshot[tstateSourceValue]{Value: s.value, Cursor: s.cursor},
 		onDispose: func() {
 			s.mu.Lock()
 			s.attachments.Delete(att)
@@ -528,7 +528,7 @@ func (s *tsTestSource) Attach() ReplicatedStateSourceAttachment[tsSourceValue] {
 	return att
 }
 
-func (s *tsTestSource) commit(value tsSourceValue, ops OpList, ctx Context, customCursor *int) {
+func (s *tstateTestSource) commit(value tstateSourceValue, ops OpList, ctx Context, customCursor *int) {
 	if ctx == nil {
 		ctx = BackgroundContext
 	}
@@ -539,7 +539,7 @@ func (s *tsTestSource) commit(value tsSourceValue, ops OpList, ctx Context, cust
 	}
 	s.value = value
 	s.cursor = nextCursor
-	frame := ReplicatedStateSourceFrame[tsSourceValue]{
+	frame := ReplicatedStateSourceFrame[tstateSourceValue]{
 		Cursor:  nextCursor,
 		Value:   value,
 		Ops:     ops,
@@ -554,27 +554,27 @@ func (s *tsTestSource) commit(value tsSourceValue, ops OpList, ctx Context, cust
 }
 
 func TestAuthoritativeSourceCapturesBeforeActivationAndDrainsQueuedCommits(t *testing.T) {
-	initial := tsObj("value", float64(0))
-	first := tsObj("value", float64(1))
-	second := tsObj("value", float64(2))
+	initial := tstateObj("value", float64(0))
+	first := tstateObj("value", float64(1))
+	second := tstateObj("value", float64(2))
 	firstOps := OpList{OpSet{Path: Path{SegString("value")}, Value: float64(1)}}
 	secondOps := OpList{OpSet{Path: Path{SegString("value")}, Value: float64(2)}}
-	source := tsNewTestSource(initial, 10)
+	source := tstateNewTestSource(initial, 10)
 	source.onAttach = func() {
 		source.commit(first, firstOps, nil, nil)
 		source.commit(second, secondOps, nil, nil)
 	}
 
-	state, err := NewReplicatedStateSource[tsSourceValue](source, nil)
+	state, err := NewReplicatedStateSource[tstateSourceValue](source, nil)
 	if err != nil {
 		t.Fatalf("NewReplicatedStateSource failed: %v", err)
 	}
 	type deliv struct {
-		value tsSourceValue
+		value tstateSourceValue
 		seq   int
 	}
 	var deliveries []deliv
-	state.Subscribe(func(value tsSourceValue, _ Context, d ReplicatedStateDelivery) error {
+	state.Subscribe(func(value tstateSourceValue, _ Context, d ReplicatedStateDelivery) error {
 		deliveries = append(deliveries, deliv{value: value, seq: d.Sequence})
 		return nil
 	})
@@ -592,17 +592,17 @@ func TestAuthoritativeSourceCapturesBeforeActivationAndDrainsQueuedCommits(t *te
 }
 
 func TestAuthoritativeSourceHydratesAtZeroAfterPriorCommits(t *testing.T) {
-	initial := tsObj("value", float64(0))
-	current := tsObj("value", float64(1))
-	source := tsNewTestSource(initial, 40)
+	initial := tstateObj("value", float64(0))
+	current := tstateObj("value", float64(1))
+	source := tstateNewTestSource(initial, 40)
 	source.commit(current, OpList{OpSet{Path: Path{SegString("value")}, Value: float64(1)}}, nil, nil)
 
-	state, err := NewReplicatedStateSource[tsSourceValue](source, nil)
+	state, err := NewReplicatedStateSource[tstateSourceValue](source, nil)
 	if err != nil {
 		t.Fatalf("NewReplicatedStateSource failed: %v", err)
 	}
 	var deliveries []int
-	state.Subscribe(func(_ tsSourceValue, _ Context, d ReplicatedStateDelivery) error {
+	state.Subscribe(func(_ tstateSourceValue, _ Context, d ReplicatedStateDelivery) error {
 		deliveries = append(deliveries, d.Sequence)
 		return nil
 	})
@@ -616,20 +616,20 @@ func TestAuthoritativeSourceHydratesAtZeroAfterPriorCommits(t *testing.T) {
 }
 
 func TestAuthoritativeSourcePublishesExactReferences(t *testing.T) {
-	source := tsNewTestSource(tsObj("value", float64(0)), 0)
-	state, err := NewReplicatedStateSource[tsSourceValue](source, nil)
+	source := tstateNewTestSource(tstateObj("value", float64(0)), 0)
+	state, err := NewReplicatedStateSource[tstateSourceValue](source, nil)
 	if err != nil {
 		t.Fatalf("NewReplicatedStateSource failed: %v", err)
 	}
-	next := tsObj("value", float64(1))
+	next := tstateObj("value", float64(1))
 	ops := OpList{OpSet{Path: Path{SegString("value")}, Value: float64(1)}}
 	var publishedOps OpList
 	GetReplicatedStateInternals(state).Subscribe(func(received OpList, _ int, _ Context) error {
 		publishedOps = received
 		return nil
 	})
-	var publishedValue tsSourceValue
-	state.Subscribe(func(value tsSourceValue, _ Context, d ReplicatedStateDelivery) error {
+	var publishedValue tstateSourceValue
+	state.Subscribe(func(value tstateSourceValue, _ Context, d ReplicatedStateDelivery) error {
 		if d.Kind == ReplicatedStateDeliveryKindUpdate {
 			publishedValue = value
 		}
@@ -641,14 +641,14 @@ func TestAuthoritativeSourcePublishesExactReferences(t *testing.T) {
 	if cur != next || publishedValue != next {
 		t.Fatal("expected exact pointer reference for committed value")
 	}
-	if len(publishedOps) != len(ops) || tsMustJson(t, publishedOps) != tsMustJson(t, ops) {
+	if len(publishedOps) != len(ops) || tstateMustJson(t, publishedOps) != tstateMustJson(t, ops) {
 		t.Fatalf("expected exact ops, got %v", publishedOps)
 	}
 }
 
 func TestAuthoritativeSourceBuffersReentrantFramesAndSkipsCoveredUpdates(t *testing.T) {
-	source := tsNewTestSource(tsObj("value", float64(0)), 0)
-	state, err := NewReplicatedStateSource[tsSourceValue](source, nil)
+	source := tstateNewTestSource(tstateObj("value", float64(0)), 0)
+	state, err := NewReplicatedStateSource[tstateSourceValue](source, nil)
 	if err != nil {
 		t.Fatalf("NewReplicatedStateSource failed: %v", err)
 	}
@@ -665,15 +665,15 @@ func TestAuthoritativeSourceBuffersReentrantFramesAndSkipsCoveredUpdates(t *test
 			return nil
 		}
 		nested = true
-		source.commit(tsObj("value", float64(2)), OpList{OpSet{Path: Path{SegString("value")}, Value: float64(2)}}, nil, nil)
-		state.Subscribe(func(value tsSourceValue, _ Context, d ReplicatedStateDelivery) error {
+		source.commit(tstateObj("value", float64(2)), OpList{OpSet{Path: Path{SegString("value")}, Value: float64(2)}}, nil, nil)
+		state.Subscribe(func(value tstateSourceValue, _ Context, d ReplicatedStateDelivery) error {
 			v, _ := value.Get("value")
 			late = append(late, lateRec{delivery: d, value: v.(float64)})
 			return nil
 		})
 		return nil
 	})
-	state.Subscribe(func(value tsSourceValue, _ Context, d ReplicatedStateDelivery) error {
+	state.Subscribe(func(value tstateSourceValue, _ Context, d ReplicatedStateDelivery) error {
 		if d.Kind == ReplicatedStateDeliveryKindUpdate {
 			v, _ := value.Get("value")
 			received = append(received, v.(float64))
@@ -681,7 +681,7 @@ func TestAuthoritativeSourceBuffersReentrantFramesAndSkipsCoveredUpdates(t *test
 		return nil
 	})
 
-	source.commit(tsObj("value", float64(1)), OpList{OpSet{Path: Path{SegString("value")}, Value: float64(1)}}, nil, nil)
+	source.commit(tstateObj("value", float64(1)), OpList{OpSet{Path: Path{SegString("value")}, Value: float64(1)}}, nil, nil)
 	if len(received) != 2 || received[0] != 1 || received[1] != 2 {
 		t.Fatalf("expected received [1 2], got %v", received)
 	}
@@ -691,22 +691,22 @@ func TestAuthoritativeSourceBuffersReentrantFramesAndSkipsCoveredUpdates(t *test
 }
 
 func TestAuthoritativeSourceReportsListenerFailuresWithoutThrowing(t *testing.T) {
-	source := tsNewTestSource(tsObj("value", float64(0)), 0)
+	source := tstateNewTestSource(tstateObj("value", float64(0)), 0)
 	var errs []error
-	state, err := NewReplicatedStateSource[tsSourceValue](source, &ReplicatedStateSourceOptions{
+	state, err := NewReplicatedStateSource[tstateSourceValue](source, &ReplicatedStateSourceOptions{
 		OnError: func(e error) { errs = append(errs, e) },
 	})
 	if err != nil {
 		t.Fatalf("NewReplicatedStateSource failed: %v", err)
 	}
 	var received []float64
-	state.Subscribe(func(_ tsSourceValue, _ Context, d ReplicatedStateDelivery) error {
+	state.Subscribe(func(_ tstateSourceValue, _ Context, d ReplicatedStateDelivery) error {
 		if d.Kind == ReplicatedStateDeliveryKindUpdate {
 			return errors.New("listener failed")
 		}
 		return nil
 	})
-	state.Subscribe(func(value tsSourceValue, _ Context, d ReplicatedStateDelivery) error {
+	state.Subscribe(func(value tstateSourceValue, _ Context, d ReplicatedStateDelivery) error {
 		if d.Kind == ReplicatedStateDeliveryKindUpdate {
 			v, _ := value.Get("value")
 			received = append(received, v.(float64))
@@ -714,8 +714,8 @@ func TestAuthoritativeSourceReportsListenerFailuresWithoutThrowing(t *testing.T)
 		return nil
 	})
 
-	source.commit(tsObj("value", float64(1)), OpList{OpSet{Path: Path{SegString("value")}, Value: float64(1)}}, nil, nil)
-	source.commit(tsObj("value", float64(2)), OpList{OpSet{Path: Path{SegString("value")}, Value: float64(2)}}, nil, nil)
+	source.commit(tstateObj("value", float64(1)), OpList{OpSet{Path: Path{SegString("value")}, Value: float64(1)}}, nil, nil)
+	source.commit(tstateObj("value", float64(2)), OpList{OpSet{Path: Path{SegString("value")}, Value: float64(2)}}, nil, nil)
 	if len(received) != 2 || received[0] != 1 || received[1] != 2 {
 		t.Fatalf("expected received [1 2], got %v", received)
 	}
@@ -725,16 +725,16 @@ func TestAuthoritativeSourceReportsListenerFailuresWithoutThrowing(t *testing.T)
 }
 
 func TestAuthoritativeSourceReportsCursorGapsAndDisposes(t *testing.T) {
-	source := tsNewTestSource(tsObj("value", float64(0)), 5)
+	source := tstateNewTestSource(tstateObj("value", float64(0)), 5)
 	var errs []error
-	state, err := NewReplicatedStateSource[tsSourceValue](source, &ReplicatedStateSourceOptions{
+	state, err := NewReplicatedStateSource[tstateSourceValue](source, &ReplicatedStateSourceOptions{
 		OnError: func(e error) { errs = append(errs, e) },
 	})
 	if err != nil {
 		t.Fatalf("NewReplicatedStateSource failed: %v", err)
 	}
 	c7 := 7
-	source.commit(tsObj("value", float64(2)), OpList{OpSet{Path: Path{SegString("value")}, Value: float64(2)}}, BackgroundContext, &c7)
+	source.commit(tstateObj("value", float64(2)), OpList{OpSet{Path: Path{SegString("value")}, Value: float64(2)}}, BackgroundContext, &c7)
 	if len(errs) == 0 || !strings.Contains(errs[0].Error(), "expected 6, received 7") {
 		t.Fatalf("expected gap error mentioning 'expected 6, received 7', got %v", errs)
 	}
@@ -742,31 +742,31 @@ func TestAuthoritativeSourceReportsCursorGapsAndDisposes(t *testing.T) {
 		t.Fatalf("expected 0 remaining attachments, got %d", source.attachments.Len())
 	}
 	v, _ := state.Value()
-	if got := tsMustJson(t, v); got != `{"value":0}` {
+	if got := tstateMustJson(t, v); got != `{"value":0}` {
 		t.Fatalf("expected original value preserved, got %s", got)
 	}
 	c8 := 8
-	source.commit(tsObj("value", float64(3)), OpList{OpSet{Path: Path{SegString("value")}, Value: float64(3)}}, BackgroundContext, &c8)
+	source.commit(tstateObj("value", float64(3)), OpList{OpSet{Path: Path{SegString("value")}, Value: float64(3)}}, BackgroundContext, &c8)
 	v2, _ := state.Value()
-	if got := tsMustJson(t, v2); got != `{"value":0}` {
+	if got := tstateMustJson(t, v2); got != `{"value":0}` {
 		t.Fatalf("expected ignored later frame, got %s", got)
 	}
 }
 
 func TestAuthoritativeSourceIndependentAttachmentsAndIdempotentDispose(t *testing.T) {
-	source := tsNewTestSource(tsObj("value", float64(0)), 0)
-	first, err := NewReplicatedStateSource[tsSourceValue](source, nil)
+	source := tstateNewTestSource(tstateObj("value", float64(0)), 0)
+	first, err := NewReplicatedStateSource[tstateSourceValue](source, nil)
 	if err != nil {
 		t.Fatalf("first attach failed: %v", err)
 	}
-	second, err := NewReplicatedStateSource[tsSourceValue](source, nil)
+	second, err := NewReplicatedStateSource[tstateSourceValue](source, nil)
 	if err != nil {
 		t.Fatalf("second attach failed: %v", err)
 	}
 	if source.attachments.Len() != 2 {
 		t.Fatalf("expected 2 attachments, got %d", source.attachments.Len())
 	}
-	source.commit(tsObj("value", float64(1)), OpList{OpSet{Path: Path{SegString("value")}, Value: float64(1)}}, nil, nil)
+	source.commit(tstateObj("value", float64(1)), OpList{OpSet{Path: Path{SegString("value")}, Value: float64(1)}}, nil, nil)
 	v1, _ := first.Value()
 	v2, _ := second.Value()
 	if n1, _ := v1.Get("value"); n1 != float64(1) {
@@ -781,7 +781,7 @@ func TestAuthoritativeSourceIndependentAttachmentsAndIdempotentDispose(t *testin
 	if source.attachments.Len() != 1 {
 		t.Fatalf("expected 1 attachment after first dispose, got %d", source.attachments.Len())
 	}
-	source.commit(tsObj("value", float64(2)), OpList{OpSet{Path: Path{SegString("value")}, Value: float64(2)}}, nil, nil)
+	source.commit(tstateObj("value", float64(2)), OpList{OpSet{Path: Path{SegString("value")}, Value: float64(2)}}, nil, nil)
 	v1After, _ := first.Value()
 	v2After, _ := second.Value()
 	if n1, _ := v1After.Get("value"); n1 != float64(1) {

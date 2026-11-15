@@ -10,48 +10,48 @@ import (
 	"github.com/keejkrej/pi-go/internal/jsonx"
 )
 
-type tsdelyKind string
+type tsdeKind string
 
 const (
-	tsdelyKindMutable  tsdelyKind = "mutable"
-	tsdelyKindAttached tsdelyKind = "attached"
-	tsdelyKindReplica  tsdelyKind = "replica"
+	tsdeKindMutable  tsdeKind = "mutable"
+	tsdeKindAttached tsdeKind = "attached"
+	tsdeKindReplica  tsdeKind = "replica"
 )
 
-type tsdelyFixture struct {
+type tsdeFixture struct {
 	state   ReplicatedState[any]
 	publish func(value int, ctx Context) error
 }
 
-func tsdelyObjVal(n int) *jsonx.Object {
+func tsdeObjVal(n int) *jsonx.Object {
 	return jsonx.ObjectOf("value", float64(n))
 }
 
-func tsdelyNumVal(v any) int {
+func tsdeNumVal(v any) int {
 	n, _ := v.(*jsonx.Object).Get("value")
 	return int(n.(float64))
 }
 
-func tsdelyNewFixture(t *testing.T, kind tsdelyKind, onError func(error)) tsdelyFixture {
+func tsdeNewFixture(t *testing.T, kind tsdeKind, onError func(error)) tsdeFixture {
 	t.Helper()
 	if onError == nil {
 		onError = func(error) {}
 	}
 	switch kind {
-	case tsdelyKindMutable:
-		m, err := NewReplicatedState[any](tsdelyObjVal(0))
+	case tsdeKindMutable:
+		m, err := NewReplicatedState[any](tsdeObjVal(0))
 		if err != nil {
 			t.Fatalf("NewReplicatedState failed: %v", err)
 		}
-		return tsdelyFixture{
+		return tsdeFixture{
 			state: m,
 			publish: func(value int, ctx Context) error {
-				return m.Replace(ctx, tsdelyObjVal(value))
+				return m.Replace(ctx, tsdeObjVal(value))
 			},
 		}
-	case tsdelyKindAttached:
+	case tsdeKindAttached:
 		var receive func(ReplicatedStateSourceFrame[any])
-		src := &tsdelySimpleSource{
+		src := &tsdeSimpleSource{
 			onActivate: func(listener func(ReplicatedStateSourceFrame[any])) {
 				receive = listener
 			},
@@ -60,11 +60,11 @@ func tsdelyNewFixture(t *testing.T, kind tsdelyKind, onError func(error)) tsdely
 		if err != nil {
 			t.Fatalf("NewReplicatedStateSource failed: %v", err)
 		}
-		return tsdelyFixture{
+		return tsdeFixture{
 			state: s,
 			publish: func(value int, ctx Context) error {
 				receive(ReplicatedStateSourceFrame[any]{
-					Value:   tsdelyObjVal(value),
+					Value:   tsdeObjVal(value),
 					Cursor:  value,
 					Ops:     OpList{OpSet{Path: Path{SegString("value")}, Value: float64(value)}},
 					Context: ctx,
@@ -72,12 +72,12 @@ func tsdelyNewFixture(t *testing.T, kind tsdelyKind, onError func(error)) tsdely
 				return nil
 			},
 		}
-	case tsdelyKindReplica:
+	case tsdeKindReplica:
 		r := NewReplicatedStateReplica[any](onError)
-		if err := r.Hydrate(0, OpList{OpReplace{Value: tsdelyObjVal(0)}}, BackgroundContext); err != nil {
+		if err := r.Hydrate(0, OpList{OpReplace{Value: tsdeObjVal(0)}}, BackgroundContext); err != nil {
 			t.Fatalf("Hydrate failed: %v", err)
 		}
-		return tsdelyFixture{
+		return tsdeFixture{
 			state: r,
 			publish: func(value int, ctx Context) error {
 				return r.Update(value, OpList{OpSet{Path: Path{SegString("value")}, Value: float64(value)}}, ctx)
@@ -85,39 +85,39 @@ func tsdelyNewFixture(t *testing.T, kind tsdelyKind, onError func(error)) tsdely
 		}
 	default:
 		t.Fatalf("unknown fixture kind: %s", kind)
-		return tsdelyFixture{}
+		return tsdeFixture{}
 	}
 }
 
-type tsdelySimpleSource struct {
+type tsdeSimpleSource struct {
 	onActivate func(func(ReplicatedStateSourceFrame[any]))
 }
 
-func (s *tsdelySimpleSource) Attach() ReplicatedStateSourceAttachment[any] {
-	return &tsdelySimpleAttachment{onActivate: s.onActivate}
+func (s *tsdeSimpleSource) Attach() ReplicatedStateSourceAttachment[any] {
+	return &tsdeSimpleAttachment{onActivate: s.onActivate}
 }
 
-type tsdelySimpleAttachment struct {
+type tsdeSimpleAttachment struct {
 	onActivate func(func(ReplicatedStateSourceFrame[any]))
 }
 
-func (a *tsdelySimpleAttachment) Snapshot() ReplicatedStateSourceSnapshot[any] {
-	return ReplicatedStateSourceSnapshot[any]{Value: tsdelyObjVal(0), Cursor: 0}
+func (a *tsdeSimpleAttachment) Snapshot() ReplicatedStateSourceSnapshot[any] {
+	return ReplicatedStateSourceSnapshot[any]{Value: tsdeObjVal(0), Cursor: 0}
 }
 
-func (a *tsdelySimpleAttachment) Activate(listener func(ReplicatedStateSourceFrame[any])) {
+func (a *tsdeSimpleAttachment) Activate(listener func(ReplicatedStateSourceFrame[any])) {
 	a.onActivate(listener)
 }
 
-func (a *tsdelySimpleAttachment) Dispose() {}
+func (a *tsdeSimpleAttachment) Dispose() {}
 
 func TestStateDeliveryAcrossKinds(t *testing.T) {
-	kinds := []tsdelyKind{tsdelyKindMutable, tsdelyKindAttached, tsdelyKindReplica}
+	kinds := []tsdeKind{tsdeKindMutable, tsdeKindAttached, tsdeKindReplica}
 
 	for _, kind := range kinds {
 		kind := kind
 		t.Run(string(kind)+"/awaits_hydration_and_updates_independently", func(t *testing.T) {
-			f := tsdelyNewFixture(t, kind, nil)
+			f := tsdeNewFixture(t, kind, nil)
 			hydrationGate := make(chan struct{})
 			updateGate := make(chan struct{})
 			started0 := make(chan struct{})
@@ -141,7 +141,7 @@ func TestStateDeliveryAcrossKinds(t *testing.T) {
 			unsubSlowCh := make(chan func(), 1)
 			go func() {
 				unsubSlowCh <- f.state.Subscribe(func(value any, _ Context, _ ReplicatedStateDelivery) error {
-					n := tsdelyNumVal(value)
+					n := tsdeNumVal(value)
 					mu.Lock()
 					events = append(events, fmt.Sprintf("start:%d", n))
 					mu.Unlock()
@@ -165,7 +165,7 @@ func TestStateDeliveryAcrossKinds(t *testing.T) {
 			<-started0
 			f.state.Subscribe(func(value any, _ Context, _ ReplicatedStateDelivery) error {
 				mu.Lock()
-				fast = append(fast, tsdelyNumVal(value))
+				fast = append(fast, tsdeNumVal(value))
 				mu.Unlock()
 				return nil
 			})
@@ -179,14 +179,14 @@ func TestStateDeliveryAcrossKinds(t *testing.T) {
 			if !slices.Equal(fast, []int{0, 1, 2}) {
 				t.Fatalf("expected fast [0 1 2], got %v", fast)
 			}
-			if kind != tsdelyKindReplica && !slices.Equal(exact, []int{1, 2}) {
+			if kind != tsdeKindReplica && !slices.Equal(exact, []int{1, 2}) {
 				t.Fatalf("expected exact [1 2], got %v", exact)
 			}
 			mu.Unlock()
 
 			cur, _ := f.state.Value()
-			if tsdelyNumVal(cur) != 2 {
-				t.Fatalf("expected state value 2, got %d", tsdelyNumVal(cur))
+			if tsdeNumVal(cur) != 2 {
+				t.Fatalf("expected state value 2, got %d", tsdeNumVal(cur))
 			}
 
 			close(hydrationGate)
@@ -212,7 +212,7 @@ func TestStateDeliveryAcrossKinds(t *testing.T) {
 		for _, count := range []int{100, 101, 102, 201, 202} {
 			count := count
 			t.Run(fmt.Sprintf("%s/bounds_%d_pending_deliveries", kind, count), func(t *testing.T) {
-				f := tsdelyNewFixture(t, kind, nil)
+				f := tsdeNewFixture(t, kind, nil)
 				hydrationGate := make(chan struct{})
 				started0 := make(chan struct{})
 				done := make(chan struct{})
@@ -232,7 +232,7 @@ func TestStateDeliveryAcrossKinds(t *testing.T) {
 
 				go func() {
 					f.state.Subscribe(func(value any, _ Context, _ ReplicatedStateDelivery) error {
-						n := tsdelyNumVal(value)
+						n := tsdeNumVal(value)
 						mu.Lock()
 						received = append(received, n)
 						mu.Unlock()
@@ -255,7 +255,7 @@ func TestStateDeliveryAcrossKinds(t *testing.T) {
 				if !slices.Equal(received, []int{0}) {
 					t.Fatalf("expected [0] before hydration resolves, got %v", received)
 				}
-				if kind != tsdelyKindReplica {
+				if kind != tsdeKindReplica {
 					if len(exact) != count || exact[0] != 1 || exact[count-1] != count {
 						t.Fatalf("expected exact 1..%d, got len=%d", count, len(exact))
 					}
@@ -279,7 +279,7 @@ func TestStateDeliveryAcrossKinds(t *testing.T) {
 		}
 
 		t.Run(string(kind)+"/excludes_running_update_from_overflow_and_retains_metadata", func(t *testing.T) {
-			f := tsdelyNewFixture(t, kind, nil)
+			f := tsdeNewFixture(t, kind, nil)
 			gate := make(chan struct{})
 			started1 := make(chan struct{})
 			done103 := make(chan struct{})
@@ -299,7 +299,7 @@ func TestStateDeliveryAcrossKinds(t *testing.T) {
 					mu.Lock()
 					received = append(received, rec{value: value, ctx: c, delivery: d})
 					mu.Unlock()
-					n := tsdelyNumVal(value)
+					n := tsdeNumVal(value)
 					if n == 0 {
 						close(readySub)
 					} else if n == 1 {
@@ -328,7 +328,7 @@ func TestStateDeliveryAcrossKinds(t *testing.T) {
 			mu.Lock()
 			var gotVals []int
 			for _, r := range received {
-				gotVals = append(gotVals, tsdelyNumVal(r.value))
+				gotVals = append(gotVals, tsdeNumVal(r.value))
 			}
 			if !slices.Equal(gotVals, []int{0, 1}) {
 				t.Fatalf("expected [0 1] while gate blocks, got %v", gotVals)
@@ -342,7 +342,7 @@ func TestStateDeliveryAcrossKinds(t *testing.T) {
 			defer mu.Unlock()
 			gotVals = nil
 			for _, r := range received {
-				gotVals = append(gotVals, tsdelyNumVal(r.value))
+				gotVals = append(gotVals, tsdeNumVal(r.value))
 			}
 			if !slices.Equal(gotVals, []int{0, 1, 102, 103}) {
 				t.Fatalf("expected [0 1 102 103], got %v", gotVals)
@@ -359,10 +359,10 @@ func TestStateDeliveryAcrossKinds(t *testing.T) {
 		})
 
 		t.Run(string(kind)+"/serializes_reentrant_callbacks", func(t *testing.T) {
-			f := tsdelyNewFixture(t, kind, nil)
+			f := tsdeNewFixture(t, kind, nil)
 			var events []string
 			f.state.Subscribe(func(value any, _ Context, _ ReplicatedStateDelivery) error {
-				n := tsdelyNumVal(value)
+				n := tsdeNumVal(value)
 				events = append(events, fmt.Sprintf("start:%d", n))
 				if n < 2 {
 					_ = f.publish(n+1, BackgroundContext)
@@ -377,7 +377,7 @@ func TestStateDeliveryAcrossKinds(t *testing.T) {
 		})
 
 		t.Run(string(kind)+"/treats_two_subscriptions_of_same_callback_independently", func(t *testing.T) {
-			f := tsdelyNewFixture(t, kind, nil)
+			f := tsdeNewFixture(t, kind, nil)
 			gate := make(chan struct{})
 			startedFirst := make(chan struct{})
 			doneFirst := make(chan struct{})
@@ -387,7 +387,7 @@ func TestStateDeliveryAcrossKinds(t *testing.T) {
 			firstOne := true
 
 			listener := func(value any, _ Context, _ ReplicatedStateDelivery) error {
-				n := tsdelyNumVal(value)
+				n := tsdeNumVal(value)
 				mu.Lock()
 				received = append(received, n)
 				block := firstOne && n == 1
@@ -428,7 +428,7 @@ func TestStateDeliveryAcrossKinds(t *testing.T) {
 		})
 
 		t.Run(string(kind)+"/unsubscribe_drops_queued_callbacks_without_aborting", func(t *testing.T) {
-			f := tsdelyNewFixture(t, kind, nil)
+			f := tsdeNewFixture(t, kind, nil)
 			gate := make(chan struct{})
 			started1 := make(chan struct{})
 			done1 := make(chan struct{})
@@ -438,7 +438,7 @@ func TestStateDeliveryAcrossKinds(t *testing.T) {
 			completed := false
 
 			stop := f.state.Subscribe(func(value any, _ Context, _ ReplicatedStateDelivery) error {
-				n := tsdelyNumVal(value)
+				n := tsdeNumVal(value)
 				mu.Lock()
 				received = append(received, n)
 				mu.Unlock()
@@ -482,15 +482,15 @@ func TestStateDeliveryAcrossKinds(t *testing.T) {
 }
 
 func TestStateDeliveryListenerErrorsForAttachedAndReplica(t *testing.T) {
-	for _, kind := range []tsdelyKind{tsdelyKindAttached, tsdelyKindReplica} {
+	for _, kind := range []tsdeKind{tsdeKindAttached, tsdeKindReplica} {
 		kind := kind
 		t.Run(string(kind)+"/isolates_hydration_failure_and_continues", func(t *testing.T) {
 			var errs []error
-			f := tsdelyNewFixture(t, kind, func(err error) { errs = append(errs, err) })
+			f := tsdeNewFixture(t, kind, func(err error) { errs = append(errs, err) })
 			var received []int
 			failure := errors.New("sync hydration")
 			f.state.Subscribe(func(value any, _ Context, _ ReplicatedStateDelivery) error {
-				n := tsdelyNumVal(value)
+				n := tsdeNumVal(value)
 				received = append(received, n)
 				if n == 0 {
 					return failure
@@ -509,7 +509,7 @@ func TestStateDeliveryListenerErrorsForAttachedAndReplica(t *testing.T) {
 		t.Run(string(kind)+"/observes_multiple_failures_while_continuing_delivery", func(t *testing.T) {
 			var mu sync.Mutex
 			var errs []error
-			f := tsdelyNewFixture(t, kind, func(err error) {
+			f := tsdeNewFixture(t, kind, func(err error) {
 				mu.Lock()
 				errs = append(errs, err)
 				mu.Unlock()
@@ -522,7 +522,7 @@ func TestStateDeliveryListenerErrorsForAttachedAndReplica(t *testing.T) {
 
 			go func() {
 				f.state.Subscribe(func(value any, _ Context, _ ReplicatedStateDelivery) error {
-					n := tsdelyNumVal(value)
+					n := tsdeNumVal(value)
 					mu.Lock()
 					received = append(received, n)
 					mu.Unlock()
@@ -545,7 +545,7 @@ func TestStateDeliveryListenerErrorsForAttachedAndReplica(t *testing.T) {
 			<-started0
 			f.state.Subscribe(func(value any, _ Context, _ ReplicatedStateDelivery) error {
 				mu.Lock()
-				fast = append(fast, tsdelyNumVal(value))
+				fast = append(fast, tsdeNumVal(value))
 				mu.Unlock()
 				return nil
 			})
@@ -576,7 +576,7 @@ func TestStateDeliveryListenerErrorsForAttachedAndReplica(t *testing.T) {
 		t.Run(string(kind)+"/observes_error_after_unsubscribe", func(t *testing.T) {
 			var mu sync.Mutex
 			var errs []error
-			f := tsdelyNewFixture(t, kind, func(err error) {
+			f := tsdeNewFixture(t, kind, func(err error) {
 				mu.Lock()
 				errs = append(errs, err)
 				mu.Unlock()
@@ -588,7 +588,7 @@ func TestStateDeliveryListenerErrorsForAttachedAndReplica(t *testing.T) {
 			failure := errors.New("stopped callback")
 
 			stop := f.state.Subscribe(func(value any, _ Context, _ ReplicatedStateDelivery) error {
-				n := tsdelyNumVal(value)
+				n := tsdeNumVal(value)
 				mu.Lock()
 				received = append(received, n)
 				mu.Unlock()
@@ -633,21 +633,21 @@ func TestStateDeliveryMutableReportsAsyncDefaultHook(t *testing.T) {
 	}
 	defer func() { ssAsyncErrorHook = prevHook }()
 
-	state, err := NewReplicatedState[any](tsdelyObjVal(0))
+	state, err := NewReplicatedState[any](tsdeObjVal(0))
 	if err != nil {
 		t.Fatalf("NewReplicatedState failed: %v", err)
 	}
 	failure := errors.New("async mutable hydration")
 	var received []int
 	state.Subscribe(func(value any, _ Context, _ ReplicatedStateDelivery) error {
-		n := tsdelyNumVal(value)
+		n := tsdeNumVal(value)
 		received = append(received, n)
 		if n == 0 {
 			return failure
 		}
 		return nil
 	})
-	if err := state.Replace(BackgroundContext, tsdelyObjVal(1)); err != nil {
+	if err := state.Replace(BackgroundContext, tsdeObjVal(1)); err != nil {
 		t.Fatalf("Replace failed: %v", err)
 	}
 	if !slices.Equal(received, []int{0, 1}) {
@@ -669,7 +669,7 @@ func TestReplicaDisconnectDropsPendingAndWaitsForRunningCallbackBeforeRehydratio
 	var mu sync.Mutex
 	var received []ReplicatedStateDelivery
 
-	if err := replica.Hydrate(0, OpList{OpReplace{Value: tsdelyObjVal(0)}}, BackgroundContext); err != nil {
+	if err := replica.Hydrate(0, OpList{OpReplace{Value: tsdeObjVal(0)}}, BackgroundContext); err != nil {
 		t.Fatalf("Hydrate 0 failed: %v", err)
 	}
 	go func() {
@@ -690,7 +690,7 @@ func TestReplicaDisconnectDropsPendingAndWaitsForRunningCallbackBeforeRehydratio
 	<-started0
 	_ = replica.Update(1, OpList{OpSet{Path: Path{SegString("value")}, Value: float64(1)}}, BackgroundContext)
 	replica.Clear()
-	_ = replica.Hydrate(50, OpList{OpReplace{Value: tsdelyObjVal(50)}}, BackgroundContext)
+	_ = replica.Hydrate(50, OpList{OpReplace{Value: tsdeObjVal(50)}}, BackgroundContext)
 	_ = replica.Update(51, OpList{OpSet{Path: Path{SegString("value")}, Value: float64(51)}}, BackgroundContext)
 
 	mu.Lock()
@@ -727,7 +727,7 @@ func TestColdReplicaHydratesAllListenersBeforeReentrantUpdates(t *testing.T) {
 		second = append(second, d)
 		return nil
 	})
-	if err := replica.Hydrate(0, OpList{OpReplace{Value: tsdelyObjVal(0)}}, BackgroundContext); err != nil {
+	if err := replica.Hydrate(0, OpList{OpReplace{Value: tsdeObjVal(0)}}, BackgroundContext); err != nil {
 		t.Fatalf("Hydrate failed: %v", err)
 	}
 	want := []ReplicatedStateDelivery{

@@ -10,11 +10,11 @@ import (
 	"github.com/keejkrej/pi-go/internal/jsonx"
 )
 
-func tsdObj(kv ...any) *jsonx.Object {
+func tsdrObj(kv ...any) *jsonx.Object {
 	return jsonx.ObjectOf(kv...)
 }
 
-func tsdMustJson(v any) string {
+func tsdrMustJson(v any) string {
 	b, err := jsonx.Marshal(v)
 	if err != nil {
 		panic(err)
@@ -24,9 +24,9 @@ func tsdMustJson(v any) string {
 
 func TestTransactionalOverlayDrafts(t *testing.T) {
 	t.Run("copies only changed branches", func(t *testing.T) {
-		tracker := Track(tsdObj(
-			"changed", tsdObj("count", float64(1), "sibling", tsdObj("value", "kept")),
-			"untouched", tsdObj("value", float64(2)),
+		tracker := Track(tsdrObj(
+			"changed", tsdrObj("count", float64(1), "sibling", tsdrObj("value", "kept")),
+			"untouched", tsdrObj("value", float64(2)),
 		))
 		base := tracker.Value()
 		baseChanged, _ := base.Get("changed")
@@ -64,7 +64,7 @@ func TestTransactionalOverlayDrafts(t *testing.T) {
 	})
 
 	t.Run("supports deletion and array mutations", func(t *testing.T) {
-		tracker := Track(tsdObj("optional", "remove", "values", []any{float64(3), float64(1), float64(2)}))
+		tracker := Track(tsdrObj("optional", "remove", "values", []any{float64(3), float64(1), float64(2)}))
 		change := tracker.BeginChange()
 		draft, _ := change.State()
 		draft.Value.Delete("optional")
@@ -96,13 +96,13 @@ func TestTransactionalOverlayDrafts(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Prepare failed: %v", err)
 		}
-		if got := tsdMustJson(prepared.Value()); got != `{"values":[5,5,9,2]}` {
+		if got := tsdrMustJson(prepared.Value()); got != `{"values":[5,5,9,2]}` {
 			t.Fatalf("got %s", got)
 		}
 	})
 
 	t.Run("inserts 100,000 items cleanly without overflow", func(t *testing.T) {
-		tracker := Track(tsdObj("values", []any{float64(-1)}))
+		tracker := Track(tsdrObj("values", []any{float64(-1)}))
 		change := tracker.BeginChange()
 		draft, _ := change.State()
 		items := make([]any, 100000)
@@ -127,20 +127,20 @@ func TestTransactionalOverlayDrafts(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ApplyImmutable failed: %v", err)
 		}
-		if tsdMustJson(replayed) != tsdMustJson(prepared.Value()) {
+		if tsdrMustJson(replayed) != tsdrMustJson(prepared.Value()) {
 			t.Fatalf("replay mismatch")
 		}
 	})
 
 	t.Run("rejects non-strict JSON placements without mutating base", func(t *testing.T) {
-		tracker := Track(tsdObj("number", float64(0), "payload", nil, "values", []any{float64(1), float64(2)}))
+		tracker := Track(tsdrObj("number", float64(0), "payload", nil, "values", []any{float64(1), float64(2)}))
 		change := tracker.BeginChange()
 		draft, _ := change.State()
-		draft.Value.Set("values", []any{tsdObj("nested", []byte{1})})
+		draft.Value.Set("values", []any{tsdrObj("nested", []byte{1})})
 		if _, err := change.Prepare(); err == nil || !strings.Contains(err.Error(), "strict JSON") {
 			t.Fatalf("expected strict JSON error, got %v", err)
 		}
-		if got := tsdMustJson(tracker.Value()); got != `{"number":0,"payload":null,"values":[1,2]}` {
+		if got := tsdrMustJson(tracker.Value()); got != `{"number":0,"payload":null,"values":[1,2]}` {
 			t.Fatalf("base mutated: %s", got)
 		}
 	})
