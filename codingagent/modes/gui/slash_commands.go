@@ -1000,13 +1000,30 @@ func (m *GuiMode) ShowModelSelector() {
 			if model == nil {
 				return
 			}
-			go func() {
+			apply := func() error {
 				if err := sess.SetModel(m.currentCtx(), model); err != nil {
-					m.postUI(func() { m.ShowError(err.Error()) })
-					return
+					return err
 				}
 				if thinkingOverride != nil {
 					sess.SetThinkingLevel(*thinkingOverride)
+				}
+				return nil
+			}
+			hasExtHook := sess.ExtensionRunner() != nil && sess.ExtensionRunner().HasHandlers("model_select")
+			if !hasExtHook && !sess.IsStreaming() && !sess.IsCompacting() {
+				if err := apply(); err != nil {
+					m.ShowError(err.Error())
+					return
+				}
+				m.updateFooterAndTitle()
+				return
+			}
+			m.sessionMutationDepth.Add(1)
+			go func() {
+				defer m.sessionMutationDepth.Add(-1)
+				if err := apply(); err != nil {
+					m.postUI(func() { m.ShowError(err.Error()) })
+					return
 				}
 				m.postUI(func() { m.updateFooterAndTitle() })
 			}()
@@ -1040,17 +1057,13 @@ func (m *GuiMode) ShowSessionSelector() {
 		return
 	}
 	cwd := sess.Cwd()
-	sessDir := sess.SessionManager.GetSessionDir()
+	curId, curFile, sessDir, _, _ := m.cachedSessionMeta()
 	sessions, _ := LoadSessionSelectorItems(m.currentCtx(), cwd, sessDir, false)
-	curFile := ""
-	if sf := sess.SessionFile(); sf != nil {
-		curFile = *sf
-	}
 
 	dlg := NewSessionSelectorDialog(SessionSelectorConfig{
 		Sessions:           sessions,
 		CurrentSessionFile: curFile,
-		CurrentSessionId:   sess.SessionId(),
+		CurrentSessionId:   curId,
 		Cwd:                cwd,
 		SessionDir:         sessDir,
 		Theme:              m.currentGuiTheme(),

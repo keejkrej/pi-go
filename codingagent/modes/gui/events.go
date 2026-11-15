@@ -45,6 +45,7 @@ func gevHandleSessionEvent(m *GuiMode, rawEv core.AgentSessionEvent) {
 		m.mu.Lock()
 		msg := m.workingMessage
 		visible := m.workingVisible
+		m.turnStartedAt = time.Now()
 		m.mu.Unlock()
 		if visible && m.statusBanner != nil {
 			m.statusBanner.SetWorking(true, msg)
@@ -56,6 +57,7 @@ func gevHandleSessionEvent(m *GuiMode, rawEv core.AgentSessionEvent) {
 		m.mu.Lock()
 		msg := m.workingMessage
 		visible := m.workingVisible
+		m.turnStartedAt = time.Now()
 		m.mu.Unlock()
 		if visible && m.statusBanner != nil {
 			m.statusBanner.SetWorking(true, msg)
@@ -63,7 +65,11 @@ func gevHandleSessionEvent(m *GuiMode, rawEv core.AgentSessionEvent) {
 		m.updateFooterAndTitle()
 
 	case *core.AgentSessionEventTurnEnd:
+		m.mu.Lock()
+		m.recordCurrentTurnDurationLocked()
+		m.mu.Unlock()
 		m.updateFooterAndTitle()
+		m.refreshRightPanelChanges()
 
 	case *core.AgentSessionEventMessageStart:
 		gevHandleMessageStart(m, sess, th, ev.Message)
@@ -82,9 +88,16 @@ func gevHandleSessionEvent(m *GuiMode, rawEv core.AgentSessionEvent) {
 
 	case *core.AgentSessionEventToolExecutionEnd:
 		gevHandleToolEnd(m, ev)
+		if ev.ToolName == "edit" || ev.ToolName == "write" || ev.ToolName == "bash" {
+			m.refreshRightPanelChanges()
+		}
 
 	case *core.AgentSessionEventAgentEnd:
 		m.mu.Lock()
+		m.recordCurrentTurnDurationLocked()
+		if !ev.WillRetry {
+			m.turnStartedAt = time.Time{}
+		}
 		m.streamingCard = nil
 		m.streamingEntryID = ""
 		m.mu.Unlock()
@@ -94,14 +107,24 @@ func gevHandleSessionEvent(m *GuiMode, rawEv core.AgentSessionEvent) {
 				m.statusBanner.SetWorking(false, "")
 			}
 			m.updateProgramStatus(gui.StatusDone, "")
+			m.refreshRightPanelTreeSnapshot()
 		}
+		m.refreshSidebarSessions()
+		m.refreshRightPanelChanges()
 
 	case *core.AgentSessionEventAgentSettled:
+		m.mu.Lock()
+		m.recordCurrentTurnDurationLocked()
+		m.turnStartedAt = time.Time{}
+		m.mu.Unlock()
 		if m.statusBanner != nil && (sess == nil || (!sess.IsBashRunning() && !sess.IsCompacting())) {
 			m.statusBanner.SetWorking(false, "")
 		}
 		m.syncProgramStatusFromSession()
 		m.updateFooterAndTitle()
+		m.refreshRightPanelTreeSnapshot()
+		m.refreshSidebarSessions()
+		m.refreshRightPanelChanges()
 
 	case *core.AgentSessionEventQueueUpdate:
 		m.mu.Lock()
@@ -117,7 +140,13 @@ func gevHandleSessionEvent(m *GuiMode, rawEv core.AgentSessionEvent) {
 		m.updateFooterAndTitle()
 
 	case *core.AgentSessionEventSessionInfoChanged:
+		if ev.Name != nil {
+			m.setCachedSessionName(*ev.Name)
+		} else {
+			m.setCachedSessionName("")
+		}
 		m.updateFooterAndTitle()
+		m.refreshSidebarSessions()
 
 	case *core.AgentSessionEventThinkingLevelChanged:
 		m.updateFooterAndTitle()

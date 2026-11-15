@@ -144,16 +144,16 @@ func selRenderDialogHeader(
 ) {
 	ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Children(func() {
 		ui.Column(c).Shrink(1).Grow(1).Gap(2).Children(func() {
-			ui.Text(c, title).TextColor(th.Text).FontWeight(700).FontSize(15)
+			ui.Text(c, title).TextColor(th.Text).FontWeight(600).FontSize(14)
 			if subtitle != "" {
-				ui.Text(c, subtitle).TextColor(th.Muted).FontSize(11).SingleLine()
+				ui.Text(c, subtitle).TextColor(th.TextTertiary).FontSize(11).SingleLine()
 			}
 		})
 		if headerRight != nil {
 			ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(6).Children(headerRight)
 		}
 	})
-	ui.Box(c).FillWidth().Height(1).Background(th.BorderMuted)
+	ui.Box(c).FillWidth().Height(1).Background(th.Border)
 }
 
 func selRenderDialogFooter(
@@ -162,10 +162,10 @@ func selRenderDialogFooter(
 	hints string,
 	actions func(),
 ) {
-	ui.Box(c).FillWidth().Height(1).Background(th.BorderMuted)
+	ui.Box(c).FillWidth().Height(1).Background(th.Border)
 	ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Children(func() {
 		if hints != "" {
-			ui.Text(c, hints).TextColor(th.Dim).FontSize(11)
+			ui.Text(c, hints).TextColor(th.TextTertiary).FontSize(11)
 		} else {
 			ui.Spacer(c)
 		}
@@ -217,7 +217,7 @@ func selFormatRelativeTime(t time.Time) string {
 
 func selFilterPill(c *ui.Context, th *gui.GuiTheme, label string, active bool) bool {
 	btn := ui.Button(c, label).
-		Radius(max(0, th.Radius-2)).
+		Radius(8).
 		Padding(4, 10).
 		FontSize(11).
 		Cursor(ui.CursorPointer)
@@ -225,7 +225,7 @@ func selFilterPill(c *ui.Context, th *gui.GuiTheme, label string, active bool) b
 		fg := gui.ContrastingText(th.Accent, ui.RGB(248, 250, 252), ui.RGB(20, 20, 24))
 		btn.Background(th.Accent).Border(1, th.Accent).TextColor(fg)
 	} else {
-		btn.Background(th.Surface).Border(1, th.BorderMuted).TextColor(th.Text)
+		btn.Background(th.Inset).Border(1, th.Border).TextColor(th.TextSecondary)
 	}
 	return btn.Clicked()
 }
@@ -5146,4 +5146,276 @@ func (d *HotkeysDialog) Show(host *gui.GUI) *DialogHandle {
 		d.mu.Unlock()
 		d.View(c)
 	})
+}
+
+// CommandPaletteEntry represents a single executable action in the Cmd+K palette.
+type CommandPaletteEntry struct {
+	ID          string
+	Label       string
+	Description string
+	Badge       string
+	OnRun       func()
+}
+
+// CommandPaletteConfig configures CommandPaletteDialog.
+type CommandPaletteConfig struct {
+	Title   string
+	Entries []CommandPaletteEntry
+	Theme   *gui.GuiTheme
+	OnClose func()
+}
+
+// CommandPaletteDialog displays a Waku-styled Cmd+K quick command & action palette.
+type CommandPaletteDialog struct {
+	cfg     CommandPaletteConfig
+	entries map[string]CommandPaletteEntry
+	list    *gui.SelectList
+
+	mu            sync.Mutex
+	confirmHandle func()
+	cancelHandle  func()
+}
+
+// NewCommandPaletteDialog constructs a searchable CommandPaletteDialog.
+func NewCommandPaletteDialog(cfg CommandPaletteConfig) *CommandPaletteDialog {
+	d := &CommandPaletteDialog{
+		cfg:     cfg,
+		entries: make(map[string]CommandPaletteEntry, len(cfg.Entries)),
+	}
+	items := make([]gui.SelectItem, 0, len(cfg.Entries))
+	for _, entry := range cfg.Entries {
+		if entry.ID == "" {
+			continue
+		}
+		d.entries[entry.ID] = entry
+		items = append(items, gui.SelectItem{
+			Value:       entry.ID,
+			Label:       entry.Label,
+			Description: entry.Description,
+			Badge:       entry.Badge,
+		})
+	}
+
+	sl := gui.NewSelectList(items)
+	sl.SetSearchable(true)
+	sl.SetAutoFocus(true)
+	sl.SetConfirmOnClick(true)
+	sl.SetPlaceholder("Type a command or search...")
+	sl.SetMaxHeight(360)
+	if cfg.Theme != nil {
+		sl.SetTheme(cfg.Theme)
+	}
+	sl.SetOnSelect(func(item gui.SelectItem) {
+		entry, ok := d.entries[item.Value]
+		d.mu.Lock()
+		confirmFn := d.confirmHandle
+		d.mu.Unlock()
+		if confirmFn != nil {
+			confirmFn()
+		}
+		if ok && entry.OnRun != nil {
+			entry.OnRun()
+		}
+	})
+	sl.SetOnCancel(func() {
+		d.mu.Lock()
+		cancelFn := d.cancelHandle
+		d.mu.Unlock()
+		if cancelFn != nil {
+			cancelFn()
+		}
+	})
+	d.list = sl
+	return d
+}
+
+// View renders the command palette modal contents inside c.
+func (d *CommandPaletteDialog) View(c *ui.Context) ui.Element {
+	th := gui.ResolveGuiTheme(c, d.cfg.Theme)
+	title := strings.TrimSpace(d.cfg.Title)
+	if title == "" {
+		title = "Command Palette"
+	}
+
+	root := ui.Column(c).FillWidth().Gap(10)
+	root.Children(func() {
+		selRenderDialogHeader(c, th, title, "Quick actions & slash commands", nil)
+		if d.list != nil {
+			d.list.View(c)
+		}
+		selRenderDialogFooter(c, th, "↑/↓ navigate · Enter run · Esc close", nil)
+	})
+	return root
+}
+
+// Show pushes CommandPaletteDialog onto host as a modal overlay.
+func (d *CommandPaletteDialog) Show(host *gui.GUI) *DialogHandle {
+	return selShowOverlay(host, gui.OverlayOptions{
+		Width:            560,
+		MaxWidthPercent:  90,
+		MaxHeightPercent: 84,
+	}, func() {
+		d.mu.Lock()
+		d.confirmHandle = nil
+		d.cancelHandle = nil
+		fn := d.cfg.OnClose
+		d.mu.Unlock()
+		if fn != nil {
+			fn()
+		}
+	}, func(c *ui.Context, confirmDone func(), cancel func()) {
+		d.mu.Lock()
+		d.confirmHandle = confirmDone
+		d.cancelHandle = cancel
+		d.mu.Unlock()
+		d.View(c)
+	})
+}
+
+// ShowCommandPalette opens the Waku Cmd+K command palette aggregating panel, session,
+// appearance, and slash command actions.
+func (m *GuiMode) ShowCommandPalette() {
+	if m == nil || m.host == nil {
+		return
+	}
+	entries := []CommandPaletteEntry{
+		{
+			ID:          "action:new-task",
+			Label:       "New Task",
+			Description: "Start a fresh agent session",
+			Badge:       "⌘N",
+			OnRun:       func() { go m.newSession(m.currentCtx()) },
+		},
+		{
+			ID:          "action:toggle-sidebar",
+			Label:       "Toggle Left Sidebar",
+			Description: "Show or hide the session history sidebar",
+			Badge:       "⌘B",
+			OnRun:       func() { m.toggleLeftSidebar() },
+		},
+		{
+			ID:          "action:toggle-right-panel",
+			Label:       "Toggle Right Panel (Changes)",
+			Description: "Show or hide workspace git diffs and changes",
+			Badge:       "⌘J",
+			OnRun:       func() { m.toggleRightPanel() },
+		},
+		{
+			ID:          "action:session-tree-panel",
+			Label:       "Session Tree Panel",
+			Description: "Open the interactive session tree in the right panel",
+			Badge:       "Panel",
+			OnRun: func() {
+				m.ensureWakuState()
+				m.rightPanel.mu.Lock()
+				m.rightPanel.open = true
+				m.rightPanel.activeTab = "tree"
+				m.rightPanel.mu.Unlock()
+				m.saveLayoutPrefs()
+				if m.host != nil {
+					m.host.RequestRender()
+				}
+			},
+		},
+		{
+			ID:          "action:select-model",
+			Label:       "Select Model…",
+			Description: "Switch the active provider and model",
+			Badge:       "/model",
+			OnRun:       func() { m.ShowModelSelector() },
+		},
+		{
+			ID:          "action:select-thinking",
+			Label:       "Select Thinking Level…",
+			Description: "Adjust reasoning budget for responses",
+			Badge:       "/thinking",
+			OnRun:       func() { m.ShowThinkingSelector() },
+		},
+		{
+			ID:          "action:switch-theme",
+			Label:       "Switch Theme…",
+			Description: "Choose a color theme preset",
+			Badge:       "/theme",
+			OnRun:       func() { m.ShowThemeSelector() },
+		},
+		{
+			ID:          "action:toggle-appearance",
+			Label:       "Toggle Dark / Light Appearance",
+			Description: "Switch between Waku Dark and Waku Light",
+			Badge:       "Theme",
+			OnRun:       func() { m.toggleQuickThemeDarkLight() },
+		},
+		{
+			ID:          "action:open-settings",
+			Label:       "Open Settings…",
+			Description: "Configure pi runtime and GUI preferences",
+			Badge:       "/settings",
+			OnRun:       func() { m.ShowSettingsSelector() },
+		},
+		{
+			ID:          "action:navigate-tree",
+			Label:       "Navigate Session Tree…",
+			Description: "Jump to any branch or turn in the session",
+			Badge:       "/tree",
+			OnRun:       func() { m.ShowTreeSelector() },
+		},
+		{
+			ID:          "action:fork-session",
+			Label:       "Fork Session…",
+			Description: "Branch a new session from an earlier message",
+			Badge:       "/fork",
+			OnRun:       func() { m.ShowForkSelector() },
+		},
+		{
+			ID:          "action:resume-session",
+			Label:       "Resume Session…",
+			Description: "Browse and load saved sessions",
+			Badge:       "/resume",
+			OnRun:       func() { m.ShowSessionSelector() },
+		},
+		{
+			ID:          "action:compact-context",
+			Label:       "Compact Context",
+			Description: "Summarize older turns to free context window space",
+			Badge:       "/compact",
+			OnRun:       func() { go m.runCompactCommand(m.currentCtx(), "") },
+		},
+		{
+			ID:          "action:copy-last-reply",
+			Label:       "Copy Last Reply",
+			Description: "Copy the most recent assistant message to clipboard",
+			Badge:       "/copy",
+			OnRun:       func() { m.copyLastAssistantMessage() },
+		},
+		{
+			ID:          "action:hotkeys",
+			Label:       "Keyboard Shortcuts",
+			Description: "View available keyboard shortcuts",
+			Badge:       "/hotkeys",
+			OnRun:       func() { m.ShowHotkeysDialog() },
+		},
+	}
+
+	for _, cmd := range m.buildSlashCommandList() {
+		cmdName := strings.TrimSpace(cmd.Name)
+		if cmdName == "" {
+			continue
+		}
+		entries = append(entries, CommandPaletteEntry{
+			ID:          "slash:" + cmdName,
+			Label:       "/" + cmdName,
+			Description: cmd.Description,
+			Badge:       "Command",
+			OnRun: func() {
+				m.HandleSlashCommand(m.currentCtx(), "/"+cmdName)
+			},
+		})
+	}
+
+	dlg := NewCommandPaletteDialog(CommandPaletteConfig{
+		Title:   "Command Palette",
+		Entries: entries,
+		Theme:   m.currentGuiTheme(),
+	})
+	m.setActiveDialog(dlg.Show(m.host))
 }

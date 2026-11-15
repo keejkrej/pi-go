@@ -319,38 +319,55 @@ func (u *UserMessageCard) View(c *ui.Context) ui.Element {
 	u.mu.Unlock()
 
 	var copyClicked bool
-	card := ui.Column(c).
-		FillWidth().
-		Background(th.UserMessageBg).
-		Border(1, th.BorderMuted).
-		Radius(th.Radius).
-		Padding(10, 14).
-		Gap(6)
+	outer := ui.Row(c).FillWidth().Justify(ui.End)
+	outer.Children(func() {
+		bubble := ui.Column(c).
+			MaxWidth(540).
+			Background(th.UserMessageBg).
+			Border(1, th.Border).
+			Radius(14).
+			Padding(9, 14).
+			Gap(4)
 
-	card.Children(func() {
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Children(func() {
-			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-				ui.Text(c, "You").TextColor(th.Accent).FontWeight(600).FontSize(12)
-				if ts != "" {
-					ui.Text(c, ts).TextColor(th.Muted).FontSize(11)
+		bubble.Children(func() {
+			ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(10).Children(func() {
+				ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
+					ui.Text(c, "You").TextColor(th.TextTertiary).FontWeight(600).FontSize(11).SingleLine()
+					if ts != "" {
+						ui.Text(c, ts).TextColor(th.TextGhost).FontSize(10).SingleLine()
+					}
+				})
+				if text != "" {
+					copyBtn := ui.ButtonBase(c).
+						Height(18).
+						Padding(0, 5, 0, 5).
+						Radius(5).
+						AlignItems(ui.Center).
+						Gap(4).
+						Cursor(ui.CursorPointer).
+						Label("Copy")
+					if copyBtn.Hovered() {
+						copyBtn.Background(th.Overlay)
+					}
+					copyBtn.Children(func() {
+						gui.IconView(c, gui.IconCopy, 11, th.TextTertiary)
+						ui.Text(c, "Copy").TextColor(th.TextTertiary).FontSize(10).SingleLine()
+					})
+					if copyBtn.Clicked() {
+						copyClicked = true
+					}
 				}
 			})
-			if text != "" {
-				btn := ui.Button(c, "Copy").Cursor(ui.CursorPointer)
-				if btn.Clicked() {
-					copyClicked = true
-				}
+
+			if text != "" && md != nil {
+				md.View(c)
+			}
+			if len(images) > 0 {
+				u.mu.Lock()
+				msgRenderImageThumbs(c, th, images, imgCache)
+				u.mu.Unlock()
 			}
 		})
-
-		if text != "" && md != nil {
-			md.View(c)
-		}
-		if len(images) > 0 {
-			u.mu.Lock()
-			msgRenderImageThumbs(c, th, images, imgCache)
-			u.mu.Unlock()
-		}
 	})
 
 	if copyClicked {
@@ -360,7 +377,7 @@ func (u *UserMessageCard) View(c *ui.Context) ui.Element {
 			_ = utils.CopyToClipboard(text)
 		}
 	}
-	return card
+	return outer
 }
 
 // ============================================================================
@@ -714,6 +731,25 @@ func (a *AssistantMessageCard) fullCopyTextLocked() string {
 	return strings.Join(parts, "\n\n")
 }
 
+// HasProseText reports whether this assistant message contains non-empty user-visible text,
+// error, or retry content (as opposed to purely tool calls/thinking).
+func (a *AssistantMessageCard) HasProseText() bool {
+	if a == nil {
+		return false
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.retry.active || a.snap.stopReason == ai.StopReasonError || a.snap.stopReason == ai.StopReasonAborted {
+		return true
+	}
+	for _, blk := range a.snap.content {
+		if tc, ok := blk.(*ai.TextContent); ok && tc != nil && strings.TrimSpace(tc.Text) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // View builds the MyGo element tree for the assistant message card.
 func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 	a.mu.Lock()
@@ -743,49 +779,17 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 
 	root := ui.Column(c).
 		FillWidth().
-		Padding(6, 4).
+		Padding(2, 0).
 		Gap(8)
 
 	root.Children(func() {
-		// Compact header bar when model/time/streaming/copy controls exist
-		if snap.model != "" || streaming || copyPayload != "" {
-			ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Children(func() {
-				ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-					label := "Assistant"
-					if snap.model != "" {
-						if snap.provider != "" {
-							label = snap.provider + "/" + snap.model
-						} else {
-							label = snap.model
-						}
-					}
-					ui.Text(c, label).TextColor(th.Muted).FontWeight(600).FontSize(12)
-					if snap.thinkingLevel != "" && snap.thinkingLevel != "off" {
-						ui.Badge(c, "thinking:"+snap.thinkingLevel)
-					}
-					if ts := msgFormatTimestamp(snap.timestamp); ts != "" {
-						ui.Text(c, ts).TextColor(th.Dim).FontSize(11)
-					}
-					if streaming {
-						ui.Spinner(c).TextColor(th.Accent).Label("Streaming assistant response")
-					}
-				})
-				if copyPayload != "" {
-					btn := ui.Button(c, "Copy").Cursor(ui.CursorPointer)
-					if btn.Clicked() {
-						copyClicked = true
-					}
-				}
-			})
-		}
-
 		// Retry banner if retrying
 		if retry.active {
 			ui.Row(c).
 				FillWidth().
-				Background(th.SurfaceElevated).
-				Border(1, th.Warning).
-				Radius(th.Radius).
+				Background(th.Raised).
+				Border(1, th.Warning.Alpha(0.65)).
+				Radius(8).
 				Padding(6, 10).
 				AlignItems(ui.Center).
 				Gap(8).
@@ -821,19 +825,19 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 					if lbl == "" {
 						lbl = "Thinking..."
 					}
-					ui.Text(c, lbl).TextColor(th.Dim).FontSize(12)
+					ui.Text(c, lbl).TextColor(th.TextTertiary).FontSize(12)
 					continue
 				}
 
 				if isRedacted {
 					ui.Box(c).
 						FillWidth().
-						Background(th.Surface).
-						Border(1, th.BorderMuted).
-						Radius(th.Radius).
+						Background(th.Raised).
+						Border(1, th.Border).
+						Radius(8).
 						Padding(6, 10).
 						Children(func() {
-							ui.Text(c, "[thinking redacted]").TextColor(th.Dim).FontSize(12)
+							ui.Text(c, "[thinking redacted]").TextColor(th.TextTertiary).FontSize(12)
 						})
 					continue
 				}
@@ -846,23 +850,24 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 				thinkCard := ui.Column(c).
 					Key(fmt.Sprintf("thinking-%d", idx)).
 					FillWidth().
-					Background(th.Surface).
-					Border(1, th.BorderMuted).
-					Radius(th.Radius).
-					Padding(8, 12).
+					Background(th.Raised).
+					Border(1, th.Border).
+					Radius(8).
+					Padding(6, 10).
 					Gap(6)
 				thinkCard.Children(func() {
 					cp := ui.CollapsibleBase(c, &open)
 					cp.Trigger.FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Cursor(ui.CursorPointer)
 					cp.Trigger.Children(func() {
-						ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-							chev := "▸"
+						ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
+							gui.IconView(c, gui.IconSparkle, 12, th.ThinkingText)
+							ui.Text(c, "Thinking").TextColor(th.ThinkingText).FontWeight(600).FontSize(12)
+							ui.Text(c, subtitle).TextColor(th.TextTertiary).FontSize(11)
+							chevSvg := gui.IconChevronRight
 							if open {
-								chev = "▾"
+								chevSvg = gui.IconChevronDown
 							}
-							ui.Text(c, chev).TextColor(th.Muted)
-							ui.Text(c, "Thinking").TextColor(th.ThinkingText).FontWeight(600)
-							ui.Text(c, subtitle).TextColor(th.Muted).FontSize(12)
+							gui.IconView(c, chevSvg, 12, th.TextTertiary)
 						})
 					})
 					if cp.Trigger.Changed() {
@@ -872,7 +877,10 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 						}{idx: idx, open: open})
 					}
 					cp.Panel(func() {
-						ui.Text(c, thinkText).TextColor(th.ThinkingText).Selectable().Wrap()
+						ui.Row(c).FillWidth().Padding(2, 0, 2, 2).Gap(8).Children(func() {
+							ui.Box(c).Width(2).Background(th.BorderStrong).Radius(999)
+							ui.Text(c, thinkText).TextColor(th.ThinkingText).FontSize(13).Selectable().Wrap()
+						})
 					})
 				})
 
@@ -891,17 +899,17 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 				}
 				ui.Row(c).
 					FillWidth().
-					Background(th.SurfaceElevated).
-					Border(1, th.BorderMuted).
-					Radius(th.Radius).
+					Background(th.Raised).
+					Border(1, th.Border).
+					Radius(8).
 					Padding(4, 8).
 					AlignItems(ui.Center).
-					Gap(8).
+					Gap(6).
 					Children(func() {
-						ui.Badge(c, "tool")
+						gui.IconView(c, gui.IconWrench, 12, th.TextSecondary)
 						ui.Text(c, b.Name).TextColor(th.ToolTitle).Font("monospace").FontSize(12)
 						if b.Id != "" {
-							ui.Text(c, b.Id).TextColor(th.Dim).FontSize(11)
+							ui.Text(c, b.Id).TextColor(th.TextGhost).FontSize(11)
 						}
 					})
 			}
@@ -912,47 +920,92 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 		case ai.StopReasonAborted:
 			errMsg := snap.errorMessage
 			if errMsg != "" && errMsg != "Request was aborted" {
-				ui.Text(c, "Aborted: "+errMsg).TextColor(th.Error).Wrap()
+				ui.Text(c, "Aborted: "+errMsg).TextColor(th.Error).FontSize(13).Wrap()
 			} else {
-				ui.Text(c, "Operation aborted").TextColor(th.Warning)
+				ui.Text(c, "Operation aborted").TextColor(th.Warning).FontSize(13)
 			}
 		case ai.StopReasonError:
 			errMsg := snap.errorMessage
 			if errMsg == "" {
 				errMsg = "Unknown error"
 			}
-			ui.Box(c).
+			ui.Row(c).
 				FillWidth().
 				Background(th.ToolErrorBg).
-				Border(1, th.Error).
-				Radius(th.Radius).
+				Border(1, th.Error.Alpha(0.6)).
+				Radius(8).
 				Padding(8, 12).
+				AlignItems(ui.Center).
+				Gap(8).
 				Children(func() {
-					ui.Text(c, "Error: "+errMsg).TextColor(th.Error).Selectable().Wrap()
+					gui.IconView(c, gui.IconAlert, 14, th.Error)
+					ui.Text(c, "Error: "+errMsg).TextColor(th.Error).FontSize(13).Selectable().Wrap()
 				})
 		}
 
-		// Usage / cost / duration / stop reason badges
-		if showUsage && !streaming && (snap.usage.Input > 0 || snap.usage.Output > 0 || snap.usage.Cost.Total > 0 || snap.stopReason != "") {
-			ui.Row(c).FillWidth().Wrap().AlignItems(ui.Center).Gap(8).Children(func() {
-				if snap.usage.Input > 0 || snap.usage.Output > 0 {
-					ui.Textf(c, "↑%s ↓%s", FormatTokens(snap.usage.Input), FormatTokens(snap.usage.Output)).
-						TextColor(th.Muted).FontSize(11)
-				}
-				if snap.usage.CacheRead > 0 {
-					ui.Textf(c, "R%s", FormatTokens(snap.usage.CacheRead)).TextColor(th.Dim).FontSize(11)
-				}
-				if snap.usage.CacheWrite > 0 {
-					ui.Textf(c, "W%s", FormatTokens(snap.usage.CacheWrite)).TextColor(th.Dim).FontSize(11)
-				}
-				if snap.usage.Cost.Total > 0 {
-					ui.Text(c, FormatCost(snap.usage.Cost.Total)).TextColor(th.Muted).FontSize(11)
-				}
-				if snap.hasDuration && snap.durationMs > 0 {
-					ui.Text(c, FormatDuration(time.Duration(snap.durationMs)*time.Millisecond)).TextColor(th.Dim).FontSize(11)
-				}
-				if snap.stopReason != "" && snap.stopReason != ai.StopReasonStop && snap.stopReason != ai.StopReasonToolUse {
-					ui.Badge(c, string(snap.stopReason))
+		// Quiet Waku metadata & Copy footer bar
+		hasMeta := snap.model != "" || copyPayload != "" || streaming || (showUsage && (snap.usage.Input > 0 || snap.usage.Output > 0 || snap.usage.Cost.Total > 0 || snap.stopReason != ""))
+		if hasMeta && (copyPayload != "" || !streaming || snap.stopReason != "" || snap.usage.Output > 0) {
+			ui.Row(c).FillWidth().Wrap().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Margin(2, 0, 0, 0).Children(func() {
+				ui.Row(c).AlignItems(ui.Center).Wrap().Gap(8).Children(func() {
+					if snap.model != "" {
+						label := snap.model
+						if snap.provider != "" {
+							label = snap.provider + "/" + snap.model
+						}
+						ui.Text(c, label).TextColor(th.TextTertiary).FontSize(11)
+					}
+					if snap.thinkingLevel != "" && snap.thinkingLevel != "off" {
+						ui.Text(c, "· "+snap.thinkingLevel).TextColor(th.TextGhost).FontSize(11)
+					}
+					if ts := msgFormatTimestamp(snap.timestamp); ts != "" {
+						ui.Text(c, ts).TextColor(th.TextGhost).FontSize(11)
+					}
+					if showUsage && !streaming && (snap.usage.Input > 0 || snap.usage.Output > 0) {
+						ui.Textf(c, "↑%s ↓%s", FormatTokens(snap.usage.Input), FormatTokens(snap.usage.Output)).
+							TextColor(th.TextTertiary).FontSize(11)
+					}
+					if showUsage && !streaming && snap.usage.CacheRead > 0 {
+						ui.Textf(c, "R%s", FormatTokens(snap.usage.CacheRead)).TextColor(th.TextGhost).FontSize(11)
+					}
+					if showUsage && !streaming && snap.usage.CacheWrite > 0 {
+						ui.Textf(c, "W%s", FormatTokens(snap.usage.CacheWrite)).TextColor(th.TextGhost).FontSize(11)
+					}
+					if showUsage && !streaming && snap.usage.Cost.Total > 0 {
+						ui.Text(c, FormatCost(snap.usage.Cost.Total)).TextColor(th.TextTertiary).FontSize(11)
+					}
+					if showUsage && !streaming && snap.hasDuration && snap.durationMs > 0 {
+						ui.Text(c, FormatDuration(time.Duration(snap.durationMs)*time.Millisecond)).TextColor(th.TextGhost).FontSize(11)
+					}
+					if snap.stopReason != "" && snap.stopReason != ai.StopReasonStop && snap.stopReason != ai.StopReasonToolUse {
+						ui.Box(c).Background(th.Raised).Border(1, th.Border).Radius(4).Padding(1, 5).Children(func() {
+							ui.Text(c, string(snap.stopReason)).TextColor(th.TextSecondary).FontSize(10)
+						})
+					}
+					if streaming {
+						ui.Spinner(c).TextColor(th.Accent).Label("Streaming assistant response")
+					}
+				})
+
+				if copyPayload != "" {
+					copyBtn := ui.ButtonBase(c).
+						Height(20).
+						Padding(0, 6, 0, 6).
+						Radius(5).
+						AlignItems(ui.Center).
+						Gap(4).
+						Cursor(ui.CursorPointer).
+						Label("Copy")
+					if copyBtn.Hovered() {
+						copyBtn.Background(th.Overlay)
+					}
+					copyBtn.Children(func() {
+						gui.IconView(c, gui.IconCopy, 11, th.TextTertiary)
+						ui.Text(c, "Copy").TextColor(th.TextTertiary).FontSize(11).SingleLine()
+					})
+					if copyBtn.Clicked() {
+						copyClicked = true
+					}
 				}
 			})
 		}
@@ -1285,31 +1338,37 @@ func (b *BashExecutionCard) View(c *ui.Context) ui.Element {
 
 	card := ui.Column(c).
 		FillWidth().
-		Background(th.Surface).
+		Background(th.Raised).
 		Border(1, borderCol).
-		Radius(th.Radius).
-		Padding(10, 14).
-		Gap(8)
+		Radius(8).
+		Padding(8, 12).
+		Gap(6)
 
 	card.Children(func() {
 		// Header row
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Children(func() {
-			ui.Row(c).Shrink(1).Grow(1).AlignItems(ui.Center).Gap(8).Children(func() {
+			ui.Row(c).Shrink(1).Grow(1).AlignItems(ui.Center).Gap(7).Children(func() {
 				if status == BashRunning {
 					ui.Spinner(c).TextColor(prefixColor).Label("Running command")
+				} else {
+					gui.IconView(c, gui.IconTerminal, 13, prefixColor)
 				}
 				prefix := "$ "
 				if excluded {
 					prefix = "!! $ "
 				}
-				ui.Text(c, prefix+cmd).TextColor(prefixColor).FontWeight(600).Font("monospace").Wrap()
+				ui.Text(c, prefix+cmd).TextColor(prefixColor).FontWeight(600).Font("monospace").FontSize(12).Wrap()
 			})
 			ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(6).Children(func() {
 				if excluded {
-					ui.Badge(c, "excluded")
+					ui.Box(c).Background(th.Inset).Border(1, th.Border).Radius(5).Padding(1, 6).Children(func() {
+						ui.Text(c, "excluded").TextColor(th.TextTertiary).FontSize(10)
+					})
 				}
 				if statusBadge != "" {
-					ui.Badge(c, statusBadge)
+					ui.Box(c).Background(th.Inset).Border(1, th.Border).Radius(5).Padding(1, 6).Children(func() {
+						ui.Text(c, statusBadge).TextColor(th.TextSecondary).FontSize(10)
+					})
 				}
 				if status == BashRunning && onCancel != nil {
 					if ui.Button(c, "Cancel").Cursor(ui.CursorPointer).Clicked() {
@@ -1321,12 +1380,27 @@ func (b *BashExecutionCard) View(c *ui.Context) ui.Element {
 					if expanded {
 						lbl = "Collapse"
 					}
-					if ui.Button(c, lbl).Cursor(ui.CursorPointer).Clicked() {
+					eb := ui.ButtonBase(c).Height(20).Padding(0, 6, 0, 6).Radius(5).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(lbl)
+					if eb.Hovered() {
+						eb.Background(th.Overlay)
+					}
+					eb.Children(func() {
+						ui.Text(c, lbl).TextColor(th.TextTertiary).FontSize(11).SingleLine()
+					})
+					if eb.Clicked() {
 						toggleExpandClicked = true
 					}
 				}
 				if fullOutput != "" {
-					if ui.Button(c, "Copy").Cursor(ui.CursorPointer).Clicked() {
+					cb := ui.ButtonBase(c).Height(20).Padding(0, 6, 0, 6).Radius(5).AlignItems(ui.Center).Gap(4).Cursor(ui.CursorPointer).Label("Copy")
+					if cb.Hovered() {
+						cb.Background(th.Overlay)
+					}
+					cb.Children(func() {
+						gui.IconView(c, gui.IconCopy, 11, th.TextTertiary)
+						ui.Text(c, "Copy").TextColor(th.TextTertiary).FontSize(11).SingleLine()
+					})
+					if cb.Clicked() {
 						copyClicked = true
 					}
 				}
@@ -1337,21 +1411,21 @@ func (b *BashExecutionCard) View(c *ui.Context) ui.Element {
 		if displayText != "" {
 			if hiddenCount > 0 {
 				ui.Textf(c, "... (%d earlier lines hidden, click Expand to show)", hiddenCount).
-					TextColor(th.Muted).FontSize(12)
+					TextColor(th.TextTertiary).FontSize(12)
 			}
 			outBox := ui.Column(c).
 				FillWidth().
-				Background(th.Background).
-				Border(1, th.BorderMuted).
-				Radius(th.Radius-2).
+				Background(th.Inset).
+				Border(1, th.Border).
+				Radius(7).
 				Padding(8, 10)
 			if expanded {
 				outBox = ui.Scroll(c).
 					FillWidth().
 					MaxHeight(360).
-					Background(th.Background).
-					Border(1, th.BorderMuted).
-					Radius(th.Radius-2).
+					Background(th.Inset).
+					Border(1, th.Border).
+					Radius(7).
 					Padding(8, 10)
 			}
 			outBox.Children(func() {
@@ -1363,7 +1437,7 @@ func (b *BashExecutionCard) View(c *ui.Context) ui.Element {
 					Wrap()
 			})
 		} else if status != BashRunning {
-			ui.Text(c, "(no output)").TextColor(th.Dim).FontSize(12)
+			ui.Text(c, "(no output)").TextColor(th.TextGhost).FontSize(12)
 		}
 
 		// Truncation / status footer
@@ -1897,6 +1971,118 @@ func (h *HeaderAnnouncement) SetTheme(th *gui.GuiTheme) {
 	h.mu.Unlock()
 }
 
+// HasActiveAlerts reports whether there are undismissed warnings or announcement notices.
+func (h *HeaderAnnouncement) HasActiveAlerts() bool {
+	if h == nil {
+		return false
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	hasWarn := !h.warningsDismissed && len(h.opts.Warnings) > 0
+	hasAnn := !h.announceDismissed && (h.opts.AnnouncementTitle != "" || h.opts.AnnouncementUrl != "")
+	return hasWarn || hasAnn
+}
+
+// ViewCompactAlerts renders only undismissed startup warnings or announcement banners
+// in Waku chrome, omitting the legacy welcome/keybinding box on clean startups.
+func (h *HeaderAnnouncement) ViewCompactAlerts(c *ui.Context) ui.Element {
+	if h == nil {
+		return ui.Box(c).Hidden(true)
+	}
+	h.mu.Lock()
+	opts := h.opts
+	warnDismissed := h.warningsDismissed
+	annDismissed := h.announceDismissed
+	th := gui.ResolveGuiTheme(c, opts.Theme)
+	h.mu.Unlock()
+
+	hasAnn := !annDismissed && (opts.AnnouncementTitle != "" || opts.AnnouncementUrl != "")
+	hasWarn := !warnDismissed && len(opts.Warnings) > 0
+	if !hasAnn && !hasWarn {
+		return ui.Box(c).Hidden(true)
+	}
+
+	var dismissWarnClicked, dismissAnnClicked, openUrlClicked bool
+	col := ui.Column(c).FillWidth().Gap(6)
+	col.Children(func() {
+		if hasAnn {
+			ui.Row(c).
+				FillWidth().
+				Background(th.Raised).
+				Border(1, th.BorderStrong).
+				Radius(10).
+				Padding(8, 12).
+				AlignItems(ui.Center).
+				Justify(ui.SpaceBetween).
+				Gap(8).
+				Children(func() {
+					ui.Row(c).Shrink(1).Grow(1).AlignItems(ui.Center).Gap(8).Children(func() {
+						gui.IconView(c, gui.IconInfo, 14, th.Accent)
+						ui.Column(c).Shrink(1).Grow(1).Gap(2).Children(func() {
+							if opts.AnnouncementTitle != "" {
+								ui.Text(c, opts.AnnouncementTitle).TextColor(th.Text).FontWeight(600).FontSize(12)
+							}
+							if opts.AnnouncementUrl != "" {
+								ui.Text(c, opts.AnnouncementUrl).TextColor(th.MdLink).FontSize(11)
+							}
+						})
+					})
+					ui.Row(c).Shrink(0).Gap(6).Children(func() {
+						if opts.AnnouncementUrl != "" {
+							if ui.Button(c, "Open").Cursor(ui.CursorPointer).Clicked() {
+								openUrlClicked = true
+							}
+						}
+						if ui.Button(c, "Dismiss").Cursor(ui.CursorPointer).Clicked() {
+							dismissAnnClicked = true
+						}
+					})
+				})
+		}
+
+		if hasWarn {
+			ui.Column(c).
+				FillWidth().
+				Background(th.Raised).
+				Border(1, th.Warning.Alpha(0.6)).
+				Radius(10).
+				Padding(8, 12).
+				Gap(4).
+				Children(func() {
+					ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
+						ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
+							gui.IconView(c, gui.IconAlert, 13, th.Warning)
+							ui.Text(c, "Startup Notices").TextColor(th.Warning).FontWeight(600).FontSize(12)
+						})
+						if ui.Button(c, "Dismiss Warnings").Cursor(ui.CursorPointer).Clicked() {
+							dismissWarnClicked = true
+						}
+					})
+					for _, w := range opts.Warnings {
+						ui.Text(c, "• "+w).TextColor(th.Warning).FontSize(12).Wrap()
+					}
+				})
+		}
+	})
+
+	if openUrlClicked && opts.AnnouncementUrl != "" {
+		if opts.OnOpenUrl != nil {
+			opts.OnOpenUrl(opts.AnnouncementUrl)
+		} else {
+			utils.OpenBrowser(opts.AnnouncementUrl)
+		}
+	}
+	if dismissAnnClicked {
+		h.mu.Lock()
+		h.announceDismissed = true
+		h.mu.Unlock()
+	}
+	if dismissWarnClicked {
+		h.DismissWarnings()
+	}
+	return col
+}
+
 // View builds the MyGo UI element tree for the header announcement card.
 func (h *HeaderAnnouncement) View(c *ui.Context) ui.Element {
 	h.mu.Lock()
@@ -2301,6 +2487,16 @@ func (s *StatusBanner) IsActive() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.working || s.compacting || s.retrying || s.noticeText != ""
+}
+
+// StateSnapshot returns a point-in-time snapshot of the StatusBanner fields.
+func (s *StatusBanner) StateSnapshot() (working bool, workingMsg string, compacting, retrying bool, retryAttempt, retryMax int, retryDelay time.Duration, retryErr, notice string, noticeErr bool) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.working, s.workingMsg, s.compacting, s.retrying, s.retryAttempt, s.retryMax, s.retryDelay, s.retryErr, s.noticeText, s.noticeError
 }
 
 // View builds the StatusBanner UI element tree.

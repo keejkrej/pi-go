@@ -430,6 +430,123 @@ func tvExtractEdits(args *jsonx.Object) []core.EditReplacement {
 	return nil
 }
 
+func tvToolIcon(name string) *ui.SVG {
+	switch strings.ToLower(name) {
+	case "read":
+		return gui.IconFile
+	case "write", "edit":
+		return gui.IconFileDiff
+	case "bash":
+		return gui.IconTerminal
+	case "grep", "find":
+		return gui.IconSearch
+	case "ls":
+		return gui.IconFolder
+	default:
+		return gui.IconWrench
+	}
+}
+
+func tvCountDiffStats(patch, oldText, newText string) (adds, dels int) {
+	if patch != "" {
+		for _, ln := range strings.Split(patch, "\n") {
+			if strings.HasPrefix(ln, "+++") || strings.HasPrefix(ln, "---") {
+				continue
+			}
+			if strings.HasPrefix(ln, "+") {
+				adds++
+			} else if strings.HasPrefix(ln, "-") {
+				dels++
+			}
+		}
+		if adds > 0 || dels > 0 {
+			return adds, dels
+		}
+	}
+	if oldText != "" {
+		dels = strings.Count(oldText, "\n") + 1
+	}
+	if newText != "" {
+		adds = strings.Count(newText, "\n") + 1
+	}
+	return adds, dels
+}
+
+// ModifiedFileStats returns the normalized workspace path and (+adds, -dels) line counts
+// if this card represents a completed `edit` or `write` file modification.
+func (tc *ToolExecutionCard) ModifiedFileStats() (path string, adds, dels int) {
+	if tc == nil {
+		return "", 0, 0
+	}
+	tc.mu.Lock()
+	name := strings.ToLower(tc.toolName)
+	args := tvCloneArgs(tc.args)
+	res := tvCloneResult(tc.result)
+	cwd := tc.cwd
+	isErr := tc.isError
+	tc.mu.Unlock()
+
+	if isErr || (name != "edit" && name != "write") {
+		return "", 0, 0
+	}
+	rawPath := tvArgStr(args, "path", "file_path")
+	if rawPath == "" {
+		return "", 0, 0
+	}
+	disp := tvDisplayPath(rawPath, cwd)
+	if name == "write" {
+		content := tvArgStr(args, "content")
+		if content == "" {
+			return disp, 0, 0
+		}
+		return disp, strings.Count(content, "\n") + 1, 0
+	}
+	var patch string
+	if det, ok := tvDecodeDetails[core.EditToolDetails](res.Details); ok {
+		patch = det.Patch
+		if patch == "" {
+			patch = det.Diff
+		}
+	}
+	edits := tvExtractEdits(args)
+	var oldB, newB strings.Builder
+	for _, ed := range edits {
+		oldB.WriteString(ed.OldText)
+		newB.WriteString(ed.NewText)
+	}
+	a, d := tvCountDiffStats(patch, oldB.String(), newB.String())
+	return disp, a, d
+}
+
+func tvMicroBadge(c *ui.Context, th *gui.GuiTheme, label string, textColor ui.Color) {
+	ui.Box(c).
+		Background(th.Inset).
+		Border(1, th.Border).
+		Radius(5).
+		Padding(1, 6).
+		Children(func() {
+			ui.Text(c, label).TextColor(textColor).FontSize(10).SingleLine()
+		})
+}
+
+func tvGhostActionButton(c *ui.Context, th *gui.GuiTheme, label string) bool {
+	btn := ui.ButtonBase(c).
+		Height(20).
+		Padding(0, 6, 0, 6).
+		Radius(5).
+		AlignItems(ui.Center).
+		Justify(ui.Center).
+		Cursor(ui.CursorPointer).
+		Label(label)
+	if btn.Hovered() {
+		btn.Background(th.Overlay)
+	}
+	btn.Children(func() {
+		ui.Text(c, label).TextColor(th.TextTertiary).FontSize(11).SingleLine()
+	})
+	return btn.Clicked()
+}
+
 // View renders the immediate-mode MyGo UI tree for the ToolExecutionCard.
 func (tc *ToolExecutionCard) View(c *ui.Context) ui.Element {
 	tc.mu.Lock()
@@ -464,19 +581,22 @@ func (tc *ToolExecutionCard) View(c *ui.Context) ui.Element {
 		}
 	}
 
-	bg := th.ToolPendingBg
-	border := th.BorderAccent
-	if !snap.Pending {
-		if snap.IsError {
-			bg = th.ToolErrorBg
-			border = th.Error.Alpha(0.6)
-		} else {
-			bg = th.ToolSuccessBg
-			border = th.Success.Alpha(0.45)
-		}
+	bg := th.Raised
+	border := th.Border
+	iconCol := th.TextSecondary
+	if snap.Pending {
+		border = th.BorderAccent
+		iconCol = th.Accent
+	} else if snap.IsError {
+		bg = th.ToolErrorBg
+		border = th.Error.Alpha(0.55)
+		iconCol = th.Error
+	} else if snap.HasResult {
+		iconCol = th.Success
 	}
 
 	title, subtitle, extraBadges, copyText := tvBuildHeaderMeta(snap)
+	_, modAdds, modDels := tc.ModifiedFileStats()
 
 	var toggleClicked, toggleDiffClicked, copyClicked bool
 
@@ -484,44 +604,52 @@ func (tc *ToolExecutionCard) View(c *ui.Context) ui.Element {
 		FillWidth().
 		Background(bg).
 		Border(1, border).
-		Radius(th.Radius).
-		Padding(10, 14).
-		Gap(8)
+		Radius(8).
+		Padding(6, 10).
+		Gap(6)
 
 	card.Children(func() {
-		// Header row
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Children(func() {
-			titleTrigger := ui.Row(c).Shrink(1).Grow(1).AlignItems(ui.Center).Gap(8).Cursor(ui.CursorPointer)
+		// Compact 28px header row
+		ui.Row(c).FillWidth().MinHeight(22).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Children(func() {
+			titleTrigger := ui.Row(c).Shrink(1).Grow(1).AlignItems(ui.Center).Gap(7).Cursor(ui.CursorPointer)
 			titleTrigger.Children(func() {
 				if snap.Pending {
 					ui.Spinner(c).TextColor(th.Accent).Label(snap.ToolName)
-				} else if snap.IsError {
-					ui.Text(c, "✗").TextColor(th.Error).FontWeight(700)
 				} else {
-					ui.Text(c, "✓").TextColor(th.Success).FontWeight(700)
+					gui.IconView(c, tvToolIcon(snap.ToolName), 13, iconCol)
 				}
-				ui.Text(c, title).TextColor(th.ToolTitle).FontWeight(700).SingleLine()
+				ui.Text(c, title).TextColor(th.Text).FontWeight(600).FontSize(12).SingleLine()
 				if subtitle != "" {
-					ui.Text(c, subtitle).TextColor(th.Muted).Font("monospace").FontSize(12).SingleLine()
+					ui.Text(c, subtitle).TextColor(th.TextSecondary).Font("monospace").FontSize(12).SingleLine()
 				}
 			})
 			if titleTrigger.Clicked() {
 				toggleClicked = true
 			}
 
-			ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(6).Children(func() {
+			ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(5).Children(func() {
+				if modAdds > 0 {
+					ui.Textf(c, "+%d", modAdds).TextColor(th.DiffAdded).Font("monospace").FontSize(11).SingleLine()
+				}
+				if modDels > 0 {
+					ui.Textf(c, "-%d", modDels).TextColor(th.DiffRemoved).Font("monospace").FontSize(11).SingleLine()
+				}
 				for _, b := range extraBadges {
-					ui.Badge(c, b)
+					bCol := th.TextTertiary
+					if b == "truncated" || b == "lines truncated" {
+						bCol = th.Warning
+					}
+					tvMicroBadge(c, th, b, bCol)
 				}
 				if snap.Duration > 0 {
-					ui.Badge(c, FormatDuration(snap.Duration))
+					tvMicroBadge(c, th, FormatDuration(snap.Duration), th.TextTertiary)
 				}
 				if strings.EqualFold(snap.ToolName, "edit") {
 					layoutLbl := "Side-by-side"
 					if snap.DiffSideBySide {
 						layoutLbl = "Inline"
 					}
-					if ui.Button(c, layoutLbl).Cursor(ui.CursorPointer).Clicked() {
+					if tvGhostActionButton(c, th, layoutLbl) {
 						toggleDiffClicked = true
 					}
 				}
@@ -529,11 +657,11 @@ func (tc *ToolExecutionCard) View(c *ui.Context) ui.Element {
 				if snap.Expanded {
 					expandLbl = "Collapse"
 				}
-				if ui.Button(c, expandLbl).Cursor(ui.CursorPointer).Clicked() {
+				if tvGhostActionButton(c, th, expandLbl) {
 					toggleClicked = true
 				}
 				if copyText != "" {
-					if ui.Button(c, "Copy").Cursor(ui.CursorPointer).Clicked() {
+					if tvGhostActionButton(c, th, "Copy") {
 						copyClicked = true
 					}
 				}
@@ -967,13 +1095,13 @@ func (tc *ToolExecutionCard) renderGenericBody(
 		if pretty, err := jsonx.MarshalIndent(snap.Args, "  "); err == nil {
 			ui.Column(c).
 				FillWidth().
-				Background(th.Background).
-				Border(1, th.BorderMuted).
-				Radius(th.Radius-2).
+				Background(th.Inset).
+				Border(1, th.Border).
+				Radius(7).
 				Padding(6, 10).
 				Gap(4).
 				Children(func() {
-					ui.Text(c, "Arguments").TextColor(th.Muted).FontSize(11).FontWeight(600)
+					ui.Text(c, "Arguments").TextColor(th.TextTertiary).FontSize(11).FontWeight(600)
 					ui.Text(c, string(pretty)).TextColor(th.ToolOutput).Font("monospace").FontSize(12).Selectable().Wrap()
 				})
 		}
@@ -986,14 +1114,14 @@ func (tc *ToolExecutionCard) renderGenericBody(
 			if pretty, err := jsonx.MarshalIndent(snap.Result.Details, "  "); err == nil && len(pretty) > 2 {
 				ui.Column(c).
 					FillWidth().
-					Background(th.Background).
-					Border(1, th.BorderMuted).
-					Radius(th.Radius-2).
+					Background(th.Inset).
+					Border(1, th.Border).
+					Radius(7).
 					Padding(6, 10).
 					Gap(4).
 					Children(func() {
-						ui.Text(c, "Details").TextColor(th.Muted).FontSize(11).FontWeight(600)
-						ui.Text(c, string(pretty)).TextColor(th.Muted).Font("monospace").FontSize(12).Selectable().Wrap()
+						ui.Text(c, "Details").TextColor(th.TextTertiary).FontSize(11).FontWeight(600)
+						ui.Text(c, string(pretty)).TextColor(th.TextSecondary).Font("monospace").FontSize(12).Selectable().Wrap()
 					})
 			}
 		}
@@ -1018,17 +1146,17 @@ func tvRenderLinesBody(c *ui.Context, text string, maxLines int, fromTail, expan
 	}
 	box := ui.Column(c).
 		FillWidth().
-		Background(th.Background).
-		Border(1, th.BorderMuted).
-		Radius(th.Radius-2).
+		Background(th.Inset).
+		Border(1, th.Border).
+		Radius(7).
 		Padding(8, 10)
 	if expanded {
 		box = ui.Scroll(c).
 			FillWidth().
 			MaxHeight(340).
-			Background(th.Background).
-			Border(1, th.BorderMuted).
-			Radius(th.Radius-2).
+			Background(th.Inset).
+			Border(1, th.Border).
+			Radius(7).
 			Padding(8, 10)
 	}
 	box.Children(func() {
