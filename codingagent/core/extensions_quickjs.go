@@ -313,6 +313,17 @@ func (e *eqjsVM) pumpUntil(done <-chan struct{}) {
 	}
 }
 
+// runOffLoopAndPump runs fn on a helper goroutine while pumping reqCh/postCh on e.loop().
+// MUST ONLY be called from inside a HostFunction executing on e.loop().
+func (e *eqjsVM) runOffLoopAndPump(fn func()) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fn()
+	}()
+	e.pumpUntil(done)
+}
+
 func (e *eqjsVM) Close() {
 	e.closeOnce.Do(func() {
 		e.timersMu.Lock()
@@ -790,6 +801,9 @@ globalThis.__piAwaitEvent = function(fn, ev, ctx, resolveCb, rejectCb) {
   } catch (err) {
     rejectCb(err);
   }
+};
+globalThis.__piMakeMap = function(entries) {
+  return new Map(entries || []);
 };`
 	res2, err2 := e.vm.EvalCode(awaitEvCode, "<pi-await-event>", 0)
 	if res2 != nil {
@@ -3381,14 +3395,16 @@ func (e *eqjsVM) installContextUIHostFuncs(hostObj *quickjs.JSValueHandle) {
 		}
 		if args[2].IsFunction() {
 			fn := e.retain(args[2])
-			factory := func(_ tui.TUI, _ *theme.Theme) tui.Component {
-				return e.callComponentFactory("widget:"+key, fn)
+			factory := func(t tui.TUI, _ *theme.Theme) tui.Component {
+				return e.callComponentFactory("widget:"+key, fn, t, false, nil)
 			}
-			if wopts != nil {
-				fui.SetWidgetFactory(key, factory, wopts)
-			} else {
-				fui.SetWidgetFactory(key, factory)
-			}
+			e.runOffLoopAndPump(func() {
+				if wopts != nil {
+					fui.SetWidgetFactory(key, factory, wopts)
+				} else {
+					fui.SetWidgetFactory(key, factory)
+				}
+			})
 			return e.vm.Undefined(), nil
 		}
 		var lines []string
@@ -3399,11 +3415,13 @@ func (e *eqjsVM) installContextUIHostFuncs(hostObj *quickjs.JSValueHandle) {
 				}
 			}
 		}
-		if wopts != nil {
-			fui.SetWidgetLines(key, lines, wopts)
-		} else {
-			fui.SetWidgetLines(key, lines)
-		}
+		e.runOffLoopAndPump(func() {
+			if wopts != nil {
+				fui.SetWidgetLines(key, lines, wopts)
+			} else {
+				fui.SetWidgetLines(key, lines)
+			}
+		})
 		return e.vm.Undefined(), nil
 	})
 	e.setHostMethod(uiObj, "setFooter", func(_ *quickjs.JSValueHandle, args ...*quickjs.JSValueHandle) (*quickjs.JSValueHandle, error) {
@@ -3416,12 +3434,16 @@ func (e *eqjsVM) installContextUIHostFuncs(hostObj *quickjs.JSValueHandle) {
 			return e.vm.Undefined(), nil
 		}
 		if args[1] == nil || !args[1].IsFunction() {
-			fui.SetFooter(nil)
+			e.runOffLoopAndPump(func() {
+				fui.SetFooter(nil)
+			})
 			return e.vm.Undefined(), nil
 		}
 		fn := e.retain(args[1])
-		fui.SetFooter(func(_ tui.TUI, _ *theme.Theme, _ ReadonlyFooterDataProvider) tui.Component {
-			return e.callComponentFactory("footer", fn)
+		e.runOffLoopAndPump(func() {
+			fui.SetFooter(func(t tui.TUI, _ *theme.Theme, footerData ReadonlyFooterDataProvider) tui.Component {
+				return e.callComponentFactory("footer", fn, t, true, footerData)
+			})
 		})
 		return e.vm.Undefined(), nil
 	})
@@ -3435,12 +3457,16 @@ func (e *eqjsVM) installContextUIHostFuncs(hostObj *quickjs.JSValueHandle) {
 			return e.vm.Undefined(), nil
 		}
 		if args[1] == nil || !args[1].IsFunction() {
-			fui.SetHeader(nil)
+			e.runOffLoopAndPump(func() {
+				fui.SetHeader(nil)
+			})
 			return e.vm.Undefined(), nil
 		}
 		fn := e.retain(args[1])
-		fui.SetHeader(func(_ tui.TUI, _ *theme.Theme) tui.Component {
-			return e.callComponentFactory("header", fn)
+		e.runOffLoopAndPump(func() {
+			fui.SetHeader(func(t tui.TUI, _ *theme.Theme) tui.Component {
+				return e.callComponentFactory("header", fn, t, false, nil)
+			})
 		})
 		return e.vm.Undefined(), nil
 	})
@@ -3467,7 +3493,7 @@ func (e *eqjsVM) installContextUIHostFuncs(hostObj *quickjs.JSValueHandle) {
 		factoryFn := e.retain(args[1])
 		deferred := e.vm.NewPromise()
 		go func() {
-			res, err := fui.Custom(e.vmCtx, func(_ tui.TUI, _ *theme.Theme, _ *tui.KeybindingsManager, done func(any)) (tui.Component, error) {
+			res, err := fui.Custom(e.vmCtx, func(t tui.TUI, _ *theme.Theme, _ *tui.KeybindingsManager, done func(any)) (tui.Component, error) {
 				var compHandle *quickjs.JSValueHandle
 				callErr := e.runOnLoop(e.vmCtx, func() error {
 					doneCb := e.newCallbackHandle(func(_ *quickjs.JSValueHandle, cbArgs ...*quickjs.JSValueHandle) (*quickjs.JSValueHandle, error) {
@@ -3479,14 +3505,17 @@ func (e *eqjsVM) installContextUIHostFuncs(hostObj *quickjs.JSValueHandle) {
 						return e.vm.Undefined(), nil
 					})
 					defer doneCb.Dispose()
-					tuiShim := e.vm.NewObject()
-					tuiShim.SetProp("requestRender", e.newCallbackHandle(func(_ *quickjs.JSValueHandle, _ ...*quickjs.JSValueHandle) (*quickjs.JSValueHandle, error) {
-						return e.vm.Undefined(), nil
-					}))
+					tuiShim := e.eqjsNewTuiShim(t)
 					defer tuiShim.Dispose()
 					kbShim := e.vm.NewObject()
 					defer kbShim.Dispose()
-					themeVal := e.vm.GetGlobal().GetProp("__piTheme")
+					var themeVal *quickjs.JSValueHandle
+					if g := e.vm.GetGlobal(); g != nil {
+						themeVal = g.GetProp("__piTheme")
+						g.Dispose()
+					} else {
+						themeVal = e.vm.Undefined()
+					}
 					defer themeVal.Dispose()
 
 					r, err := e.vm.CallFunction(factoryFn, e.vm.Undefined(), tuiShim, themeVal, kbShim, doneCb)
@@ -4536,6 +4565,132 @@ func (c *eqjsComponent) HandleInput(data string) {
 	})
 }
 
+func (c *eqjsComponent) Dispose() {
+	if c == nil || c.obj == nil || c.evm == nil || c.evm.isClosed() {
+		return
+	}
+	_ = c.evm.runOnLoop(c.evm.vmCtx, func() error {
+		fn := c.obj.GetProp("dispose")
+		defer fn.Dispose()
+		if fn.IsFunction() {
+			r, _ := c.evm.vm.CallFunction(fn, c.obj)
+			if r != nil {
+				r.Dispose()
+			}
+			_, _ = c.evm.vm.ExecutePendingJobs()
+		}
+		return nil
+	})
+}
+
+func (e *eqjsVM) eqjsNewTuiShim(t tui.TUI) *quickjs.JSValueHandle {
+	tuiShim := e.vm.NewObject()
+	e.setHostMethod(tuiShim, "requestRender", func(_ *quickjs.JSValueHandle, args ...*quickjs.JSValueHandle) (*quickjs.JSValueHandle, error) {
+		if t != nil {
+			var forcePtr *bool
+			if len(args) > 0 && args[0] != nil && args[0].ToBoolean() {
+				f := true
+				forcePtr = &f
+			}
+			t.RequestRender(forcePtr)
+		}
+		return e.vm.Undefined(), nil
+	})
+	return tuiShim
+}
+
+func (e *eqjsVM) eqjsBuildFooterDataJS(footerData ReadonlyFooterDataProvider) *quickjs.JSValueHandle {
+	fdObj := e.vm.NewObject()
+	e.setHostMethod(fdObj, "getGitBranch", func(_ *quickjs.JSValueHandle, _ ...*quickjs.JSValueHandle) (*quickjs.JSValueHandle, error) {
+		if footerData == nil {
+			return e.vm.Null(), nil
+		}
+		return eqjsToJS(e.vm, footerData.GetGitBranch()), nil
+	})
+	e.setHostMethod(fdObj, "getExtensionStatuses", func(_ *quickjs.JSValueHandle, _ ...*quickjs.JSValueHandle) (*quickjs.JSValueHandle, error) {
+		var statuses map[string]string
+		if footerData != nil {
+			statuses = footerData.GetExtensionStatuses()
+		}
+		keys := make([]string, 0, len(statuses))
+		for k := range statuses {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		pairs := make([]any, 0, len(keys))
+		for _, k := range keys {
+			pairs = append(pairs, []any{k, statuses[k]})
+		}
+		g := e.vm.GetGlobal()
+		if g == nil {
+			return e.vm.Undefined(), nil
+		}
+		makeMapFn := g.GetProp("__piMakeMap")
+		g.Dispose()
+		defer makeMapFn.Dispose()
+		if !makeMapFn.IsFunction() {
+			return e.vm.Undefined(), nil
+		}
+		pairsHandle := eqjsToJS(e.vm, pairs)
+		defer pairsHandle.Dispose()
+		res, err := e.vm.CallFunction(makeMapFn, e.vm.Undefined(), pairsHandle)
+		if err != nil {
+			if res != nil {
+				res.Dispose()
+			}
+			return nil, err
+		}
+		return res, nil
+	})
+	e.setHostMethod(fdObj, "getAvailableProviderCount", func(_ *quickjs.JSValueHandle, _ ...*quickjs.JSValueHandle) (*quickjs.JSValueHandle, error) {
+		if footerData == nil {
+			return e.vm.NewNumber(0), nil
+		}
+		return e.vm.NewNumber(float64(footerData.GetAvailableProviderCount())), nil
+	})
+	e.setHostMethod(fdObj, "onBranchChange", func(_ *quickjs.JSValueHandle, args ...*quickjs.JSValueHandle) (*quickjs.JSValueHandle, error) {
+		if footerData == nil || len(args) == 0 || args[0] == nil || !args[0].IsFunction() {
+			return e.newCallbackHandle(func(_ *quickjs.JSValueHandle, _ ...*quickjs.JSValueHandle) (*quickjs.JSValueHandle, error) {
+				return e.vm.Undefined(), nil
+			}), nil
+		}
+		cbHandle := e.retain(args[0])
+		var unsubscribed atomic.Bool
+		var unsubOnce sync.Once
+		rawUnsub := footerData.OnBranchChange(func() {
+			if e.isClosed() || unsubscribed.Load() {
+				return
+			}
+			e.postToLoop(func() {
+				if e.isClosed() || unsubscribed.Load() {
+					return
+				}
+				r, _ := e.vm.CallFunction(cbHandle, e.vm.Undefined())
+				if r != nil {
+					r.Dispose()
+				}
+				_, _ = e.vm.ExecutePendingJobs()
+			})
+		})
+		unsubFn := func() {
+			unsubOnce.Do(func() {
+				unsubscribed.Store(true)
+				if rawUnsub != nil {
+					rawUnsub()
+				}
+			})
+		}
+		e.eventUnsubMu.Lock()
+		e.eventUnsubs = append(e.eventUnsubs, unsubFn)
+		e.eventUnsubMu.Unlock()
+		return e.newCallbackHandle(func(_ *quickjs.JSValueHandle, _ ...*quickjs.JSValueHandle) (*quickjs.JSValueHandle, error) {
+			unsubFn()
+			return e.vm.Undefined(), nil
+		}), nil
+	})
+	return fdObj
+}
+
 func (e *eqjsVM) callComponentRenderer(_ string, fn *quickjs.JSValueHandle, arg0 any, arg1 any) tui.Component {
 	var compHandle *quickjs.JSValueHandle
 	_ = e.runOnLoop(e.vmCtx, func() error {
@@ -4557,17 +4712,26 @@ func (e *eqjsVM) callComponentRenderer(_ string, fn *quickjs.JSValueHandle, arg0
 	return &eqjsComponent{evm: e, obj: compHandle}
 }
 
-func (e *eqjsVM) callComponentFactory(_ string, fn *quickjs.JSValueHandle) tui.Component {
+func (e *eqjsVM) callComponentFactory(_ string, fn *quickjs.JSValueHandle, t tui.TUI, includeFooterData bool, footerData ReadonlyFooterDataProvider) tui.Component {
 	var compHandle *quickjs.JSValueHandle
 	_ = e.runOnLoop(e.vmCtx, func() error {
-		tuiShim := e.vm.NewObject()
-		tuiShim.SetProp("requestRender", e.newCallbackHandle(func(_ *quickjs.JSValueHandle, _ ...*quickjs.JSValueHandle) (*quickjs.JSValueHandle, error) {
-			return e.vm.Undefined(), nil
-		}))
+		tuiShim := e.eqjsNewTuiShim(t)
 		defer tuiShim.Dispose()
-		thVal := e.vm.GetGlobal().GetProp("__piTheme")
+		var thVal *quickjs.JSValueHandle
+		if g := e.vm.GetGlobal(); g != nil {
+			thVal = g.GetProp("__piTheme")
+			g.Dispose()
+		} else {
+			thVal = e.vm.Undefined()
+		}
 		defer thVal.Dispose()
-		r, err := e.vm.CallFunction(fn, e.vm.Undefined(), tuiShim, thVal)
+		args := []*quickjs.JSValueHandle{tuiShim, thVal}
+		if includeFooterData {
+			fdObj := e.eqjsBuildFooterDataJS(footerData)
+			defer fdObj.Dispose()
+			args = append(args, fdObj)
+		}
+		r, err := e.vm.CallFunction(fn, e.vm.Undefined(), args...)
 		if err == nil && r != nil && r.IsObject() {
 			compHandle = e.retain(r)
 		}

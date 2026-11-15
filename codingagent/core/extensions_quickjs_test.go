@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -933,5 +934,228 @@ export default function (pi: any) {
 	case <-done:
 	case <-time.After(3 * time.Second):
 		t.Fatalf("runner.Shutdown hung with active setInterval")
+	}
+}
+
+type teqjsStubTUI struct {
+	tui.TUI
+	renderCalls atomic.Int32
+}
+
+func (s *teqjsStubTUI) RequestRender(_ *bool) {
+	s.renderCalls.Add(1)
+}
+
+type teqjsStubFooterData struct {
+	mu            sync.Mutex
+	branch        *string
+	statuses      map[string]string
+	providerCount int
+	nextID        int
+	cbs           map[int]func()
+	unsubCount    atomic.Int32
+}
+
+func (f *teqjsStubFooterData) GetGitBranch() *string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.branch == nil {
+		return nil
+	}
+	b := *f.branch
+	return &b
+}
+
+func (f *teqjsStubFooterData) GetExtensionStatuses() map[string]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make(map[string]string, len(f.statuses))
+	for k, v := range f.statuses {
+		out[k] = v
+	}
+	return out
+}
+
+func (f *teqjsStubFooterData) GetAvailableProviderCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.providerCount
+}
+
+func (f *teqjsStubFooterData) OnBranchChange(cb func()) func() {
+	f.mu.Lock()
+	if f.cbs == nil {
+		f.cbs = make(map[int]func())
+	}
+	id := f.nextID
+	f.nextID++
+	f.cbs[id] = cb
+	f.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			f.unsubCount.Add(1)
+			f.mu.Lock()
+			delete(f.cbs, id)
+			f.mu.Unlock()
+		})
+	}
+}
+
+func (f *teqjsStubFooterData) triggerBranchChange(next string) {
+	f.mu.Lock()
+	f.branch = &next
+	cbs := make([]func(), 0, len(f.cbs))
+	for _, cb := range f.cbs {
+		cbs = append(cbs, cb)
+	}
+	f.mu.Unlock()
+	for _, cb := range cbs {
+		cb()
+	}
+}
+
+func (f *teqjsStubFooterData) subscriberCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.cbs)
+}
+
+type teqjsFooterMockUI struct {
+	*teqjsMockUI
+	tuiInstance tui.TUI
+	footerData  ReadonlyFooterDataProvider
+	mu          sync.Mutex
+	footers     []tui.Component
+}
+
+func (m *teqjsFooterMockUI) SetFooter(factory func(tui.TUI, *theme.Theme, ReadonlyFooterDataProvider) tui.Component) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if factory == nil {
+		return
+	}
+	m.footers = append(m.footers, factory(m.tuiInstance, nil, m.footerData))
+}
+
+func TestQuickJSSetFooterDataProviderAndCleanup(t *testing.T) {
+	ctx := context.Background()
+	runner, _, _ := teqjsLoadTS(t, map[string]string{
+		"custom_footer.ts": `
+export default function (pi: any) {
+  pi.registerCommand("mount-footer", {
+    description: "Mount footer using footerData",
+    handler: async (_args: string, ctx: any) => {
+      let branchChanges = 0;
+      ctx.ui.setFooter((tui: any, _theme: any, footerData: any) => {
+        const unsub = footerData.onBranchChange(() => {
+          branchChanges++;
+          tui.requestRender();
+        });
+        return {
+          dispose: unsub,
+          invalidate() {},
+          render(_width: number): string[] {
+            const branch = footerData.getGitBranch();
+            const statuses = footerData.getExtensionStatuses();
+            const isMap = statuses instanceof Map;
+            const entries = isMap ? Array.from(statuses.entries()).map(([k, v]) => k + "=" + v).join(",") : "not-map";
+            const provCount = footerData.getAvailableProviderCount();
+            return [
+              "branch=" + String(branch) + ";changes=" + branchChanges + ";providers=" + provCount + ";map=" + isMap + ";statuses=" + entries,
+            ];
+          },
+        };
+      });
+      // Second subscription left open until VM shutdown to verify automatic cleanup.
+      ctx.ui.setFooter((tui: any, _theme: any, footerData: any) => {
+        footerData.onBranchChange(() => tui.requestRender());
+        return {
+          invalidate() {},
+          render() { return ["secondary"]; },
+        };
+      });
+    },
+  });
+}
+`,
+	}, "custom_footer.ts")
+
+	stubTUI := &teqjsStubTUI{}
+	stubFD := &teqjsStubFooterData{
+		branch:        teqjsStrPtr("feat/footer"),
+		statuses:      map[string]string{"s1": "ready", "s2": "ok"},
+		providerCount: 3,
+	}
+	mockUI := &teqjsFooterMockUI{
+		teqjsMockUI: &teqjsMockUI{},
+		tuiInstance: stubTUI,
+		footerData:  stubFD,
+	}
+	runner.SetUIContext(mockUI, ExtensionModeTui)
+
+	cmd := runner.GetCommand("mount-footer")
+	if cmd == nil {
+		t.Fatalf("mount-footer command not found")
+	}
+	if err := cmd.Handler(ctx, "", runner.CreateCommandContext()); err != nil {
+		t.Fatalf("mount-footer handler failed: %v", err)
+	}
+
+	mockUI.mu.Lock()
+	if len(mockUI.footers) != 2 {
+		mockUI.mu.Unlock()
+		t.Fatalf("expected 2 footer components, got %d", len(mockUI.footers))
+	}
+	comp := mockUI.footers[0]
+	mockUI.mu.Unlock()
+
+	lines := comp.Render(120)
+	if len(lines) != 1 || lines[0] != "branch=feat/footer;changes=0;providers=3;map=true;statuses=s1=ready,s2=ok" {
+		t.Fatalf("unexpected initial footer render: %#v", lines)
+	}
+	if stubFD.subscriberCount() != 2 {
+		t.Fatalf("expected 2 active branch subscribers, got %d", stubFD.subscriberCount())
+	}
+
+	stubFD.triggerBranchChange("main")
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if stubTUI.renderCalls.Load() >= 2 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if stubTUI.renderCalls.Load() < 2 {
+		t.Fatalf("expected tui.requestRender() called by both onBranchChange handlers, got %d", stubTUI.renderCalls.Load())
+	}
+	lines = comp.Render(120)
+	if len(lines) != 1 || lines[0] != "branch=main;changes=1;providers=3;map=true;statuses=s1=ready,s2=ok" {
+		t.Fatalf("unexpected footer render after branch change: %#v", lines)
+	}
+
+	// Explicit component Dispose() must invoke JS dispose() -> unsub().
+	disposer, ok := comp.(interface{ Dispose() })
+	if !ok {
+		t.Fatalf("expected eqjsComponent to implement Dispose()")
+	}
+	disposer.Dispose()
+	if stubFD.subscriberCount() != 1 {
+		t.Fatalf("expected 1 subscriber remaining after Dispose(), got %d", stubFD.subscriberCount())
+	}
+	stubFD.triggerBranchChange("release")
+	time.Sleep(30 * time.Millisecond)
+	lines = comp.Render(120)
+	if len(lines) != 1 || !strings.Contains(lines[0], "changes=1") {
+		t.Fatalf("expected unsubscribed footer callback not to increment changes after Dispose(), got %#v", lines)
+	}
+
+	// Runner shutdown must clean up the second retained subscription without hanging.
+	runner.Shutdown()
+	if stubFD.subscriberCount() != 0 {
+		t.Fatalf("expected 0 subscribers after runner.Shutdown(), got %d", stubFD.subscriberCount())
+	}
+	if stubFD.unsubCount.Load() != 2 {
+		t.Fatalf("expected 2 total unsub calls across Dispose+Shutdown, got %d", stubFD.unsubCount.Load())
 	}
 }
