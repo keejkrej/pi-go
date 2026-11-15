@@ -4,7 +4,9 @@ package chord
 
 import (
 	"context"
+	"math"
 
+	"github.com/keejkrej/pi-go/internal/js"
 	"github.com/keejkrej/pi-go/internal/jsonx"
 )
 
@@ -219,32 +221,128 @@ type UnknownServiceMemberSnapshot struct {
 func (UnknownServiceMemberSnapshot) isServiceMemberSnapshot() {}
 
 func (u UnknownServiceMemberSnapshot) MarshalJSON() ([]byte, error) {
-	panic("unported: UnknownServiceMemberSnapshot.MarshalJSON")
+	if u.Raw == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(u.Raw)
 }
 
 func (u *UnknownServiceMemberSnapshot) UnmarshalJSON(data []byte) error {
-	panic("unported: UnknownServiceMemberSnapshot.UnmarshalJSON")
+	val, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if val == nil {
+		u.Raw = nil
+		return nil
+	}
+	obj, ok := val.(*jsonx.Object)
+	if !ok || obj == nil {
+		return js.NewTypeError("unknown service member snapshot is not an object")
+	}
+	u.Raw = obj
+	return nil
 }
 
 // ServiceMemberSnapshotList is a JSON array of member snapshots.
 type ServiceMemberSnapshotList []ServiceMemberSnapshot
 
 func (l ServiceMemberSnapshotList) MarshalJSON() ([]byte, error) {
-	panic("unported: ServiceMemberSnapshotList.MarshalJSON")
+	out := make([]any, len(l))
+	for i, member := range l {
+		if sm, ok := member.(ServiceMemberSnapshotState); ok && sm.Ops == nil {
+			sm.Ops = OpList{}
+			out[i] = sm
+		} else if smp, ok := member.(*ServiceMemberSnapshotState); ok && smp != nil && smp.Ops == nil {
+			copyVal := *smp
+			copyVal.Ops = OpList{}
+			out[i] = copyVal
+		} else {
+			out[i] = member
+		}
+	}
+	return jsonx.Marshal(out)
 }
 
 func (l *ServiceMemberSnapshotList) UnmarshalJSON(data []byte) error {
-	panic("unported: ServiceMemberSnapshotList.UnmarshalJSON")
+	val, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	arr, ok := val.([]any)
+	if !ok || arr == nil {
+		return js.NewTypeError("service member snapshot list is not an array")
+	}
+	out := make(ServiceMemberSnapshotList, len(arr))
+	for i, item := range arr {
+		m, err := DecodeServiceMemberSnapshot(item)
+		if err != nil {
+			return err
+		}
+		out[i] = m
+	}
+	*l = out
+	return nil
 }
 
 // UnmarshalServiceMemberSnapshot decodes one member snapshot.
 func UnmarshalServiceMemberSnapshot(data []byte) (ServiceMemberSnapshot, error) {
-	panic("unported: UnmarshalServiceMemberSnapshot")
+	val, err := jsonx.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeServiceMemberSnapshot(val)
 }
 
 // DecodeServiceMemberSnapshot decodes one member snapshot from a jsonx value.
 func DecodeServiceMemberSnapshot(v any) (ServiceMemberSnapshot, error) {
-	panic("unported: DecodeServiceMemberSnapshot")
+	obj, ok := v.(*jsonx.Object)
+	if !ok || obj == nil {
+		return nil, js.NewTypeError("service member snapshot is not an object")
+	}
+	kindVal, ok := obj.Get("kind")
+	if !ok {
+		return UnknownServiceMemberSnapshot{Raw: obj}, nil
+	}
+	kind, ok := kindVal.(string)
+	if !ok {
+		return UnknownServiceMemberSnapshot{Raw: obj}, nil
+	}
+	switch kind {
+	case "method":
+		nameVal, okName := obj.Get("name")
+		name, isStr := nameVal.(string)
+		if !okName || !isStr {
+			return nil, js.NewTypeError("Invalid service method snapshot")
+		}
+		return ServiceMemberSnapshotMethod{Name: name, Kind: "method"}, nil
+	case "state":
+		nameVal, okName := obj.Get("name")
+		name, isStr := nameVal.(string)
+		seqVal, okSeq := obj.Get("sequence")
+		seq, isInt := typesToInt(seqVal)
+		opsVal, okOps := obj.Get("ops")
+		opsArr, isArr := opsVal.([]any)
+		if !okName || !isStr || !okSeq || !isInt || !okOps || !isArr || opsArr == nil {
+			return nil, js.NewTypeError("Invalid service state snapshot")
+		}
+		ops := make(OpList, len(opsArr))
+		for i, item := range opsArr {
+			op, err := DecodeOp(item)
+			if err != nil {
+				return nil, err
+			}
+			ops[i] = op
+		}
+		return ServiceMemberSnapshotState{
+			Name:     name,
+			Kind:     "state",
+			Sequence: seq,
+			Ops:      ops,
+		}, nil
+	default:
+		return UnknownServiceMemberSnapshot{Raw: obj}, nil
+	}
 }
 
 // ServiceInstanceSnapshot is one instance baseline.
@@ -332,21 +430,227 @@ type UnknownServiceProviderUpdate struct {
 func (UnknownServiceProviderUpdate) isServiceProviderUpdate() {}
 
 func (u UnknownServiceProviderUpdate) MarshalJSON() ([]byte, error) {
-	panic("unported: UnknownServiceProviderUpdate.MarshalJSON")
+	if u.Raw == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(u.Raw)
 }
 
 func (u *UnknownServiceProviderUpdate) UnmarshalJSON(data []byte) error {
-	panic("unported: UnknownServiceProviderUpdate.UnmarshalJSON")
+	val, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if val == nil {
+		u.Raw = nil
+		return nil
+	}
+	obj, ok := val.(*jsonx.Object)
+	if !ok || obj == nil {
+		return js.NewTypeError("unknown service provider update is not an object")
+	}
+	u.Raw = obj
+	return nil
 }
 
 // UnmarshalServiceProviderUpdate decodes one provider update.
 func UnmarshalServiceProviderUpdate(data []byte) (ServiceProviderUpdate, error) {
-	panic("unported: UnmarshalServiceProviderUpdate")
+	val, err := jsonx.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeServiceProviderUpdate(val)
 }
 
 // DecodeServiceProviderUpdate decodes one provider update from a jsonx value.
 func DecodeServiceProviderUpdate(v any) (ServiceProviderUpdate, error) {
-	panic("unported: DecodeServiceProviderUpdate")
+	obj, ok := v.(*jsonx.Object)
+	if !ok || obj == nil {
+		return nil, js.NewTypeError("service provider update is not an object")
+	}
+	typeVal, ok := obj.Get("type")
+	if !ok {
+		return UnknownServiceProviderUpdate{Raw: obj}, nil
+	}
+	typ, ok := typeVal.(string)
+	if !ok {
+		return UnknownServiceProviderUpdate{Raw: obj}, nil
+	}
+	switch typ {
+	case "state":
+		var inst *ServiceInstanceAddress
+		if instVal, hasInst := obj.Get("instance"); hasInst {
+			addr, err := typesDecodeInstanceAddress(instVal)
+			if err != nil {
+				return nil, err
+			}
+			inst = &addr
+		}
+		memberVal, okMember := obj.Get("member")
+		member, isStr := memberVal.(string)
+		seqVal, okSeq := obj.Get("sequence")
+		seq, isInt := typesToInt(seqVal)
+		opsVal, okOps := obj.Get("ops")
+		opsArr, isArr := opsVal.([]any)
+		if !okMember || !isStr || !okSeq || !isInt || !okOps || !isArr || opsArr == nil {
+			return nil, js.NewTypeError("Invalid service state update")
+		}
+		ops := make(OpList, len(opsArr))
+		for i, item := range opsArr {
+			op, err := DecodeOp(item)
+			if err != nil {
+				return nil, err
+			}
+			ops[i] = op
+		}
+		return ServiceProviderUpdateState{
+			Type:     "state",
+			Instance: inst,
+			Member:   member,
+			Sequence: seq,
+			Ops:      ops,
+		}, nil
+	case "reset":
+		snapVal, okSnap := obj.Get("snapshot")
+		if !okSnap {
+			return nil, js.NewTypeError("Invalid service provider update")
+		}
+		snap, err := typesDecodeSubscriptionSnapshot(snapVal)
+		if err != nil {
+			return nil, err
+		}
+		return ServiceProviderUpdateReset{Type: "reset", Snapshot: snap}, nil
+	case "unavailable":
+		return ServiceProviderUpdateUnavailable{Type: "unavailable"}, nil
+	case "replaced":
+		snapVal, okSnap := obj.Get("snapshot")
+		if !okSnap {
+			return nil, js.NewTypeError("Invalid service provider update")
+		}
+		snap, err := typesDecodeInstanceSnapshot(snapVal)
+		if err != nil {
+			return nil, err
+		}
+		return ServiceProviderUpdateReplaced{Type: "replaced", Snapshot: snap}, nil
+	case "spawned":
+		instVal, okInst := obj.Get("instance")
+		if !okInst {
+			return nil, js.NewTypeError("Invalid service provider update")
+		}
+		inst, err := typesDecodeInstanceSnapshot(instVal)
+		if err != nil {
+			return nil, err
+		}
+		return ServiceProviderUpdateSpawned{Type: "spawned", Instance: inst}, nil
+	case "closed":
+		instVal, okInst := obj.Get("instance")
+		if !okInst {
+			return nil, js.NewTypeError("Invalid service provider update")
+		}
+		addr, err := typesDecodeInstanceAddress(instVal)
+		if err != nil {
+			return nil, err
+		}
+		return ServiceProviderUpdateClosed{Type: "closed", Instance: addr}, nil
+	default:
+		return UnknownServiceProviderUpdate{Raw: obj}, nil
+	}
+}
+
+func typesToInt(v any) (int, bool) {
+	switch n := v.(type) {
+	case int:
+		return n, true
+	case int64:
+		if n < math.MinInt || n > math.MaxInt {
+			return 0, false
+		}
+		return int(n), true
+	case float64:
+		if math.IsNaN(n) || math.IsInf(n, 0) || math.Trunc(n) != n {
+			return 0, false
+		}
+		// Ensure exact integer representation bounds before converting to int.
+		if n < -9007199254740991 || n > 9007199254740991 {
+			return 0, false
+		}
+		return int(n), true
+	default:
+		return 0, false
+	}
+}
+
+func typesDecodeInstanceAddress(v any) (ServiceInstanceAddress, error) {
+	obj, ok := v.(*jsonx.Object)
+	if !ok || obj == nil {
+		return ServiceInstanceAddress{}, js.NewTypeError("Invalid service instance address")
+	}
+	keyVal, okKey := obj.Get("key")
+	key, isStr := keyVal.(string)
+	genVal, okGen := obj.Get("generation")
+	gen, isInt := typesToInt(genVal)
+	if !okKey || !isStr || !okGen || !isInt {
+		return ServiceInstanceAddress{}, js.NewTypeError("Invalid service instance address")
+	}
+	return ServiceInstanceAddress{Key: key, Generation: gen}, nil
+}
+
+func typesDecodeInstanceSnapshot(v any) (ServiceInstanceSnapshot, error) {
+	obj, ok := v.(*jsonx.Object)
+	if !ok || obj == nil {
+		return ServiceInstanceSnapshot{}, js.NewTypeError("Invalid service instance snapshot")
+	}
+	var inst *ServiceInstanceAddress
+	if instVal, hasInst := obj.Get("instance"); hasInst {
+		addr, err := typesDecodeInstanceAddress(instVal)
+		if err != nil {
+			return ServiceInstanceSnapshot{}, err
+		}
+		inst = &addr
+	}
+	membersVal, okMembers := obj.Get("members")
+	membersArr, isArr := membersVal.([]any)
+	if !okMembers || !isArr || membersArr == nil {
+		return ServiceInstanceSnapshot{}, js.NewTypeError("Invalid service instance snapshot")
+	}
+	members := make(ServiceMemberSnapshotList, len(membersArr))
+	for i, item := range membersArr {
+		m, err := DecodeServiceMemberSnapshot(item)
+		if err != nil {
+			return ServiceInstanceSnapshot{}, err
+		}
+		members[i] = m
+	}
+	return ServiceInstanceSnapshot{Instance: inst, Members: members}, nil
+}
+
+func typesDecodeSubscriptionSnapshot(v any) (ServiceSubscriptionSnapshot, error) {
+	obj, ok := v.(*jsonx.Object)
+	if !ok || obj == nil {
+		return ServiceSubscriptionSnapshot{}, js.NewTypeError("Invalid service subscription snapshot")
+	}
+	serviceIdVal, okId := obj.Get("serviceId")
+	serviceId, isIdStr := serviceIdVal.(string)
+	modeVal, okMode := obj.Get("mode")
+	modeStr, isModeStr := modeVal.(string)
+	instVal, okInst := obj.Get("instances")
+	instArr, isArr := instVal.([]any)
+	if !okId || !isIdStr || !okMode || !isModeStr || !okInst || !isArr || instArr == nil {
+		return ServiceSubscriptionSnapshot{}, js.NewTypeError("Invalid service subscription snapshot")
+	}
+	instances := make([]ServiceInstanceSnapshot, len(instArr))
+	for i, item := range instArr {
+		inst, err := typesDecodeInstanceSnapshot(item)
+		if err != nil {
+			return ServiceSubscriptionSnapshot{}, err
+		}
+		instances[i] = inst
+	}
+	return ServiceSubscriptionSnapshot{
+		ServiceId: serviceId,
+		Mode:      ServiceMode(modeStr),
+		Instances: instances,
+	}, nil
 }
 
 // ServiceCall is one remote invocation.

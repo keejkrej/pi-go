@@ -3,7 +3,10 @@
 package cbor
 
 import (
+	"fmt"
+	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/keejkrej/pi-go/internal/js"
 )
@@ -54,7 +57,7 @@ type CborError struct {
 
 // NewCborError returns an error with the given message.
 func NewCborError(message string) *CborError {
-	panic("unported: NewCborError")
+	return &CborError{Message: message}
 }
 
 func (e *CborError) Error() string { return e.Message }
@@ -68,7 +71,10 @@ type optiTextEncoder struct{}
 
 // Encode is textEncoder.encode. Lone surrogates become U+FFFD.
 func (e *optiTextEncoder) Encode(value string) []byte {
-	panic("unported: TextEncoder.Encode")
+	if utf8.ValidString(value) {
+		return []byte(value)
+	}
+	return []byte(strings.ToValidUTF8(value, "\uFFFD"))
 }
 
 // TextEncoder is new TextEncoder().
@@ -94,7 +100,10 @@ var TextDecoder = &optiTextDecoder{dec: js.NewTextDecoder(&js.TextDecoderOptions
 // optiResolveLimit checks one configured limit.
 // The error message is "<name> must be an integer between 0 and <maximum>" (TS RangeError).
 func optiResolveLimit(name string, value int, maximum int) (int, error) {
-	panic("unported: optiResolveLimit")
+	if value < 0 || value > maximum {
+		return 0, js.NewRangeError(fmt.Sprintf("%s must be an integer between 0 and %d", name, maximum))
+	}
+	return value, nil
 }
 
 // ResolveOptions fills defaults and checks each limit.
@@ -102,5 +111,35 @@ func optiResolveLimit(name string, value int, maximum int) (int, error) {
 // A limit that is not an integer in range returns an error whose message is
 // "<name> must be an integer between 0 and <maximum>" (TS RangeError).
 func ResolveOptions(options *CborOptions) (ResolvedCborOptions, error) {
-	panic("unported: ResolveOptions")
+	rawByteLength := DefaultMaxCborByteLength
+	rawContainerLength := DefaultMaxCborContainerLength
+	rawDepth := DefaultMaxCborDepth
+	if options != nil {
+		if options.MaxByteLength != nil {
+			rawByteLength = *options.MaxByteLength
+		}
+		if options.MaxContainerLength != nil {
+			rawContainerLength = *options.MaxContainerLength
+		}
+		if options.MaxDepth != nil {
+			rawDepth = *options.MaxDepth
+		}
+	}
+	maxByteLength, err := optiResolveLimit("maxByteLength", rawByteLength, MaxUint32)
+	if err != nil {
+		return ResolvedCborOptions{}, err
+	}
+	maxContainerLength, err := optiResolveLimit("maxContainerLength", rawContainerLength, MaxUint32)
+	if err != nil {
+		return ResolvedCborOptions{}, err
+	}
+	maxDepth, err := optiResolveLimit("maxDepth", rawDepth, optiMaxConfiguredDepth)
+	if err != nil {
+		return ResolvedCborOptions{}, err
+	}
+	return ResolvedCborOptions{
+		MaxByteLength:      maxByteLength,
+		MaxContainerLength: maxContainerLength,
+		MaxDepth:           maxDepth,
+	}, nil
 }
