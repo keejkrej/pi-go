@@ -3,6 +3,7 @@
 package runtime
 
 import (
+	"fmt"
 	"sync/atomic"
 
 	"github.com/keejkrej/pi-go/codemode"
@@ -114,21 +115,93 @@ type UnknownWorkerToHostMessage struct {
 func (*UnknownWorkerToHostMessage) isWorkerToHostMessage() {}
 
 func (u *UnknownWorkerToHostMessage) MarshalJSON() ([]byte, error) {
-	panic("unported: UnknownWorkerToHostMessage.MarshalJSON")
+	if u == nil || u.Raw == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(u.Raw)
 }
 
 func (u *UnknownWorkerToHostMessage) UnmarshalJSON(data []byte) error {
-	panic("unported: UnknownWorkerToHostMessage.UnmarshalJSON")
+	v, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if v == nil {
+		u.Raw = nil
+		return nil
+	}
+	obj, ok := v.(*jsonx.Object)
+	if !ok {
+		return fmt.Errorf("expected worker message object, got %T", v)
+	}
+	u.Raw = obj
+	return nil
 }
 
 // UnmarshalWorkerToHostMessage decodes one worker-to-host message.
 func UnmarshalWorkerToHostMessage(data []byte) (WorkerToHostMessage, error) {
-	panic("unported: UnmarshalWorkerToHostMessage")
+	v, err := jsonx.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeWorkerToHostMessage(v)
 }
 
 // DecodeWorkerToHostMessage decodes one worker-to-host message from a jsonx value.
 func DecodeWorkerToHostMessage(v any) (WorkerToHostMessage, error) {
-	panic("unported: DecodeWorkerToHostMessage")
+	obj, ok := v.(*jsonx.Object)
+	if !ok || obj == nil {
+		return nil, fmt.Errorf("expected worker message object, got %T", v)
+	}
+	rawType, _ := obj.Get("type")
+	typeName, _ := rawType.(string)
+	switch typeName {
+	case "call":
+		var msg WorkerCallMessage
+		if err := jsonx.Decode(obj, &msg); err != nil {
+			return nil, err
+		}
+		return &msg, nil
+	case "output":
+		rawItem, hasItem := obj.Get("item")
+		if !hasItem {
+			return nil, fmt.Errorf("output message missing item")
+		}
+		item, err := codemode.DecodeCodemodeOutputItem(rawItem)
+		if err != nil {
+			return nil, err
+		}
+		return &WorkerOutputMessage{
+			Type: "output",
+			Item: item,
+		}, nil
+	case "done":
+		rawOk, hasOk := obj.Get("ok")
+		okBool, isBool := rawOk.(bool)
+		if !hasOk || !isBool {
+			return &UnknownWorkerToHostMessage{Raw: obj}, nil
+		}
+		if okBool {
+			var msg WorkerDoneOkMessage
+			if err := jsonx.Decode(obj, &msg); err != nil {
+				return nil, err
+			}
+			return &msg, nil
+		}
+		var msg WorkerDoneErrorMessage
+		if err := jsonx.Decode(obj, &msg); err != nil {
+			return nil, err
+		}
+		return &msg, nil
+	case "crash":
+		var msg WorkerCrashMessage
+		if err := jsonx.Decode(obj, &msg); err != nil {
+			return nil, err
+		}
+		return &msg, nil
+	default:
+		return &UnknownWorkerToHostMessage{Raw: obj}, nil
+	}
 }
 
 // HostToWorkerMessage is { type: "result", id, ok, payload }.
@@ -140,12 +213,55 @@ type HostToWorkerMessage struct {
 	Payload *string `json:"payload,omitzero"`
 }
 
+func protObjectType(value any) (string, bool) {
+	switch obj := value.(type) {
+	case *jsonx.Object:
+		if obj == nil {
+			return "", false
+		}
+		rawType, _ := obj.Get("type")
+		s, ok := rawType.(string)
+		return s, ok
+	case map[string]any:
+		if obj == nil {
+			return "", false
+		}
+		s, ok := obj["type"].(string)
+		return s, ok
+	default:
+		return "", false
+	}
+}
+
 // IsWorkerToHostMessage reports whether value is a worker-to-host message.
 func IsWorkerToHostMessage(value any) bool {
-	panic("unported: IsWorkerToHostMessage")
+	switch m := value.(type) {
+	case *WorkerCallMessage:
+		return m != nil
+	case *WorkerOutputMessage:
+		return m != nil
+	case *WorkerDoneOkMessage:
+		return m != nil
+	case *WorkerDoneErrorMessage:
+		return m != nil
+	case *WorkerCrashMessage:
+		return m != nil
+	default:
+		t, ok := protObjectType(value)
+		if !ok {
+			return false
+		}
+		return t == "call" || t == "output" || t == "done" || t == "crash"
+	}
 }
 
 // IsHostToWorkerMessage reports whether value is a host-to-worker result.
 func IsHostToWorkerMessage(value any) bool {
-	panic("unported: IsHostToWorkerMessage")
+	switch m := value.(type) {
+	case *HostToWorkerMessage:
+		return m != nil && m.Type == "result"
+	default:
+		t, ok := protObjectType(value)
+		return ok && t == "result"
+	}
 }
