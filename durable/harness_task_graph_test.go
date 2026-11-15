@@ -146,7 +146,11 @@ func TestHarnessTaskGraph(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = opened.Harness.Close(nil) }()
+		defer func() {
+			child.Resolve(struct{}{})
+			late.Resolve(struct{}{})
+			_ = opened.Harness.Close(nil)
+		}()
 		root, err := opened.Harness.Root(nil)
 		if err != nil {
 			t.Fatal(err)
@@ -272,13 +276,26 @@ func TestHarnessTaskGraph(t *testing.T) {
 		rebuild()
 
 		child.Resolve(struct{}{})
+		firstKey := thtgTaskKey(first)
 		if err := testkit.Eventually(func() (bool, error) {
 			v, _ := graph.Value()
 			n, ok := v.Tasks[parentKey]
-			return ok && n.State.Status == "completing", nil
+			if !ok || n.State.Status != "completing" || len(v.Tasks) != 2 {
+				return false, nil
+			}
+			if _, exists := v.Tasks[firstKey]; exists {
+				return false, nil
+			}
+			for _, taskNode := range v.Tasks {
+				if taskNode.Kind == "test.graph-child" && taskNode.State.Status == "running" {
+					return true, nil
+				}
+			}
+			return false, nil
 		}); err != nil {
 			t.Fatal(err)
 		}
+		testkit.Flush()
 		cur, _ = graph.Value()
 		wantCompleting := durable.TaskGraphState{
 			Status:  "completing",

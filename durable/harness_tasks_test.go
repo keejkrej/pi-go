@@ -2254,9 +2254,10 @@ func TestHarnessTaskClose(t *testing.T) {
 		harnessD := testkit.NewDeferred[durable.Harness]()
 		watchEndD := testkit.NewDeferred[durable.WatchEnd]()
 
-		stubborn := thtkOneStep[any]("test.stubborn", func(ctx chord.Context, _ durable.RunningTask[any, thtkStep], rt *durable.TaskRuntime[any, thtkStep, any, struct{}]) error {
+		stubborn := thtkOneStep[any]("test.stubborn", func(_ chord.Context, _ durable.RunningTask[any, thtkStep], rt *durable.TaskRuntime[any, thtkStep, any, struct{}]) error {
 			hRef, _ := harnessD.Wait()
-			w, err := rt.WatchDoc(ctx, notesDoc)
+			// Uses a context close does not cancel, then waits for the watch to close.
+			w, err := rt.WatchDoc(nil, notesDoc)
 			if err != nil {
 				return err
 			}
