@@ -23,7 +23,7 @@ import (
 	"github.com/keejkrej/pi-go/protocol"
 )
 
-func makeShortSocketPath(t *testing.T) string {
+func tutMakeShortSocketPath(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "pct-")
 	if err != nil {
@@ -33,7 +33,7 @@ func makeShortSocketPath(t *testing.T) string {
 	return filepath.Join(dir, "pi.sock")
 }
 
-func startRawUnixListener(t *testing.T, sockPath string, handle func(net.Conn)) net.Listener {
+func tutStartRawUnixListener(t *testing.T, sockPath string, handle func(net.Conn)) net.Listener {
 	t.Helper()
 	ln, err := net.Listen("unix", sockPath)
 	if err != nil {
@@ -91,11 +91,11 @@ func TestCreateUnixTransportFactoryRealUnixSocket(t *testing.T) {
 	}
 
 	t.Run("carries a complete Client handshake and request over a real Unix socket", func(t *testing.T) {
-		sockPath := makeShortSocketPath(t)
+		sockPath := tutMakeShortSocketPath(t)
 		var mu sync.Mutex
 		var receivedMembers []string
 
-		startRawUnixListener(t, sockPath, func(conn net.Conn) {
+		tutStartRawUnixListener(t, sockPath, func(conn net.Conn) {
 			decoder, err := protocol.NewClientMessageDecoder(nil)
 			if err != nil {
 				return
@@ -114,7 +114,7 @@ func TestCreateUnixTransportFactoryRealUnixSocket(t *testing.T) {
 							frame, err := protocol.EncodeServerMessage(&protocol.ServerHello{
 								Type:     "hello",
 								Version:  protocol.ProtocolVersion,
-								ServerId: testServerId,
+								ServerId: tclientServerId,
 							}, nil)
 							if err != nil {
 								return
@@ -164,7 +164,7 @@ func TestCreateUnixTransportFactoryRealUnixSocket(t *testing.T) {
 			t.Fatalf("CreateUnixTransportFactory failed: %v", err)
 		}
 		c, err := client.NewClient(client.ClientOptions{
-			ServerId:         testServerId,
+			ServerId:         tclientServerId,
 			TransportFactory: factory,
 		})
 		if err != nil {
@@ -173,12 +173,12 @@ func TestCreateUnixTransportFactoryRealUnixSocket(t *testing.T) {
 		defer func() { _ = c.Dispose() }()
 
 		hello, err := c.Connect()
-		if err != nil || hello.ServerId != testServerId {
+		if err != nil || hello.ServerId != tclientServerId {
 			t.Fatalf("Connect failed: hello=%+v err=%v", hello, err)
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tclientTimeout)
 		defer cancel()
-		val, ok, err := c.Request(ctx, testServerTarget, chord.ServiceCall{
+		val, ok, err := c.Request(ctx, tclientServerTarget, chord.ServiceCall{
 			ServiceId: "test.server",
 			Member:    "list",
 			Args:      []chord.JsonValue{},
@@ -195,8 +195,8 @@ func TestCreateUnixTransportFactoryRealUnixSocket(t *testing.T) {
 	})
 
 	t.Run("reports truncated final frames through Client", func(t *testing.T) {
-		sockPath := makeShortSocketPath(t)
-		startRawUnixListener(t, sockPath, func(conn net.Conn) {
+		sockPath := tutMakeShortSocketPath(t)
+		tutStartRawUnixListener(t, sockPath, func(conn net.Conn) {
 			decoder, err := protocol.NewClientMessageDecoder(nil)
 			if err != nil {
 				return
@@ -214,7 +214,7 @@ func TestCreateUnixTransportFactoryRealUnixSocket(t *testing.T) {
 							frame, err := protocol.EncodeServerMessage(&protocol.ServerHello{
 								Type:     "hello",
 								Version:  protocol.ProtocolVersion,
-								ServerId: testServerId,
+								ServerId: tclientServerId,
 							}, nil)
 							if err != nil {
 								return
@@ -242,7 +242,7 @@ func TestCreateUnixTransportFactoryRealUnixSocket(t *testing.T) {
 			t.Fatalf("CreateUnixTransportFactory failed: %v", err)
 		}
 		c, err := client.NewClient(client.ClientOptions{
-			ServerId:         testServerId,
+			ServerId:         tclientServerId,
 			TransportFactory: factory,
 		})
 		if err != nil {
@@ -253,9 +253,9 @@ func TestCreateUnixTransportFactoryRealUnixSocket(t *testing.T) {
 		if _, err := c.Connect(); err != nil {
 			t.Fatalf("Connect failed: %v", err)
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tclientTimeout)
 		defer cancel()
-		_, _, err = c.Request(ctx, testServerTarget, chord.ServiceCall{
+		_, _, err = c.Request(ctx, tclientServerTarget, chord.ServiceCall{
 			ServiceId: "test.server",
 			Member:    "list",
 			Args:      []chord.JsonValue{},
@@ -270,7 +270,7 @@ func TestCreateUnixTransportFactoryRealUnixSocket(t *testing.T) {
 	})
 
 	t.Run("rejects connection attempts to missing sockets", func(t *testing.T) {
-		sockPath := makeShortSocketPath(t)
+		sockPath := tutMakeShortSocketPath(t)
 		factory, err := client.CreateUnixTransportFactory(client.UnixTransportOptions{Path: sockPath})
 		if err != nil {
 			t.Fatalf("CreateUnixTransportFactory failed: %v", err)

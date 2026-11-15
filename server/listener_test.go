@@ -11,7 +11,7 @@ import (
 	"github.com/keejkrej/pi-go/server/servertest"
 )
 
-type ltTestListener struct {
+type tlistTestListener struct {
 	mu         sync.Mutex
 	accept     server.ByteConnectionAcceptor
 	startCount int
@@ -19,7 +19,7 @@ type ltTestListener struct {
 	startError error
 }
 
-func (l *ltTestListener) Start(accept server.ByteConnectionAcceptor) error {
+func (l *tlistTestListener) Start(accept server.ByteConnectionAcceptor) error {
 	l.mu.Lock()
 	l.startCount++
 	l.accept = accept
@@ -28,14 +28,14 @@ func (l *ltTestListener) Start(accept server.ByteConnectionAcceptor) error {
 	return err
 }
 
-func (l *ltTestListener) Close() error {
+func (l *tlistTestListener) Close() error {
 	l.mu.Lock()
 	l.closeCount++
 	l.mu.Unlock()
 	return nil
 }
 
-func (l *ltTestListener) snapshot() (hasAccept bool, startCount, closeCount int) {
+func (l *tlistTestListener) snapshot() (hasAccept bool, startCount, closeCount int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.accept != nil, l.startCount, l.closeCount
@@ -43,8 +43,8 @@ func (l *ltTestListener) snapshot() (hasAccept bool, startCount, closeCount int)
 
 func TestServerListenerComposition(t *testing.T) {
 	t.Run("starts and closes every configured listener", func(t *testing.T) {
-		first := &ltTestListener{}
-		second := &ltTestListener{}
+		first := &tlistTestListener{}
+		second := &tlistTestListener{}
 		ts, err := servertest.CreateTestServer(servertest.TestServerOptions{
 			Listeners: []server.ServerListener{first, second},
 		})
@@ -73,9 +73,9 @@ func TestServerListenerComposition(t *testing.T) {
 	})
 
 	t.Run("closes previously started listeners when startup fails", func(t *testing.T) {
-		first := &ltTestListener{}
+		first := &tlistTestListener{}
 		failure := errors.New("listener failed")
-		second := &ltTestListener{startError: failure}
+		second := &tlistTestListener{startError: failure}
 		ts, err := servertest.CreateTestServer(servertest.TestServerOptions{
 			Listeners: []server.ServerListener{first, second},
 		})

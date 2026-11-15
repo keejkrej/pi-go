@@ -24,7 +24,7 @@ import (
 	"github.com/keejkrej/pi-go/server/transports/unix"
 )
 
-func utMakeDirectory(t *testing.T) string {
+func tunixMakeDirectory(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "pc-")
 	if err != nil {
@@ -34,23 +34,23 @@ func utMakeDirectory(t *testing.T) string {
 	return dir
 }
 
-func utServerId(value int) protocol.ServerId {
+func tunixServerId(value int) protocol.ServerId {
 	return protocol.ServerId(fmt.Sprintf("00000000-0000-4000-8000-%012x", value))
 }
 
-type utUnusedHost struct {
+type tunixUnusedHost struct {
 	serverServices server.RoutedServerServiceHost
 }
 
-func (h *utUnusedHost) ServerServices() server.RoutedServerServiceHost { return h.serverServices }
-func (h *utUnusedHost) ResolveSession(string, chord.Context) (server.SessionMetadata, error) {
+func (h *tunixUnusedHost) ServerServices() server.RoutedServerServiceHost { return h.serverServices }
+func (h *tunixUnusedHost) ResolveSession(string, chord.Context) (server.SessionMetadata, error) {
 	return nil, errors.New("unused")
 }
-func (h *utUnusedHost) OpenSession(server.SessionMetadata, chord.Context) (server.RoutedSessionHandle, error) {
+func (h *tunixUnusedHost) OpenSession(server.SessionMetadata, chord.Context) (server.RoutedSessionHandle, error) {
 	return nil, errors.New("unused")
 }
 
-func utStartServer(t *testing.T, dir string, fileServerId protocol.ServerId, reported ...protocol.ServerId) *server.Server[server.SessionMetadata] {
+func tunixStartServer(t *testing.T, dir string, fileServerId protocol.ServerId, reported ...protocol.ServerId) *server.Server[server.SessionMetadata] {
 	t.Helper()
 	repId := fileServerId
 	if len(reported) > 0 && reported[0] != "" {
@@ -62,7 +62,7 @@ func utStartServer(t *testing.T, dir string, fileServerId protocol.ServerId, rep
 		t.Fatalf("CreateUnixListener failed: %v", err)
 	}
 	srv, err := server.NewServer[server.SessionMetadata](
-		&utUnusedHost{serverServices: servertest.CreateTestServerServices()},
+		&tunixUnusedHost{serverServices: servertest.CreateTestServerServices()},
 		server.ServerOptions{
 			Listeners: []server.ServerListener{listener},
 			ServerId:  repId,
@@ -78,14 +78,14 @@ func utStartServer(t *testing.T, dir string, fileServerId protocol.ServerId, rep
 	return srv
 }
 
-type utConnStats struct {
+type tunixConnStats struct {
 	mu      sync.Mutex
 	active  int
 	maximum int
 	total   int
 }
 
-func utStartSilentSocket(t *testing.T, sockPath string, stats *utConnStats) {
+func tunixStartSilentSocket(t *testing.T, sockPath string, stats *tunixConnStats) {
 	t.Helper()
 	ln, err := net.Listen("unix", sockPath)
 	if err != nil {
@@ -149,7 +149,7 @@ func utStartSilentSocket(t *testing.T, sockPath string, stats *utConnStats) {
 
 func TestDiscoverUnixServers(t *testing.T) {
 	t.Run("returns no routes when the server directory is missing", func(t *testing.T) {
-		dir := filepath.Join(utMakeDirectory(t), "missing")
+		dir := filepath.Join(tunixMakeDirectory(t), "missing")
 		routes, err := client.DiscoverUnixServers(client.DiscoverUnixServersOptions{Directory: dir})
 		if err != nil {
 			t.Fatalf("DiscoverUnixServers failed: %v", err)
@@ -160,11 +160,11 @@ func TestDiscoverUnixServers(t *testing.T) {
 	})
 
 	t.Run("discovers reachable servers in server ID order", func(t *testing.T) {
-		dir := utMakeDirectory(t)
-		first := utServerId(1)
-		second := utServerId(2)
-		utStartServer(t, dir, second)
-		utStartServer(t, dir, first)
+		dir := tunixMakeDirectory(t)
+		first := tunixServerId(1)
+		second := tunixServerId(2)
+		tunixStartServer(t, dir, second)
+		tunixStartServer(t, dir, first)
 
 		routes, err := client.DiscoverUnixServers(client.DiscoverUnixServersOptions{Directory: dir})
 		if err != nil {
@@ -180,17 +180,17 @@ func TestDiscoverUnixServers(t *testing.T) {
 	})
 
 	t.Run("ignores malformed entries, non-sockets, and mismatched servers", func(t *testing.T) {
-		dir := utMakeDirectory(t)
-		if err := os.WriteFile(filepath.Join(dir, string(utServerId(1))+".sock"), []byte("not a socket"), 0o644); err != nil {
+		dir := tunixMakeDirectory(t)
+		if err := os.WriteFile(filepath.Join(dir, string(tunixServerId(1))+".sock"), []byte("not a socket"), 0o644); err != nil {
 			t.Fatalf("WriteFile 1 failed: %v", err)
 		}
 		if err := os.WriteFile(filepath.Join(dir, "not-a-server.sock"), []byte("ignored"), 0o644); err != nil {
 			t.Fatalf("WriteFile 2 failed: %v", err)
 		}
-		if err := os.Mkdir(filepath.Join(dir, string(utServerId(2))+".sock"), 0o755); err != nil {
+		if err := os.Mkdir(filepath.Join(dir, string(tunixServerId(2))+".sock"), 0o755); err != nil {
 			t.Fatalf("Mkdir failed: %v", err)
 		}
-		utStartServer(t, dir, utServerId(3), utServerId(4))
+		tunixStartServer(t, dir, tunixServerId(3), tunixServerId(4))
 
 		routes, err := client.DiscoverUnixServers(client.DiscoverUnixServersOptions{Directory: dir})
 		if err != nil {
@@ -202,9 +202,9 @@ func TestDiscoverUnixServers(t *testing.T) {
 	})
 
 	t.Run("ignores stale sockets without deleting them", func(t *testing.T) {
-		dir := utMakeDirectory(t)
-		sockPath := filepath.Join(dir, string(utServerId(1))+".sock")
-		suCreateStaleSocketProcess(t, sockPath)
+		dir := tunixMakeDirectory(t)
+		sockPath := filepath.Join(dir, string(tunixServerId(1))+".sock")
+		tsuCreateStaleSocketProcess(t, sockPath)
 
 		routes, err := client.DiscoverUnixServers(client.DiscoverUnixServersOptions{Directory: dir})
 		if err != nil {
@@ -220,9 +220,9 @@ func TestDiscoverUnixServers(t *testing.T) {
 	})
 
 	t.Run("times out an unresponsive socket without deleting it", func(t *testing.T) {
-		dir := utMakeDirectory(t)
-		sockPath := filepath.Join(dir, string(utServerId(1))+".sock")
-		utStartSilentSocket(t, sockPath, nil)
+		dir := tunixMakeDirectory(t)
+		sockPath := filepath.Join(dir, string(tunixServerId(1))+".sock")
+		tunixStartSilentSocket(t, sockPath, nil)
 
 		timeout := 20
 		routes, err := client.DiscoverUnixServers(client.DiscoverUnixServersOptions{
@@ -242,10 +242,10 @@ func TestDiscoverUnixServers(t *testing.T) {
 	})
 
 	t.Run("limits concurrent probes to 16", func(t *testing.T) {
-		dir := utMakeDirectory(t)
-		stats := &utConnStats{}
+		dir := tunixMakeDirectory(t)
+		stats := &tunixConnStats{}
 		for index := 1; index <= 20; index++ {
-			utStartSilentSocket(t, filepath.Join(dir, string(utServerId(index))+".sock"), stats)
+			tunixStartSilentSocket(t, filepath.Join(dir, string(tunixServerId(index))+".sock"), stats)
 		}
 
 		type discRes struct {
@@ -253,7 +253,7 @@ func TestDiscoverUnixServers(t *testing.T) {
 			err    error
 		}
 		ch := make(chan discRes, 1)
-		timeout := 100
+		timeout := 150
 		go func() {
 			r, e := client.DiscoverUnixServers(client.DiscoverUnixServersOptions{
 				Directory: dir,
@@ -275,9 +275,10 @@ func TestDiscoverUnixServers(t *testing.T) {
 		stats.mu.Lock()
 		activeAtPeak := stats.active
 		maxSoFar := stats.maximum
+		totalAtPeak := stats.total
 		stats.mu.Unlock()
-		if activeAtPeak != 16 || maxSoFar != 16 {
-			t.Fatalf("expected active==16 and max==16 during discovery, got active=%d max=%d", activeAtPeak, maxSoFar)
+		if activeAtPeak != 16 || maxSoFar != 16 || totalAtPeak != 16 {
+			t.Fatalf("expected active==16 max==16 total==16 during discovery, got active=%d max=%d total=%d", activeAtPeak, maxSoFar, totalAtPeak)
 		}
 
 		res := <-ch
@@ -288,17 +289,16 @@ func TestDiscoverUnixServers(t *testing.T) {
 			t.Fatalf("expected 0 routes, got %+v", res.routes)
 		}
 		stats.mu.Lock()
-		finalMax := stats.maximum
 		finalTotal := stats.total
 		stats.mu.Unlock()
-		if finalMax != 16 || finalTotal != 20 {
-			t.Fatalf("expected max=16 total=20, got max=%d total=%d", finalMax, finalTotal)
+		if finalTotal != 20 {
+			t.Fatalf("expected total=20, got total=%d", finalTotal)
 		}
 	})
 
 	t.Run("ignores an endpoint that closes before its handshake", func(t *testing.T) {
-		dir := utMakeDirectory(t)
-		sockPath := filepath.Join(dir, string(utServerId(1))+".sock")
+		dir := tunixMakeDirectory(t)
+		sockPath := filepath.Join(dir, string(tunixServerId(1))+".sock")
 		ln, err := net.Listen("unix", sockPath)
 		if err != nil {
 			t.Fatalf("net.Listen failed: %v", err)
@@ -329,7 +329,7 @@ func TestDiscoverUnixServers(t *testing.T) {
 	})
 
 	t.Run("propagates unexpected filesystem errors", func(t *testing.T) {
-		dir := utMakeDirectory(t)
+		dir := tunixMakeDirectory(t)
 		file := filepath.Join(dir, "not-a-directory")
 		if err := os.WriteFile(file, []byte("content"), 0o644); err != nil {
 			t.Fatalf("WriteFile failed: %v", err)

@@ -19,30 +19,30 @@ import (
 )
 
 const (
-	ptServerId = protocol.ServerId("00000000-0000-4000-8000-000000000001")
-	ptTimeout  = 5 * time.Second
+	tprotServerId = protocol.ServerId("00000000-0000-4000-8000-000000000001")
+	tprotTimeout  = 5 * time.Second
 )
 
-type ptInMemoryWire struct {
+type tprotInMemoryWire struct {
 	mu      sync.Mutex
 	closed  bool
 	handler server.ByteConnectionHandler
 	client  *servertest.ProtocolTestClient
 }
 
-func (w *ptInMemoryWire) Closed() bool {
+func (w *tprotInMemoryWire) Closed() bool {
 	w.mu.Lock()
 	c := w.closed
 	w.mu.Unlock()
 	return c
 }
 
-func (w *ptInMemoryWire) Send(chunk []byte) error {
+func (w *tprotInMemoryWire) Send(chunk []byte) error {
 	w.client.Receive(chunk)
 	return nil
 }
 
-func (w *ptInMemoryWire) Close(finalChunk []byte) error {
+func (w *tprotInMemoryWire) Close(finalChunk []byte) error {
 	if len(finalChunk) > 0 {
 		w.client.Receive(finalChunk)
 	}
@@ -53,18 +53,18 @@ func (w *ptInMemoryWire) Close(finalChunk []byte) error {
 	return nil
 }
 
-type ptWireChannel struct {
-	wire *ptInMemoryWire
+type tprotWireChannel struct {
+	wire *tprotInMemoryWire
 }
 
-func (c *ptWireChannel) Send(chunk []byte) error {
+func (c *tprotWireChannel) Send(chunk []byte) error {
 	if c.wire.handler.OnData != nil {
 		c.wire.handler.OnData(chunk)
 	}
 	return nil
 }
 
-func (c *ptWireChannel) SendFragmented(chunk []byte, splitAt int) error {
+func (c *tprotWireChannel) SendFragmented(chunk []byte, splitAt int) error {
 	if c.wire.handler.OnData != nil {
 		c.wire.handler.OnData(chunk[:splitAt])
 		c.wire.handler.OnData(chunk[splitAt:])
@@ -72,7 +72,7 @@ func (c *ptWireChannel) SendFragmented(chunk []byte, splitAt int) error {
 	return nil
 }
 
-func (c *ptWireChannel) Close() error {
+func (c *tprotWireChannel) Close() error {
 	c.wire.mu.Lock()
 	if c.wire.closed {
 		c.wire.mu.Unlock()
@@ -89,19 +89,19 @@ func (c *ptWireChannel) Close() error {
 	return nil
 }
 
-func ptConnect(t *testing.T) *servertest.ProtocolTestClient {
+func tprotConnect(t *testing.T) *servertest.ProtocolTestClient {
 	t.Helper()
 	srv, err := server.NewServer(servertest.NewTestServerHost(), server.ServerOptions{
 		Listeners: []server.ServerListener{},
-		ServerId:  ptServerId,
+		ServerId:  tprotServerId,
 	})
 	if err != nil {
 		t.Fatalf("NewServer failed: %v", err)
 	}
 	t.Cleanup(func() { _ = srv.Close() })
 
-	wire := &ptInMemoryWire{}
-	channel := &ptWireChannel{wire: wire}
+	wire := &tprotInMemoryWire{}
+	channel := &tprotWireChannel{wire: wire}
 	client := servertest.NewProtocolTestClient(channel)
 	wire.client = client
 	wire.handler = srv.Accept(wire)
@@ -109,17 +109,17 @@ func ptConnect(t *testing.T) *servertest.ProtocolTestClient {
 }
 
 func TestProtocolRequiresHelloAsFirstMessage(t *testing.T) {
-	c := ptConnect(t)
+	c := tprotConnect(t)
 	callVal, _ := jsonx.Encode(chord.ServiceCall{ServiceId: "pi.session-directory", Member: "list", Args: []chord.JsonValue{}})
 	if err := c.SendMessage(&protocol.RequestEnvelope{
 		Type:   "request",
 		Id:     "request-1",
-		Target: &protocol.ServerTarget{ServerId: ptServerId},
+		Target: &protocol.ServerTarget{ServerId: tprotServerId},
 		Call:   callVal,
 	}); err != nil {
 		t.Fatalf("SendMessage failed: %v", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), ptTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), tprotTimeout)
 	defer cancel()
 	msg, err := c.Next(ctx, func(m protocol.ServerMessage) bool {
 		_, ok := m.(*protocol.ServerHelloError)
@@ -138,8 +138,8 @@ func TestProtocolRequiresHelloAsFirstMessage(t *testing.T) {
 }
 
 func TestProtocolRejectsUnsupportedVersions(t *testing.T) {
-	c := ptConnect(t)
-	ctx, cancel := context.WithTimeout(context.Background(), ptTimeout)
+	c := tprotConnect(t)
+	ctx, cancel := context.WithTimeout(context.Background(), tprotTimeout)
 	defer cancel()
 	msg, err := c.Hello(ctx, protocol.ProtocolVersion+1)
 	if err != nil {
@@ -155,8 +155,8 @@ func TestProtocolRejectsUnsupportedVersions(t *testing.T) {
 }
 
 func TestProtocolAcceptsFragmentedHelloAndRequestFrames(t *testing.T) {
-	c := ptConnect(t)
-	ctx, cancel := context.WithTimeout(context.Background(), ptTimeout)
+	c := tprotConnect(t)
+	ctx, cancel := context.WithTimeout(context.Background(), tprotTimeout)
 	defer cancel()
 
 	helloMsg := &protocol.ClientHello{Type: "hello", Version: protocol.ProtocolVersion}
@@ -188,7 +188,7 @@ func TestProtocolAcceptsFragmentedHelloAndRequestFrames(t *testing.T) {
 		t.Fatalf("Next(hello) failed: %v", e)
 	case m := <-helloCh:
 		sh := m.(*protocol.ServerHello)
-		if sh.ServerId != ptServerId {
+		if sh.ServerId != tprotServerId {
 			t.Fatalf("unexpected ServerId: %s", sh.ServerId)
 		}
 	}
@@ -197,7 +197,7 @@ func TestProtocolAcceptsFragmentedHelloAndRequestFrames(t *testing.T) {
 	reqMsg := &protocol.RequestEnvelope{
 		Type:   "request",
 		Id:     "request-1",
-		Target: &protocol.ServerTarget{ServerId: ptServerId},
+		Target: &protocol.ServerTarget{ServerId: tprotServerId},
 		Call:   callVal,
 	}
 	reqFrame, err := protocol.EncodeClientMessage(reqMsg, nil)
@@ -255,8 +255,8 @@ func TestProtocolRejectsHostileFramedInput(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			c := ptConnect(t)
-			ctx, cancel := context.WithTimeout(context.Background(), ptTimeout)
+			c := tprotConnect(t)
+			ctx, cancel := context.WithTimeout(context.Background(), tprotTimeout)
 			defer cancel()
 
 			if err := c.SendBytes(tc.bytes); err != nil {
@@ -281,8 +281,8 @@ func TestProtocolRejectsHostileFramedInput(t *testing.T) {
 }
 
 func TestProtocolRejectsSecondHelloAfterHandshake(t *testing.T) {
-	c := ptConnect(t)
-	ctx, cancel := context.WithTimeout(context.Background(), ptTimeout)
+	c := tprotConnect(t)
+	ctx, cancel := context.WithTimeout(context.Background(), tprotTimeout)
 	defer cancel()
 
 	if _, err := c.Hello(ctx); err != nil {
@@ -308,8 +308,8 @@ func TestProtocolRejectsSecondHelloAfterHandshake(t *testing.T) {
 }
 
 func TestProtocolProcessesHelloAndRequestCoalescedInOneChunk(t *testing.T) {
-	c := ptConnect(t)
-	ctx, cancel := context.WithTimeout(context.Background(), ptTimeout)
+	c := tprotConnect(t)
+	ctx, cancel := context.WithTimeout(context.Background(), tprotTimeout)
 	defer cancel()
 
 	hello, err := protocol.EncodeClientMessage(&protocol.ClientHello{Type: "hello", Version: protocol.ProtocolVersion}, nil)
@@ -320,7 +320,7 @@ func TestProtocolProcessesHelloAndRequestCoalescedInOneChunk(t *testing.T) {
 	request, err := protocol.EncodeClientMessage(&protocol.RequestEnvelope{
 		Type:   "request",
 		Id:     "request-1",
-		Target: &protocol.ServerTarget{ServerId: ptServerId},
+		Target: &protocol.ServerTarget{ServerId: tprotServerId},
 		Call:   callVal,
 	}, nil)
 	if err != nil {
@@ -357,21 +357,21 @@ func TestProtocolProcessesHelloAndRequestCoalescedInOneChunk(t *testing.T) {
 	}
 }
 
-type ptTruncatedConn struct {
+type tprotTruncatedConn struct {
 	closed bool
 }
 
-func (c *ptTruncatedConn) Closed() bool       { return c.closed }
-func (c *ptTruncatedConn) Send([]byte) error  { return nil }
-func (c *ptTruncatedConn) Close([]byte) error { c.closed = true; return nil }
-func (c *ptTruncatedConn) isClosed() bool     { return c.closed }
-func (c *ptTruncatedConn) markClosedTest()    { _ = reflect.TypeOf(c) }
+func (c *tprotTruncatedConn) Closed() bool       { return c.closed }
+func (c *tprotTruncatedConn) Send([]byte) error  { return nil }
+func (c *tprotTruncatedConn) Close([]byte) error { c.closed = true; return nil }
+func (c *tprotTruncatedConn) isClosed() bool     { return c.closed }
+func (c *tprotTruncatedConn) markClosedTest()    { _ = reflect.TypeOf(c) }
 
 func TestProtocolReportsTruncatedFinalFrameOnPeerClose(t *testing.T) {
 	var errs []error
 	srv, err := server.NewServer(servertest.NewTestServerHost(), server.ServerOptions{
 		Listeners: []server.ServerListener{},
-		ServerId:  ptServerId,
+		ServerId:  tprotServerId,
 		OnError:   func(err error) { errs = append(errs, err) },
 	})
 	if err != nil {
@@ -379,7 +379,7 @@ func TestProtocolReportsTruncatedFinalFrameOnPeerClose(t *testing.T) {
 	}
 	defer func() { _ = srv.Close() }()
 
-	conn := &ptTruncatedConn{}
+	conn := &tprotTruncatedConn{}
 	handler := srv.Accept(conn)
 	handler.OnData([]byte{0, 0, 0, 2, 1})
 	handler.OnClose()

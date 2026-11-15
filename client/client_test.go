@@ -21,14 +21,14 @@ import (
 )
 
 const (
-	testServerId = protocol.ServerId("00000000-0000-4000-8000-000000000001")
-	testTimeout  = 5 * time.Second
+	tclientServerId = protocol.ServerId("00000000-0000-4000-8000-000000000001")
+	tclientTimeout  = 5 * time.Second
 )
 
-var testServerTarget = &protocol.ServerTarget{ServerId: testServerId}
+var tclientServerTarget = &protocol.ServerTarget{ServerId: tclientServerId}
 
-func connectTestClient(server *testkit.MemoryByteServer, expectedServerId ...protocol.ServerId) (*client.Client, error) {
-	sid := testServerId
+func tclientConnect(server *testkit.MemoryByteServer, expectedServerId ...protocol.ServerId) (*client.Client, error) {
+	sid := tclientServerId
 	if len(expectedServerId) > 0 && expectedServerId[0] != "" {
 		sid = expectedServerId[0]
 	}
@@ -40,10 +40,10 @@ func connectTestClient(server *testkit.MemoryByteServer, expectedServerId ...pro
 	})
 }
 
-func attachTestClient(t *testing.T, c *client.Client, server *testkit.MemoryByteServer, sessionId string) {
+func tclientAttach(t *testing.T, c *client.Client, server *testkit.MemoryByteServer, sessionId string) {
 	t.Helper()
 	expectedMessages := len(server.Messages()) + 1
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), tclientTimeout)
 	defer cancel()
 
 	type reqRes struct {
@@ -51,7 +51,7 @@ func attachTestClient(t *testing.T, c *client.Client, server *testkit.MemoryByte
 	}
 	done := make(chan reqRes, 1)
 	go func() {
-		_, _, err := c.Request(ctx, testServerTarget, chord.ServiceCall{
+		_, _, err := c.Request(ctx, tclientServerTarget, chord.ServiceCall{
 			ServiceId: "pi.session-management",
 			Member:    "attach",
 			Args:      []chord.JsonValue{sessionId},
@@ -70,7 +70,7 @@ func attachTestClient(t *testing.T, c *client.Client, server *testkit.MemoryByte
 	if err := server.Send(&protocol.AttachmentEnvelope{
 		Type: "attachment",
 		Attachment: jsonx.Some(protocol.SessionTarget{
-			ServerId:     testServerId,
+			ServerId:     tclientServerId,
 			SessionId:    sessionId,
 			AttachmentId: "attachment-" + sessionId,
 		}),
@@ -91,9 +91,9 @@ func attachTestClient(t *testing.T, c *client.Client, server *testkit.MemoryByte
 	}
 }
 
-func pollUntil(t *testing.T, cond func() bool, desc string) {
+func tclientPollUntil(t *testing.T, cond func() bool, desc string) {
 	t.Helper()
-	deadline := time.Now().Add(testTimeout)
+	deadline := time.Now().Add(tclientTimeout)
 	for time.Now().Before(deadline) {
 		if cond() {
 			return
@@ -117,11 +117,11 @@ func TestRequiresCanonicalUUIDv4ServerIdentity(t *testing.T) {
 
 func TestConnectsOnlyToExpectedLogicalServer(t *testing.T) {
 	matching := testkit.NewMemoryByteServer()
-	c, err := connectTestClient(matching)
+	c, err := tclientConnect(matching)
 	if err != nil {
 		t.Fatalf("connect matching failed: %v", err)
 	}
-	if h := c.Hello(); h == nil || h.ServerId != testServerId {
+	if h := c.Hello(); h == nil || h.ServerId != tclientServerId {
 		t.Fatalf("unexpected hello: %+v", h)
 	}
 	if err := c.Dispose(); err != nil {
@@ -129,7 +129,7 @@ func TestConnectsOnlyToExpectedLogicalServer(t *testing.T) {
 	}
 
 	wrong := testkit.NewMemoryByteServer(protocol.ServerId("00000000-0000-4000-8000-000000000002"))
-	_, err = connectTestClient(wrong)
+	_, err = tclientConnect(wrong)
 	var pve *protocol.ProtocolValidationError
 	if !errors.As(err, &pve) {
 		t.Fatalf("expected ProtocolValidationError, got %T (%v)", err, err)
@@ -138,7 +138,7 @@ func TestConnectsOnlyToExpectedLogicalServer(t *testing.T) {
 
 func TestUpdatesAttachmentStateFromOutOfBandServerRouting(t *testing.T) {
 	server := testkit.NewMemoryByteServer()
-	c, err := connectTestClient(server)
+	c, err := tclientConnect(server)
 	if err != nil {
 		t.Fatalf("connect failed: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestUpdatesAttachmentStateFromOutOfBandServerRouting(t *testing.T) {
 		t.Fatalf("OnAttachmentChange failed: %v", err)
 	}
 
-	attachTestClient(t, c, server, "session-1")
+	tclientAttach(t, c, server, "session-1")
 	att := c.Attachment()
 	if att == nil || att.SessionId != "session-1" || att.AttachmentId != "attachment-session-1" {
 		t.Fatalf("unexpected attachment: %+v", att)
@@ -172,7 +172,7 @@ func TestUpdatesAttachmentStateFromOutOfBandServerRouting(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected RequestEnvelope at index 1, got %T", msgs[1])
 	}
-	if !reflect.DeepEqual(req.Target, testServerTarget) {
+	if !reflect.DeepEqual(req.Target, tclientServerTarget) {
 		t.Fatalf("unexpected target: %#v", req.Target)
 	}
 	call, err := chord.ParseServiceCall(req.Call)
@@ -202,13 +202,13 @@ func TestUpdatesAttachmentStateFromOutOfBandServerRouting(t *testing.T) {
 
 func TestBuffersServiceUpdatesUntilSubscriptionSnapshotArrives(t *testing.T) {
 	server := testkit.NewMemoryByteServer()
-	c, err := connectTestClient(server)
+	c, err := tclientConnect(server)
 	if err != nil {
 		t.Fatalf("connect failed: %v", err)
 	}
 	defer func() { _ = c.Dispose() }()
 
-	attachTestClient(t, c, server, "session-1")
+	tclientAttach(t, c, server, "session-1")
 	target := c.Attachment()
 	if target == nil {
 		t.Fatal("missing attachment")
@@ -242,7 +242,7 @@ func TestBuffersServiceUpdatesUntilSubscriptionSnapshotArrives(t *testing.T) {
 		opening <- subRes{sub: sub, err: err}
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), tclientTimeout)
 	defer cancel()
 	if err := server.WaitForMessages(ctx, 3); err != nil {
 		t.Fatalf("WaitForMessages(3) failed: %v", err)
@@ -352,7 +352,7 @@ func TestBuffersServiceUpdatesUntilSubscriptionSnapshotArrives(t *testing.T) {
 	if err := sub.Activate(); err != nil {
 		t.Fatalf("Activate failed: %v", err)
 	}
-	pollUntil(t, func() bool {
+	tclientPollUntil(t, func() bool {
 		updMu.Lock()
 		defer updMu.Unlock()
 		return len(updates) == 1
@@ -386,7 +386,7 @@ func TestBuffersServiceUpdatesUntilSubscriptionSnapshotArrives(t *testing.T) {
 		t.Fatalf("send update 3 failed: %v", err)
 	}
 
-	pollUntil(t, func() bool {
+	tclientPollUntil(t, func() bool {
 		updMu.Lock()
 		defer updMu.Unlock()
 		return len(updates) == 3
@@ -436,13 +436,13 @@ func TestBuffersServiceUpdatesUntilSubscriptionSnapshotArrives(t *testing.T) {
 
 func TestCorrelatesOutOfOrderGenericServiceResponses(t *testing.T) {
 	server := testkit.NewMemoryByteServer()
-	c, err := connectTestClient(server)
+	c, err := tclientConnect(server)
 	if err != nil {
 		t.Fatalf("connect failed: %v", err)
 	}
 	defer func() { _ = c.Dispose() }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), tclientTimeout)
 	defer cancel()
 
 	type resVal struct {
@@ -452,14 +452,14 @@ func TestCorrelatesOutOfOrderGenericServiceResponses(t *testing.T) {
 	ch1 := make(chan resVal, 1)
 	ch2 := make(chan resVal, 1)
 	go func() {
-		v, _, err := c.Request(ctx, testServerTarget, chord.ServiceCall{ServiceId: "test", Member: "first", Args: []chord.JsonValue{}})
+		v, _, err := c.Request(ctx, tclientServerTarget, chord.ServiceCall{ServiceId: "test", Member: "first", Args: []chord.JsonValue{}})
 		ch1 <- resVal{v, err}
 	}()
 	if err := server.WaitForMessages(ctx, 2); err != nil {
 		t.Fatalf("WaitForMessages(2) failed: %v", err)
 	}
 	go func() {
-		v, _, err := c.Request(ctx, testServerTarget, chord.ServiceCall{ServiceId: "test", Member: "second", Args: []chord.JsonValue{}})
+		v, _, err := c.Request(ctx, tclientServerTarget, chord.ServiceCall{ServiceId: "test", Member: "second", Args: []chord.JsonValue{}})
 		ch2 <- resVal{v, err}
 	}()
 
@@ -480,17 +480,17 @@ func TestCorrelatesOutOfOrderGenericServiceResponses(t *testing.T) {
 
 func TestExposesBoundedServerErrors(t *testing.T) {
 	server := testkit.NewMemoryByteServer()
-	c, err := connectTestClient(server)
+	c, err := tclientConnect(server)
 	if err != nil {
 		t.Fatalf("connect failed: %v", err)
 	}
 	defer func() { _ = c.Dispose() }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), tclientTimeout)
 	defer cancel()
 	errCh := make(chan error, 1)
 	go func() {
-		_, _, err := c.Request(ctx, testServerTarget, chord.ServiceCall{ServiceId: "test", Member: "missing", Args: []chord.JsonValue{}})
+		_, _, err := c.Request(ctx, tclientServerTarget, chord.ServiceCall{ServiceId: "test", Member: "missing", Args: []chord.JsonValue{}})
 		errCh <- err
 	}()
 	if err := server.WaitForMessages(ctx, 2); err != nil {
@@ -513,7 +513,7 @@ func TestExposesBoundedServerErrors(t *testing.T) {
 
 func TestDoesNotSendPreAbortedUntypedRPCRequest(t *testing.T) {
 	server := testkit.NewMemoryByteServer()
-	c, err := connectTestClient(server)
+	c, err := tclientConnect(server)
 	if err != nil {
 		t.Fatalf("connect failed: %v", err)
 	}
@@ -523,7 +523,7 @@ func TestDoesNotSendPreAbortedUntypedRPCRequest(t *testing.T) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	cancel(reason)
 
-	_, _, err = c.Request(ctx, testServerTarget, chord.ServiceCall{ServiceId: "test", Member: "noop", Args: []chord.JsonValue{}})
+	_, _, err = c.Request(ctx, tclientServerTarget, chord.ServiceCall{ServiceId: "test", Member: "noop", Args: []chord.JsonValue{}})
 	if !errors.Is(err, reason) {
 		t.Fatalf("expected %v, got %v", reason, err)
 	}
@@ -534,7 +534,7 @@ func TestDoesNotSendPreAbortedUntypedRPCRequest(t *testing.T) {
 
 func TestCancelsOneUntypedRPCRequestWithoutDisconnecting(t *testing.T) {
 	server := testkit.NewMemoryByteServer()
-	c, err := connectTestClient(server)
+	c, err := tclientConnect(server)
 	if err != nil {
 		t.Fatalf("connect failed: %v", err)
 	}
@@ -542,12 +542,12 @@ func TestCancelsOneUntypedRPCRequestWithoutDisconnecting(t *testing.T) {
 
 	reason := errors.New("stop this request")
 	ctx, cancel := context.WithCancelCause(context.Background())
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), testTimeout)
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), tclientTimeout)
 	defer waitCancel()
 
 	errCh := make(chan error, 1)
 	go func() {
-		_, _, err := c.Request(ctx, testServerTarget, chord.ServiceCall{
+		_, _, err := c.Request(ctx, tclientServerTarget, chord.ServiceCall{
 			ServiceId: "test",
 			Member:    "mutate",
 			Args:      []chord.JsonValue{jsonx.ObjectOf("value", float64(42))},
@@ -559,7 +559,7 @@ func TestCancelsOneUntypedRPCRequestWithoutDisconnecting(t *testing.T) {
 		t.Fatalf("WaitForMessages(2) failed: %v", err)
 	}
 	req, ok := server.Messages()[1].(*protocol.RequestEnvelope)
-	if !ok || req.Id != "request-1" || !reflect.DeepEqual(req.Target, testServerTarget) {
+	if !ok || req.Id != "request-1" || !reflect.DeepEqual(req.Target, tclientServerTarget) {
 		t.Fatalf("unexpected request envelope: %#v", server.Messages()[1])
 	}
 
@@ -571,7 +571,7 @@ func TestCancelsOneUntypedRPCRequestWithoutDisconnecting(t *testing.T) {
 		t.Fatalf("WaitForMessages(3) failed: %v", err)
 	}
 	cancelEnv, ok := server.Messages()[2].(*protocol.CancelEnvelope)
-	if !ok || cancelEnv.Id != "request-1" || !reflect.DeepEqual(cancelEnv.Target, testServerTarget) {
+	if !ok || cancelEnv.Id != "request-1" || !reflect.DeepEqual(cancelEnv.Target, tclientServerTarget) {
 		t.Fatalf("unexpected cancel envelope: %#v", server.Messages()[2])
 	}
 
@@ -590,16 +590,16 @@ func TestCancelsOneUntypedRPCRequestWithoutDisconnecting(t *testing.T) {
 
 func TestRejectsPendingRequestsAfterDisconnectOrDisposal(t *testing.T) {
 	server := testkit.NewMemoryByteServer()
-	c, err := connectTestClient(server)
+	c, err := tclientConnect(server)
 	if err != nil {
 		t.Fatalf("connect failed: %v", err)
 	}
 
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), testTimeout)
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), tclientTimeout)
 	defer waitCancel()
 	errCh := make(chan error, 1)
 	go func() {
-		_, _, err := c.Request(waitCtx, testServerTarget, chord.ServiceCall{ServiceId: "test", Member: "pending", Args: []chord.JsonValue{}})
+		_, _, err := c.Request(waitCtx, tclientServerTarget, chord.ServiceCall{ServiceId: "test", Member: "pending", Args: []chord.JsonValue{}})
 		errCh <- err
 	}()
 	if err := server.WaitForMessages(waitCtx, 2); err != nil {
@@ -614,26 +614,26 @@ func TestRejectsPendingRequestsAfterDisconnectOrDisposal(t *testing.T) {
 	if err := c.Dispose(); err != nil {
 		t.Fatalf("Dispose failed: %v", err)
 	}
-	_, _, err = c.Request(waitCtx, testServerTarget, chord.ServiceCall{ServiceId: "test", Member: "disposed", Args: []chord.JsonValue{}})
+	_, _, err = c.Request(waitCtx, tclientServerTarget, chord.ServiceCall{ServiceId: "test", Member: "disposed", Args: []chord.JsonValue{}})
 	var cde *client.ClientDisposedError
 	if !errors.As(err, &cde) {
 		t.Fatalf("expected ClientDisposedError, got %T (%v)", err, err)
 	}
 }
 
-type funcByteTransport struct {
+type tclientFuncByteTransport struct {
 	sendFn  func([]byte) error
 	closeFn func()
 }
 
-func (f *funcByteTransport) Send(chunk []byte) error {
+func (f *tclientFuncByteTransport) Send(chunk []byte) error {
 	if f.sendFn != nil {
 		return f.sendFn(chunk)
 	}
 	return nil
 }
 
-func (f *funcByteTransport) Close() {
+func (f *tclientFuncByteTransport) Close() {
 	if f.closeFn != nil {
 		f.closeFn()
 	}
@@ -643,18 +643,18 @@ func TestRejectsServerDataDeliveredBeforeClientHelloIsSent(t *testing.T) {
 	closeCount := 0
 	sendCount := 0
 	c, err := client.NewClient(client.ClientOptions{
-		ServerId: testServerId,
+		ServerId: tclientServerId,
 		TransportFactory: func(handlers client.ByteTransportHandlers) (client.ByteTransport, error) {
 			frame, err := protocol.EncodeServerMessage(&protocol.ServerHello{
 				Type:     "hello",
 				Version:  protocol.ProtocolVersion,
-				ServerId: testServerId,
+				ServerId: tclientServerId,
 			}, nil)
 			if err != nil {
 				return nil, err
 			}
 			handlers.OnData(frame)
-			return &funcByteTransport{
+			return &tclientFuncByteTransport{
 				sendFn:  func([]byte) error { sendCount++; return nil },
 				closeFn: func() { closeCount++ },
 			}, nil
@@ -677,10 +677,10 @@ func TestRejectsTypedHandshakeErrorsAndClosesTransport(t *testing.T) {
 	var handlers client.ByteTransportHandlers
 	closeCount := 0
 	c, err := client.NewClient(client.ClientOptions{
-		ServerId: testServerId,
+		ServerId: tclientServerId,
 		TransportFactory: func(created client.ByteTransportHandlers) (client.ByteTransport, error) {
 			handlers = created
-			return &funcByteTransport{
+			return &tclientFuncByteTransport{
 				sendFn: func([]byte) error {
 					frame, err := protocol.EncodeServerMessage(&protocol.ServerHelloError{
 						Type:  "hello_error",
@@ -714,7 +714,7 @@ func TestRejectsPendingRequestsAndReconnectsThroughFreshTransport(t *testing.T) 
 	second := testkit.NewMemoryByteServer()
 	connection := 0
 	c, err := client.NewClient(client.ClientOptions{
-		ServerId: testServerId,
+		ServerId: tclientServerId,
 		TransportFactory: func(handlers client.ByteTransportHandlers) (client.ByteTransport, error) {
 			srv := first
 			if connection > 0 {
@@ -740,13 +740,13 @@ func TestRejectsPendingRequestsAndReconnectsThroughFreshTransport(t *testing.T) 
 	if _, err := c.Connect(); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
-	attachTestClient(t, c, first, "session-1")
+	tclientAttach(t, c, first, "session-1")
 	att := c.Attachment()
 	if att == nil {
 		t.Fatal("missing attachment")
 	}
 
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), testTimeout)
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), tclientTimeout)
 	defer waitCancel()
 	errCh := make(chan error, 1)
 	go func() {
@@ -772,7 +772,7 @@ func TestRejectsPendingRequestsAndReconnectsThroughFreshTransport(t *testing.T) 
 	}
 
 	hello, err := c.Reconnect()
-	if err != nil || hello.ServerId != testServerId {
+	if err != nil || hello.ServerId != tclientServerId {
 		t.Fatalf("Reconnect failed: hello=%+v err=%v", hello, err)
 	}
 	if connection != 2 || !c.Connected() || len(second.Messages()) != 1 {
@@ -792,17 +792,17 @@ func TestRejectsPendingRequestsAndReconnectsThroughFreshTransport(t *testing.T) 
 
 func TestReportsTransportFailuresWithoutLeavingRequestsPending(t *testing.T) {
 	server := testkit.NewMemoryByteServer()
-	c, err := connectTestClient(server)
+	c, err := tclientConnect(server)
 	if err != nil {
 		t.Fatalf("connect failed: %v", err)
 	}
 	defer func() { _ = c.Dispose() }()
 
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), testTimeout)
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), tclientTimeout)
 	defer waitCancel()
 	errCh := make(chan error, 1)
 	go func() {
-		_, _, err := c.Request(waitCtx, testServerTarget, chord.ServiceCall{ServiceId: "test", Member: "pending", Args: []chord.JsonValue{}})
+		_, _, err := c.Request(waitCtx, tclientServerTarget, chord.ServiceCall{ServiceId: "test", Member: "pending", Args: []chord.JsonValue{}})
 		errCh <- err
 	}()
 	if err := server.WaitForMessages(waitCtx, 2); err != nil {
@@ -822,7 +822,7 @@ func TestReportsTransportFailuresWithoutLeavingRequestsPending(t *testing.T) {
 
 func TestDisconnectsOnInvalidOrTruncatedServerFraming(t *testing.T) {
 	invalidServer := testkit.NewMemoryByteServer()
-	invalidClient, err := connectTestClient(invalidServer)
+	invalidClient, err := tclientConnect(invalidServer)
 	if err != nil {
 		t.Fatalf("connect invalidServer failed: %v", err)
 	}
@@ -849,17 +849,17 @@ func TestDisconnectsOnInvalidOrTruncatedServerFraming(t *testing.T) {
 	}
 
 	truncatedServer := testkit.NewMemoryByteServer()
-	truncatedClient, err := connectTestClient(truncatedServer)
+	truncatedClient, err := tclientConnect(truncatedServer)
 	if err != nil {
 		t.Fatalf("connect truncatedServer failed: %v", err)
 	}
 	defer func() { _ = truncatedClient.Dispose() }()
 
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), testTimeout)
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), tclientTimeout)
 	defer waitCancel()
 	errCh := make(chan error, 1)
 	go func() {
-		_, _, err := truncatedClient.Request(waitCtx, testServerTarget, chord.ServiceCall{ServiceId: "test", Member: "pending", Args: []chord.JsonValue{}})
+		_, _, err := truncatedClient.Request(waitCtx, tclientServerTarget, chord.ServiceCall{ServiceId: "test", Member: "pending", Args: []chord.JsonValue{}})
 		errCh <- err
 	}()
 	if err := truncatedServer.WaitForMessages(waitCtx, 2); err != nil {
@@ -882,7 +882,7 @@ func TestDisconnectsOnInvalidOrTruncatedServerFraming(t *testing.T) {
 
 func TestDisconnectsWhenResponseHasNoMatchingRequest(t *testing.T) {
 	server := testkit.NewMemoryByteServer()
-	c, err := connectTestClient(server)
+	c, err := tclientConnect(server)
 	if err != nil {
 		t.Fatalf("connect failed: %v", err)
 	}

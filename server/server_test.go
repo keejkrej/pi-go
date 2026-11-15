@@ -18,9 +18,9 @@ import (
 	"github.com/keejkrej/pi-go/server/transports/unix"
 )
 
-const stServerId = protocol.ServerId("00000000-0000-4000-8000-000000000001")
+const tserverServerId = protocol.ServerId("00000000-0000-4000-8000-000000000001")
 
-func stMakeSocketPath(t *testing.T) string {
+func tserverMakeSocketPath(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "pss-")
 	if err != nil {
@@ -30,24 +30,24 @@ func stMakeSocketPath(t *testing.T) string {
 	return filepath.Join(dir, "server.sock")
 }
 
-type stTimedOutConn struct {
+type tserverTimedOutConn struct {
 	mu         sync.Mutex
 	closed     bool
 	finalChunk []byte
 	closedCh   chan struct{}
 }
 
-func (c *stTimedOutConn) Closed() bool {
+func (c *tserverTimedOutConn) Closed() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.closed
 }
 
-func (c *stTimedOutConn) Send([]byte) error {
+func (c *tserverTimedOutConn) Send([]byte) error {
 	return errors.New("handshake timeout must use the terminal close frame")
 }
 
-func (c *stTimedOutConn) Close(finalChunk []byte) error {
+func (c *tserverTimedOutConn) Close(finalChunk []byte) error {
 	c.mu.Lock()
 	c.finalChunk = append([]byte(nil), finalChunk...)
 	c.closed = true
@@ -56,12 +56,12 @@ func (c *stTimedOutConn) Close(finalChunk []byte) error {
 	return nil
 }
 
-type stFailCloseListener struct {
+type tserverFailCloseListener struct {
 	failure error
 }
 
-func (l *stFailCloseListener) Start(server.ByteConnectionAcceptor) error { return nil }
-func (l *stFailCloseListener) Close() error                              { return l.failure }
+func (l *tserverFailCloseListener) Start(server.ByteConnectionAcceptor) error { return nil }
+func (l *tserverFailCloseListener) Close() error                              { return l.failure }
 
 func TestServerRequiresExplicitListenersAndCanonicalUUIDv4ServerId(t *testing.T) {
 	host := servertest.NewTestServerHost()
@@ -78,10 +78,10 @@ func TestServerRequiresExplicitListenersAndCanonicalUUIDv4ServerId(t *testing.T)
 
 func TestServerRejectsConcurrentStartCallsWithoutLeakingUnixListener(t *testing.T) {
 	host := servertest.NewTestServerHost()
-	sockPath := stMakeSocketPath(t)
+	sockPath := tserverMakeSocketPath(t)
 	srv, err := unix.CreateUnixServer(host, unix.UnixServerOptions{
 		Path:     sockPath,
-		ServerId: stServerId,
+		ServerId: tserverServerId,
 	})
 	if err != nil {
 		t.Fatalf("CreateUnixServer failed: %v", err)
@@ -120,10 +120,10 @@ func TestServerConcurrentStartWhileListenerBlocks(t *testing.T) {
 	host := servertest.NewTestServerHost()
 	entered := make(chan struct{})
 	release := make(chan struct{})
-	gated := &stGatedStartListener{entered: entered, release: release}
+	gated := &tserverGatedStartListener{entered: entered, release: release}
 	srv, err := server.NewServer(host, server.ServerOptions{
 		Listeners: []server.ServerListener{gated},
-		ServerId:  stServerId,
+		ServerId:  tserverServerId,
 	})
 	if err != nil {
 		t.Fatalf("NewServer failed: %v", err)
@@ -145,18 +145,18 @@ func TestServerConcurrentStartWhileListenerBlocks(t *testing.T) {
 	}
 }
 
-type stGatedStartListener struct {
+type tserverGatedStartListener struct {
 	entered chan struct{}
 	release chan struct{}
 }
 
-func (l *stGatedStartListener) Start(server.ByteConnectionAcceptor) error {
+func (l *tserverGatedStartListener) Start(server.ByteConnectionAcceptor) error {
 	close(l.entered)
 	<-l.release
 	return nil
 }
 
-func (l *stGatedStartListener) Close() error { return nil }
+func (l *tserverGatedStartListener) Close() error { return nil }
 
 func TestServerHandshakeTimeoutClosesWithFinalHelloErrorFrame(t *testing.T) {
 	host := servertest.NewTestServerHost()
@@ -164,7 +164,7 @@ func TestServerHandshakeTimeoutClosesWithFinalHelloErrorFrame(t *testing.T) {
 	timeoutMs := 10
 	core, err := server.NewServer(host, server.ServerOptions{
 		Listeners:          []server.ServerListener{},
-		ServerId:           stServerId,
+		ServerId:           tserverServerId,
 		MaxFrameLength:     &maxFrame,
 		HandshakeTimeoutMs: &timeoutMs,
 	})
@@ -173,7 +173,7 @@ func TestServerHandshakeTimeoutClosesWithFinalHelloErrorFrame(t *testing.T) {
 	}
 	defer func() { _ = core.Close() }()
 
-	conn := &stTimedOutConn{closedCh: make(chan struct{})}
+	conn := &tserverTimedOutConn{closedCh: make(chan struct{})}
 	core.Accept(conn)
 
 	select {
@@ -212,14 +212,14 @@ func TestServerRejectsTimeoutValuesAboveMaxTimerDelay(t *testing.T) {
 	tooBig := 2_147_483_648
 	if _, err := unix.CreateUnixServer(host, unix.UnixServerOptions{
 		Path:               "/tmp/pi-server-timeout-test.sock",
-		ServerId:           stServerId,
+		ServerId:           tserverServerId,
 		HandshakeTimeoutMs: &tooBig,
 	}); err == nil || !strings.Contains(err.Error(), "handshakeTimeoutMs") {
 		t.Fatalf("expected handshakeTimeoutMs error, got %v", err)
 	}
 	if _, err := unix.CreateUnixServer(host, unix.UnixServerOptions{
 		Path:                   "/tmp/pi-server-timeout-test.sock",
-		ServerId:               stServerId,
+		ServerId:               tserverServerId,
 		GracefulCloseTimeoutMs: &tooBig,
 	}); err == nil || !strings.Contains(err.Error(), "gracefulCloseTimeoutMs") {
 		t.Fatalf("expected gracefulCloseTimeoutMs error, got %v", err)
@@ -228,12 +228,12 @@ func TestServerRejectsTimeoutValuesAboveMaxTimerDelay(t *testing.T) {
 
 func TestServerRejectsPendingByteLimitsSmallerThanOneMaximumFrame(t *testing.T) {
 	host := servertest.NewTestServerHost()
-	sockPath := stMakeSocketPath(t)
+	sockPath := tserverMakeSocketPath(t)
 	maxFrame := 128
 	maxPending := 131
 	if _, err := unix.CreateUnixServer(host, unix.UnixServerOptions{
 		Path:            sockPath,
-		ServerId:        stServerId,
+		ServerId:        tserverServerId,
 		MaxFrameLength:  &maxFrame,
 		MaxPendingBytes: &maxPending,
 	}); err == nil || !strings.Contains(err.Error(), "maxPendingBytes") {
@@ -245,8 +245,8 @@ func TestServerRejectsCloseAndClosedWhenListenerShutdownFails(t *testing.T) {
 	host := servertest.NewTestServerHost()
 	failure := errors.New("listener close failed")
 	core, err := server.NewServer(host, server.ServerOptions{
-		Listeners: []server.ServerListener{&stFailCloseListener{failure: failure}},
-		ServerId:  stServerId,
+		Listeners: []server.ServerListener{&tserverFailCloseListener{failure: failure}},
+		ServerId:  tserverServerId,
 	})
 	if err != nil {
 		t.Fatalf("NewServer failed: %v", err)

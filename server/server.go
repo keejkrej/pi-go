@@ -338,12 +338,12 @@ func (s *Server[M]) receive(state *connState, chunk []byte) {
 		return
 	}
 	state.decodeMu.Lock()
-	defer state.decodeMu.Unlock()
-
 	if state.isTerminal() {
+		state.decodeMu.Unlock()
 		return
 	}
 	messages, err := state.decoder.Push(chunk)
+	state.decodeMu.Unlock()
 	if err != nil {
 		s.failProtocol(state, s.toProtocolError(err))
 		return

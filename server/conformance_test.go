@@ -22,30 +22,30 @@ import (
 )
 
 const (
-	ctServerId = protocol.ServerId("00000000-0000-4000-8000-000000000001")
-	ctTimeout  = 5 * time.Second
+	tconfServerId = protocol.ServerId("00000000-0000-4000-8000-000000000001")
+	tconfTimeout  = 5 * time.Second
 )
 
-type ctInMemoryWire struct {
+type tconfInMemoryWire struct {
 	mu      sync.Mutex
 	closed  bool
 	handler server.ByteConnectionHandler
 	client  *servertest.ProtocolTestClient
 }
 
-func (w *ctInMemoryWire) Closed() bool {
+func (w *tconfInMemoryWire) Closed() bool {
 	w.mu.Lock()
 	c := w.closed
 	w.mu.Unlock()
 	return c
 }
 
-func (w *ctInMemoryWire) Send(chunk []byte) error {
+func (w *tconfInMemoryWire) Send(chunk []byte) error {
 	w.client.Receive(chunk)
 	return nil
 }
 
-func (w *ctInMemoryWire) Close(finalChunk []byte) error {
+func (w *tconfInMemoryWire) Close(finalChunk []byte) error {
 	if len(finalChunk) > 0 {
 		w.client.Receive(finalChunk)
 	}
@@ -56,18 +56,18 @@ func (w *ctInMemoryWire) Close(finalChunk []byte) error {
 	return nil
 }
 
-type ctWireChannel struct {
-	wire *ctInMemoryWire
+type tconfWireChannel struct {
+	wire *tconfInMemoryWire
 }
 
-func (c *ctWireChannel) Send(chunk []byte) error {
+func (c *tconfWireChannel) Send(chunk []byte) error {
 	if c.wire.handler.OnData != nil {
 		c.wire.handler.OnData(chunk)
 	}
 	return nil
 }
 
-func (c *ctWireChannel) SendFragmented(chunk []byte, splitAt int) error {
+func (c *tconfWireChannel) SendFragmented(chunk []byte, splitAt int) error {
 	if c.wire.handler.OnData != nil {
 		c.wire.handler.OnData(chunk[:splitAt])
 		c.wire.handler.OnData(chunk[splitAt:])
@@ -75,7 +75,7 @@ func (c *ctWireChannel) SendFragmented(chunk []byte, splitAt int) error {
 	return nil
 }
 
-func (c *ctWireChannel) Close() error {
+func (c *tconfWireChannel) Close() error {
 	c.wire.mu.Lock()
 	if c.wire.closed {
 		c.wire.mu.Unlock()
@@ -92,7 +92,7 @@ func (c *ctWireChannel) Close() error {
 	return nil
 }
 
-func ctNewServer[M server.SessionMetadata](t *testing.T, host server.ServerHost[M], onError ...func(error)) *server.Server[M] {
+func tconfNewServer[M server.SessionMetadata](t *testing.T, host server.ServerHost[M], onError ...func(error)) *server.Server[M] {
 	t.Helper()
 	var errFn func(error)
 	if len(onError) > 0 {
@@ -100,7 +100,7 @@ func ctNewServer[M server.SessionMetadata](t *testing.T, host server.ServerHost[
 	}
 	srv, err := server.NewServer(host, server.ServerOptions{
 		Listeners: []server.ServerListener{},
-		ServerId:  ctServerId,
+		ServerId:  tconfServerId,
 		OnError:   errFn,
 	})
 	if err != nil {
@@ -110,23 +110,23 @@ func ctNewServer[M server.SessionMetadata](t *testing.T, host server.ServerHost[
 	return srv
 }
 
-func ctConnect[M server.SessionMetadata](srv *server.Server[M]) *servertest.ProtocolTestClient {
-	wire := &ctInMemoryWire{}
-	channel := &ctWireChannel{wire: wire}
+func tconfConnect[M server.SessionMetadata](srv *server.Server[M]) *servertest.ProtocolTestClient {
+	wire := &tconfInMemoryWire{}
+	channel := &tconfWireChannel{wire: wire}
 	client := servertest.NewProtocolTestClient(channel)
 	wire.client = client
 	wire.handler = srv.Accept(wire)
 	return client
 }
 
-func ctSessionCall(member string, args ...chord.JsonValue) chord.ServiceCall {
+func tconfSessionCall(member string, args ...chord.JsonValue) chord.ServiceCall {
 	if args == nil {
 		args = []chord.JsonValue{}
 	}
 	return chord.ServiceCall{ServiceId: "test.session", Member: member, Args: args}
 }
 
-func ctLatestAttachmentId(t *testing.T, c *servertest.ProtocolTestClient, sessionId string) string {
+func tconfLatestAttachmentId(t *testing.T, c *servertest.ProtocolTestClient, sessionId string) string {
 	t.Helper()
 	msgs := c.Messages()
 	for i := len(msgs) - 1; i >= 0; i-- {
@@ -140,9 +140,9 @@ func ctLatestAttachmentId(t *testing.T, c *servertest.ProtocolTestClient, sessio
 	return ""
 }
 
-func ctPollUntil(t *testing.T, cond func() bool, desc string) {
+func tconfPollUntil(t *testing.T, cond func() bool, desc string) {
 	t.Helper()
-	deadline := time.Now().Add(ctTimeout)
+	deadline := time.Now().Add(tconfTimeout)
 	for time.Now().Before(deadline) {
 		if cond() {
 			return
@@ -152,60 +152,60 @@ func ctPollUntil(t *testing.T, cond func() bool, desc string) {
 	t.Fatalf("timed out waiting for %s", desc)
 }
 
-type ctBackendMetadata struct {
+type tconfBackendMetadata struct {
 	id         string
 	path       string
 	modifiedAt int
 }
 
-func (m ctBackendMetadata) SessionId() string { return m.id }
+func (m tconfBackendMetadata) SessionId() string { return m.id }
 
-type ctCustomMetadataHost struct {
+type tconfCustomMetadataHost struct {
 	serverServices server.RoutedServerServiceHost
-	metadata       ctBackendMetadata
-	onOpen         func(ctBackendMetadata)
+	metadata       tconfBackendMetadata
+	onOpen         func(tconfBackendMetadata)
 }
 
-func (h *ctCustomMetadataHost) ServerServices() server.RoutedServerServiceHost {
+func (h *tconfCustomMetadataHost) ServerServices() server.RoutedServerServiceHost {
 	return h.serverServices
 }
-func (h *ctCustomMetadataHost) ResolveSession(string, chord.Context) (ctBackendMetadata, error) {
+func (h *tconfCustomMetadataHost) ResolveSession(string, chord.Context) (tconfBackendMetadata, error) {
 	return h.metadata, nil
 }
-func (h *ctCustomMetadataHost) OpenSession(candidate ctBackendMetadata, _ chord.Context) (server.RoutedSessionHandle, error) {
+func (h *tconfCustomMetadataHost) OpenSession(candidate tconfBackendMetadata, _ chord.Context) (server.RoutedSessionHandle, error) {
 	h.onOpen(candidate)
-	return &ctNoopHandle{}, nil
+	return &tconfNoopHandle{}, nil
 }
 
-type ctNoopHandle struct{}
+type tconfNoopHandle struct{}
 
-func (h *ctNoopHandle) AttachClient(chord.Context) (server.RoutedSessionAttachment, error) {
-	return &ctNoopAttachment{}, nil
+func (h *tconfNoopHandle) AttachClient(chord.Context) (server.RoutedSessionAttachment, error) {
+	return &tconfNoopAttachment{}, nil
 }
-func (h *ctNoopHandle) Terminated() <-chan error  { return nil }
-func (h *ctNoopHandle) Close(chord.Context) error { return nil }
+func (h *tconfNoopHandle) Terminated() <-chan error  { return nil }
+func (h *tconfNoopHandle) Close(chord.Context) error { return nil }
 
-type ctNoopAttachment struct{}
+type tconfNoopAttachment struct{}
 
-func (a *ctNoopAttachment) InvokeService(chord.ServiceCall, chord.ServiceUpdatePublisher, chord.Context) (chord.JsonValue, bool, error) {
+func (a *tconfNoopAttachment) InvokeService(chord.ServiceCall, chord.ServiceUpdatePublisher, chord.Context) (chord.JsonValue, bool, error) {
 	return nil, false, nil
 }
-func (a *ctNoopAttachment) Release(chord.Context) error { return nil }
+func (a *tconfNoopAttachment) Release(chord.Context) error { return nil }
 
 func TestSessionProtocolConformance(t *testing.T) {
 	t.Run("handshake identifies the logical server without listing sessions", func(t *testing.T) {
 		host := servertest.NewTestServerHost()
 		host.Seed()
-		c := ctConnect(ctNewServer(t, host))
+		c := tconfConnect(tconfNewServer(t, host))
 
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		msg, err := c.Hello(ctx)
 		if err != nil {
 			t.Fatalf("Hello failed: %v", err)
 		}
 		sh, ok := msg.(*protocol.ServerHello)
-		if !ok || sh.ServerId != ctServerId {
+		if !ok || sh.ServerId != tconfServerId {
 			t.Fatalf("unexpected hello: %#v", msg)
 		}
 		if host.HarnessCount() != 0 {
@@ -215,8 +215,8 @@ func TestSessionProtocolConformance(t *testing.T) {
 
 	t.Run("rejects a semantically invalid service call after envelope decoding", func(t *testing.T) {
 		host := servertest.NewTestServerHost()
-		c := ctConnect(ctNewServer(t, host))
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		c := tconfConnect(tconfNewServer(t, host))
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 
 		if _, err := c.Hello(ctx); err != nil {
@@ -246,7 +246,7 @@ func TestSessionProtocolConformance(t *testing.T) {
 		if err := c.SendMessage(&protocol.RequestEnvelope{
 			Type:   "request",
 			Id:     "invalid-call",
-			Target: &protocol.ServerTarget{ServerId: ctServerId},
+			Target: &protocol.ServerTarget{ServerId: tconfServerId},
 			Call:   jsonx.ObjectOf("arbitrary", true),
 		}); err != nil {
 			t.Fatalf("SendMessage failed: %v", err)
@@ -263,20 +263,20 @@ func TestSessionProtocolConformance(t *testing.T) {
 	})
 
 	t.Run("attach passes concrete repository metadata to the Harness host", func(t *testing.T) {
-		want := ctBackendMetadata{id: "session-1", path: "/sessions/session-1.jsonl", modifiedAt: 2}
-		var got ctBackendMetadata
-		host := &ctCustomMetadataHost{
+		want := tconfBackendMetadata{id: "session-1", path: "/sessions/session-1.jsonl", modifiedAt: 2}
+		var got tconfBackendMetadata
+		host := &tconfCustomMetadataHost{
 			serverServices: servertest.CreateTestServerServices(),
 			metadata:       want,
-			onOpen:         func(candidate ctBackendMetadata) { got = candidate },
+			onOpen:         func(candidate tconfBackendMetadata) { got = candidate },
 		}
-		c := ctConnect(ctNewServer(t, host))
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		c := tconfConnect(tconfNewServer(t, host))
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		if _, err := c.Hello(ctx); err != nil {
 			t.Fatalf("Hello failed: %v", err)
 		}
-		resp, err := c.Attach(ctx, ctServerId, "session-1")
+		resp, err := c.Attach(ctx, tconfServerId, "session-1")
 		if err != nil {
 			t.Fatalf("Attach failed: %v", err)
 		}
@@ -293,20 +293,20 @@ func TestSessionProtocolConformance(t *testing.T) {
 		backing.Seed("session-1")
 		var releaseCount atomic.Int64
 
-		customServices := &ctCustomServerServices{
+		customServices := &tconfCustomServerServices{
 			onAttach: func(presentation server.RoutedServerPresentation) server.RoutedServerServiceAttachment {
-				return &ctCustomServerServiceAttachment{
+				return &tconfCustomServerServiceAttachment{
 					presentation: presentation,
 					onRelease:    func() { releaseCount.Add(1) },
 				}
 			},
 		}
-		host := &ctDelegateHost{
+		host := &tconfDelegateHost{
 			backing:        backing,
 			serverServices: customServices,
 		}
-		c := ctConnect(ctNewServer[server.SessionMetadata](t, host))
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		c := tconfConnect(tconfNewServer[server.SessionMetadata](t, host))
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		if _, err := c.Hello(ctx); err != nil {
 			t.Fatalf("Hello failed: %v", err)
@@ -327,7 +327,7 @@ func TestSessionProtocolConformance(t *testing.T) {
 		}()
 		time.Sleep(5 * time.Millisecond)
 
-		attachResp, err := c.Attach(ctx, ctServerId, "session-1")
+		attachResp, err := c.Attach(ctx, tconfServerId, "session-1")
 		if err != nil {
 			t.Fatalf("Attach failed: %v", err)
 		}
@@ -364,7 +364,7 @@ func TestSessionProtocolConformance(t *testing.T) {
 		}()
 		time.Sleep(5 * time.Millisecond)
 
-		detResp, err := c.RequestService(ctx, &protocol.ServerTarget{ServerId: ctServerId}, chord.ServiceCall{
+		detResp, err := c.RequestService(ctx, &protocol.ServerTarget{ServerId: tconfServerId}, chord.ServiceCall{
 			ServiceId: "pi.session-management",
 			Member:    "detach",
 			Args:      []chord.JsonValue{},
@@ -386,17 +386,17 @@ func TestSessionProtocolConformance(t *testing.T) {
 		if err := c.Close(); err != nil {
 			t.Fatalf("Close failed: %v", err)
 		}
-		ctPollUntil(t, func() bool { return releaseCount.Load() == 1 }, "server service releaseCount == 1")
+		tconfPollUntil(t, func() bool { return releaseCount.Load() == 1 }, "server service releaseCount == 1")
 	})
 
 	t.Run("permits multiple client attachments per Session", func(t *testing.T) {
 		host := servertest.NewTestServerHost()
 		host.Seed("session-1")
-		srv := ctNewServer(t, host)
-		first := ctConnect(srv)
-		second := ctConnect(srv)
+		srv := tconfNewServer(t, host)
+		first := tconfConnect(srv)
+		second := tconfConnect(srv)
 
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		if _, err := first.Hello(ctx); err != nil {
 			t.Fatalf("first.Hello failed: %v", err)
@@ -405,12 +405,12 @@ func TestSessionProtocolConformance(t *testing.T) {
 			t.Fatalf("second.Hello failed: %v", err)
 		}
 
-		if r, err := first.Attach(ctx, ctServerId, "session-1"); err != nil {
+		if r, err := first.Attach(ctx, tconfServerId, "session-1"); err != nil {
 			t.Fatalf("first.Attach 1 failed: %v", err)
 		} else if _, ok := r.(*protocol.ResponseSuccess); !ok {
 			t.Fatalf("expected ok, got %#v", r)
 		}
-		if r, err := first.Attach(ctx, ctServerId, "session-1"); err != nil {
+		if r, err := first.Attach(ctx, tconfServerId, "session-1"); err != nil {
 			t.Fatalf("first.Attach 2 failed: %v", err)
 		} else if _, ok := r.(*protocol.ResponseSuccess); !ok {
 			t.Fatalf("expected ok, got %#v", r)
@@ -420,7 +420,7 @@ func TestSessionProtocolConformance(t *testing.T) {
 			t.Fatalf("expected 1 attached client, err=%v", err)
 		}
 
-		if r, err := second.Attach(ctx, ctServerId, "session-1"); err != nil {
+		if r, err := second.Attach(ctx, tconfServerId, "session-1"); err != nil {
 			t.Fatalf("second.Attach failed: %v", err)
 		} else if _, ok := r.(*protocol.ResponseSuccess); !ok {
 			t.Fatalf("expected ok, got %#v", r)
@@ -432,8 +432,8 @@ func TestSessionProtocolConformance(t *testing.T) {
 		if err := first.Close(); err != nil {
 			t.Fatalf("first.Close failed: %v", err)
 		}
-		ctPollUntil(t, func() bool { return harness.AttachedClients() == 1 }, "attachedClients == 1")
-		if r, err := second.Attach(ctx, ctServerId, "session-1"); err != nil {
+		tconfPollUntil(t, func() bool { return harness.AttachedClients() == 1 }, "attachedClients == 1")
+		if r, err := second.Attach(ctx, tconfServerId, "session-1"); err != nil {
 			t.Fatalf("second re-attach failed: %v", err)
 		} else if _, ok := r.(*protocol.ResponseSuccess); !ok {
 			t.Fatalf("expected ok, got %#v", r)
@@ -445,34 +445,34 @@ func TestSessionProtocolConformance(t *testing.T) {
 		host.Seed("session-1")
 		var errMu sync.Mutex
 		var errs []error
-		srv := ctNewServer(t, host, func(err error) {
+		srv := tconfNewServer(t, host, func(err error) {
 			errMu.Lock()
 			errs = append(errs, err)
 			errMu.Unlock()
 		})
-		first := ctConnect(srv)
-		second := ctConnect(srv)
+		first := tconfConnect(srv)
+		second := tconfConnect(srv)
 
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		_, _ = first.Hello(ctx)
 		_, _ = second.Hello(ctx)
-		_, _ = first.Attach(ctx, ctServerId, "session-1")
+		_, _ = first.Attach(ctx, tconfServerId, "session-1")
 
 		harness, _ := host.LatestHarness("session-1")
 		releaseErr := errors.New("release failed")
 		harness.SetFailAttachmentRelease(releaseErr)
 
 		_ = first.Close()
-		ctPollUntil(t, func() bool { return harness.AttachmentReleaseCount() == 1 }, "attachmentReleaseCount == 1")
-		ctPollUntil(t, func() bool {
+		tconfPollUntil(t, func() bool { return harness.AttachmentReleaseCount() == 1 }, "attachmentReleaseCount == 1")
+		tconfPollUntil(t, func() bool {
 			errMu.Lock()
 			defer errMu.Unlock()
 			return slices.Contains(errs, releaseErr)
 		}, "releaseError logged")
 
 		harness.SetFailAttachmentRelease(nil)
-		if r, err := second.Attach(ctx, ctServerId, "session-1"); err != nil {
+		if r, err := second.Attach(ctx, tconfServerId, "session-1"); err != nil {
 			t.Fatalf("second.Attach failed: %v", err)
 		} else if _, ok := r.(*protocol.ResponseSuccess); !ok {
 			t.Fatalf("expected ok, got %#v", r)
@@ -483,29 +483,29 @@ func TestSessionProtocolConformance(t *testing.T) {
 		host := servertest.NewTestServerHost()
 		host.Seed("session-1")
 		host.Seed("session-2")
-		srv := ctNewServer(t, host)
-		attached := ctConnect(srv)
-		unattached := ctConnect(srv)
+		srv := tconfNewServer(t, host)
+		attached := tconfConnect(srv)
+		unattached := tconfConnect(srv)
 
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		_, _ = attached.Hello(ctx)
 		_, _ = unattached.Hello(ctx)
 
-		if r, err := unattached.RequestSessionService(ctx, ctServerId, "session-1", ctSessionCall("run")); err != nil {
+		if r, err := unattached.RequestSessionService(ctx, tconfServerId, "session-1", tconfSessionCall("run")); err != nil {
 			t.Fatalf("unattached call failed: %v", err)
 		} else if rf, ok := r.(*protocol.ResponseFailure); !ok || rf.Error.Code != "session_not_attached" {
 			t.Fatalf("expected session_not_attached, got %#v", r)
 		}
 
-		_, _ = attached.Attach(ctx, ctServerId, "session-1")
-		if r, err := attached.RequestSessionService(ctx, ctServerId, "session-2", ctSessionCall("run")); err != nil {
+		_, _ = attached.Attach(ctx, tconfServerId, "session-1")
+		if r, err := attached.RequestSessionService(ctx, tconfServerId, "session-2", tconfSessionCall("run")); err != nil {
 			t.Fatalf("wrong session call failed: %v", err)
 		} else if rf, ok := r.(*protocol.ResponseFailure); !ok || rf.Error.Code != "session_not_attached" {
 			t.Fatalf("expected session_not_attached, got %#v", r)
 		}
 
-		if r, err := attached.RequestSessionService(ctx, ctServerId, "session-1", ctSessionCall("run", "Hello")); err != nil {
+		if r, err := attached.RequestSessionService(ctx, tconfServerId, "session-1", tconfSessionCall("run", "Hello")); err != nil {
 			t.Fatalf("attached call failed: %v", err)
 		} else if rs, ok := r.(*protocol.ResponseSuccess); !ok {
 			t.Fatalf("expected ResponseSuccess, got %#v", r)
@@ -518,7 +518,7 @@ func TestSessionProtocolConformance(t *testing.T) {
 		}
 
 		harness, _ := host.LatestHarness("session-1")
-		wantCalls := []chord.ServiceCall{ctSessionCall("run", "Hello")}
+		wantCalls := []chord.ServiceCall{tconfSessionCall("run", "Hello")}
 		if !reflect.DeepEqual(harness.ServiceCalls(), wantCalls) {
 			t.Fatalf("expected calls %+v, got %+v", wantCalls, harness.ServiceCalls())
 		}
@@ -528,20 +528,20 @@ func TestSessionProtocolConformance(t *testing.T) {
 		host := servertest.NewTestServerHost()
 		host.Seed("session-1")
 		host.Seed("session-2")
-		c := ctConnect(ctNewServer(t, host))
+		c := tconfConnect(tconfNewServer(t, host))
 
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		_, _ = c.Hello(ctx)
-		_, _ = c.Attach(ctx, ctServerId, "session-1")
-		firstAttachmentId := ctLatestAttachmentId(t, c, "session-1")
-		_, _ = c.Attach(ctx, ctServerId, "session-2")
+		_, _ = c.Attach(ctx, tconfServerId, "session-1")
+		firstAttachmentId := tconfLatestAttachmentId(t, c, "session-1")
+		_, _ = c.Attach(ctx, tconfServerId, "session-2")
 
 		resp, err := c.RequestService(ctx, &protocol.SessionTarget{
-			ServerId:     ctServerId,
+			ServerId:     tconfServerId,
 			SessionId:    "session-1",
 			AttachmentId: firstAttachmentId,
-		}, ctSessionCall("run", "stale"))
+		}, tconfSessionCall("run", "stale"))
 		if err != nil {
 			t.Fatalf("RequestService failed: %v", err)
 		}
@@ -557,16 +557,16 @@ func TestSessionProtocolConformance(t *testing.T) {
 	t.Run("preserves opaque service results and bounds adapter defects", func(t *testing.T) {
 		host := servertest.NewTestServerHost()
 		host.Seed("session-1")
-		c := ctConnect(ctNewServer(t, host))
+		c := tconfConnect(tconfNewServer(t, host))
 
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		_, _ = c.Hello(ctx)
-		_, _ = c.Attach(ctx, ctServerId, "session-1")
+		_, _ = c.Attach(ctx, tconfServerId, "session-1")
 		harness, _ := host.LatestHarness("session-1")
 
 		harness.SetNextServiceResult(jsonx.ObjectOf("accepted", false, "reason", "closed"), true)
-		resp, err := c.RequestSessionService(ctx, ctServerId, "session-1", ctSessionCall("run"))
+		resp, err := c.RequestSessionService(ctx, tconfServerId, "session-1", tconfSessionCall("run"))
 		if err != nil {
 			t.Fatalf("RequestSessionService failed: %v", err)
 		}
@@ -587,7 +587,7 @@ func TestSessionProtocolConformance(t *testing.T) {
 		}
 
 		harness.SetNextServiceError(errors.New("private adapter detail"))
-		resp2, err := c.RequestSessionService(ctx, ctServerId, "session-1", ctSessionCall("run"))
+		resp2, err := c.RequestSessionService(ctx, tconfServerId, "session-1", tconfSessionCall("run"))
 		if err != nil {
 			t.Fatalf("RequestSessionService 2 failed: %v", err)
 		}
@@ -599,12 +599,12 @@ func TestSessionProtocolConformance(t *testing.T) {
 	t.Run("admits concurrent service calls to the attached Session", func(t *testing.T) {
 		host := servertest.NewTestServerHost()
 		host.Seed("session-1")
-		c := ctConnect(ctNewServer(t, host))
+		c := tconfConnect(tconfNewServer(t, host))
 
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		_, _ = c.Hello(ctx)
-		_, _ = c.Attach(ctx, ctServerId, "session-1")
+		_, _ = c.Attach(ctx, tconfServerId, "session-1")
 		harness, _ := host.LatestHarness("session-1")
 
 		gate := harness.GateNextServiceCall()
@@ -614,19 +614,19 @@ func TestSessionProtocolConformance(t *testing.T) {
 		}
 		firstCh := make(chan respPair, 1)
 		go func() {
-			r, e := c.RequestSessionService(ctx, ctServerId, "session-1", ctSessionCall("run", "first"))
+			r, e := c.RequestSessionService(ctx, tconfServerId, "session-1", tconfSessionCall("run", "first"))
 			firstCh <- respPair{r, e}
 		}()
 		<-gate.Entered.Done()
 
-		secondResp, secondErr := c.RequestSessionService(ctx, ctServerId, "session-1", ctSessionCall("run", "second"))
+		secondResp, secondErr := c.RequestSessionService(ctx, tconfServerId, "session-1", tconfSessionCall("run", "second"))
 		if secondErr != nil {
 			t.Fatalf("second service call failed: %v", secondErr)
 		}
 		if _, ok := secondResp.(*protocol.ResponseSuccess); !ok {
 			t.Fatalf("expected ResponseSuccess for second call, got %#v", secondResp)
 		}
-		wantCalls := []chord.ServiceCall{ctSessionCall("run", "first"), ctSessionCall("run", "second")}
+		wantCalls := []chord.ServiceCall{tconfSessionCall("run", "first"), tconfSessionCall("run", "second")}
 		if !reflect.DeepEqual(harness.ServiceCalls(), wantCalls) {
 			t.Fatalf("expected calls %+v, got %+v", wantCalls, harness.ServiceCalls())
 		}
@@ -643,18 +643,18 @@ func TestSessionProtocolConformance(t *testing.T) {
 	t.Run("keeps attachment demand until an accepted service call settles after disconnect", func(t *testing.T) {
 		host := servertest.NewTestServerHost()
 		host.Seed("session-1")
-		c := ctConnect(ctNewServer(t, host))
+		c := tconfConnect(tconfNewServer(t, host))
 
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		_, _ = c.Hello(ctx)
-		_, _ = c.Attach(ctx, ctServerId, "session-1")
+		_, _ = c.Attach(ctx, tconfServerId, "session-1")
 		harness, _ := host.LatestHarness("session-1")
 
 		gate := harness.GateNextServiceCall()
 		errCh := make(chan error, 1)
 		go func() {
-			_, e := c.RequestSessionService(ctx, ctServerId, "session-1", ctSessionCall("run"))
+			_, e := c.RequestSessionService(ctx, tconfServerId, "session-1", tconfSessionCall("run"))
 			errCh <- e
 		}()
 		<-gate.Entered.Done()
@@ -667,15 +667,15 @@ func TestSessionProtocolConformance(t *testing.T) {
 		if gotErr := <-errCh; gotErr == nil || !regexp.MustCompile(`(?i)closed`).MatchString(gotErr.Error()) {
 			t.Fatalf("expected closed error, got %v", gotErr)
 		}
-		ctPollUntil(t, func() bool { return harness.AttachedClients() == 0 }, "attachedClients == 0")
+		tconfPollUntil(t, func() bool { return harness.AttachedClients() == 0 }, "attachedClients == 0")
 	})
 
 	t.Run("rejects requests addressed to another server before repository access", func(t *testing.T) {
 		host := servertest.NewTestServerHost()
 		host.Seed("session-1")
-		c := ctConnect(ctNewServer(t, host))
+		c := tconfConnect(tconfNewServer(t, host))
 
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		_, _ = c.Hello(ctx)
 
@@ -693,13 +693,13 @@ func TestSessionProtocolConformance(t *testing.T) {
 
 	t.Run("reports an unknown session without creating a Harness", func(t *testing.T) {
 		host := servertest.NewTestServerHost()
-		c := ctConnect(ctNewServer(t, host))
+		c := tconfConnect(tconfNewServer(t, host))
 
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		_, _ = c.Hello(ctx)
 
-		resp, err := c.Attach(ctx, ctServerId, "missing")
+		resp, err := c.Attach(ctx, tconfServerId, "missing")
 		if err != nil {
 			t.Fatalf("Attach failed: %v", err)
 		}
@@ -712,14 +712,14 @@ func TestSessionProtocolConformance(t *testing.T) {
 	})
 
 	t.Run("rejects an ambiguous session ID without creating a Harness", func(t *testing.T) {
-		host := &ctAmbiguousHost{serverServices: servertest.CreateTestServerServices()}
-		c := ctConnect(ctNewServer(t, host))
+		host := &tconfAmbiguousHost{serverServices: servertest.CreateTestServerServices()}
+		c := tconfConnect(tconfNewServer(t, host))
 
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		_, _ = c.Hello(ctx)
 
-		resp, err := c.Attach(ctx, ctServerId, "duplicate")
+		resp, err := c.Attach(ctx, tconfServerId, "duplicate")
 		if err != nil {
 			t.Fatalf("Attach failed: %v", err)
 		}
@@ -731,21 +731,21 @@ func TestSessionProtocolConformance(t *testing.T) {
 	t.Run("invalidates a terminated Harness handle and allows a later attach", func(t *testing.T) {
 		host := servertest.NewTestServerHost()
 		host.Seed("session-1")
-		c := ctConnect(ctNewServer(t, host))
+		c := tconfConnect(tconfNewServer(t, host))
 
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		_, _ = c.Hello(ctx)
-		_, _ = c.Attach(ctx, ctServerId, "session-1")
+		_, _ = c.Attach(ctx, tconfServerId, "session-1")
 		firstHarness, _ := host.LatestHarness("session-1")
 
 		firstHarness.Terminate(errors.New("worker crashed"))
-		ctPollUntil(t, func() bool { return firstHarness.AttachedClients() == 0 }, "firstHarness attachedClients == 0")
+		tconfPollUntil(t, func() bool { return firstHarness.AttachedClients() == 0 }, "firstHarness attachedClients == 0")
 		if firstHarness.AttachmentReleaseCount() != 1 {
 			t.Fatalf("expected attachmentReleaseCount == 1, got %d", firstHarness.AttachmentReleaseCount())
 		}
 
-		if r, err := c.Attach(ctx, ctServerId, "session-1"); err != nil {
+		if r, err := c.Attach(ctx, tconfServerId, "session-1"); err != nil {
 			t.Fatalf("re-attach failed: %v", err)
 		} else if _, ok := r.(*protocol.ResponseSuccess); !ok {
 			t.Fatalf("expected ok on re-attach, got %#v", r)
@@ -758,17 +758,17 @@ func TestSessionProtocolConformance(t *testing.T) {
 	t.Run("connection loss releases its attachment, while server shutdown closes the Harness", func(t *testing.T) {
 		host := servertest.NewTestServerHost()
 		host.Seed("session-1")
-		srv := ctNewServer(t, host)
-		c := ctConnect(srv)
+		srv := tconfNewServer(t, host)
+		c := tconfConnect(srv)
 
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		_, _ = c.Hello(ctx)
-		_, _ = c.Attach(ctx, ctServerId, "session-1")
+		_, _ = c.Attach(ctx, tconfServerId, "session-1")
 		harness, _ := host.LatestHarness("session-1")
 
 		_ = c.Close()
-		ctPollUntil(t, func() bool { return harness.AttachedClients() == 0 }, "attachedClients == 0")
+		tconfPollUntil(t, func() bool { return harness.AttachedClients() == 0 }, "attachedClients == 0")
 		if harness.CloseCount() != 0 {
 			t.Fatalf("expected closeCount 0 before server close, got %d", harness.CloseCount())
 		}
@@ -788,20 +788,20 @@ func TestRoutedSessionAcquisitionFailures(t *testing.T) {
 		terminated := make(chan error, 1)
 		var releaseCount atomic.Int64
 
-		host := &ctConcurrentTerminateHost{
+		host := &tconfConcurrentTerminateHost{
 			serverServices: servertest.CreateTestServerServices(),
 			terminated:     terminated,
 			onAttach: func() (server.RoutedSessionAttachment, error) {
 				acquiring.Resolve(struct{}{})
 				continueAcquiring.Await()
-				return &ctCountingAttachment{
+				return &tconfCountingAttachment{
 					onRelease: func() { releaseCount.Add(1) },
 				}, nil
 			},
 		}
-		c := ctConnect(ctNewServer[server.SessionMetadata](t, host))
+		c := tconfConnect(tconfNewServer[server.SessionMetadata](t, host))
 
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		_, _ = c.Hello(ctx)
 
@@ -811,7 +811,7 @@ func TestRoutedSessionAcquisitionFailures(t *testing.T) {
 		}
 		attCh := make(chan attachPair, 1)
 		go func() {
-			r, e := c.Attach(ctx, ctServerId, "session-1")
+			r, e := c.Attach(ctx, tconfServerId, "session-1")
 			attCh <- attachPair{r, e}
 		}()
 		<-acquiring.Done()
@@ -836,11 +836,11 @@ func TestRoutedSessionAcquisitionFailures(t *testing.T) {
 		host := servertest.NewTestServerHost()
 		host.Seed("session-1")
 		host.SetNextOpenSessionError(errors.New("Harness creation failed"))
-		srv := ctNewServer(t, host)
-		first := ctConnect(srv)
-		second := ctConnect(srv)
+		srv := tconfNewServer(t, host)
+		first := tconfConnect(srv)
+		second := tconfConnect(srv)
 
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		_, _ = first.Hello(ctx)
 		_, _ = second.Hello(ctx)
@@ -853,12 +853,12 @@ func TestRoutedSessionAcquisitionFailures(t *testing.T) {
 		ch1 := make(chan respErr, 1)
 		ch2 := make(chan respErr, 1)
 		go func() {
-			r, e := first.Attach(ctx, ctServerId, "session-1")
+			r, e := first.Attach(ctx, tconfServerId, "session-1")
 			ch1 <- respErr{r, e}
 		}()
 		<-gate.Entered.Done()
 		go func() {
-			r, e := second.Attach(ctx, ctServerId, "session-1")
+			r, e := second.Attach(ctx, tconfServerId, "session-1")
 			ch2 <- respErr{r, e}
 		}()
 		// Ensure second request reaches SessionRouter before opening gate.
@@ -878,7 +878,7 @@ func TestRoutedSessionAcquisitionFailures(t *testing.T) {
 			t.Fatalf("expected openSessionCount 1, got %d", host.OpenSessionCount())
 		}
 
-		if r3, err := first.Attach(ctx, ctServerId, "session-1"); err != nil {
+		if r3, err := first.Attach(ctx, tconfServerId, "session-1"); err != nil {
 			t.Fatalf("retry attach failed: %v", err)
 		} else if _, ok := r3.(*protocol.ResponseSuccess); !ok {
 			t.Fatalf("expected ResponseSuccess on retry, got %#v", r3)
@@ -891,17 +891,17 @@ func TestRoutedSessionAcquisitionFailures(t *testing.T) {
 	t.Run("closes a Harness acquired while server shutdown is in progress", func(t *testing.T) {
 		host := servertest.NewTestServerHost()
 		host.Seed("session-1")
-		srv := ctNewServer(t, host)
-		c := ctConnect(srv)
+		srv := tconfNewServer(t, host)
+		c := tconfConnect(srv)
 
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		_, _ = c.Hello(ctx)
 
 		gate := host.GateNextOpenSession()
 		attErr := make(chan error, 1)
 		go func() {
-			_, e := c.Attach(ctx, ctServerId, "session-1")
+			_, e := c.Attach(ctx, tconfServerId, "session-1")
 			attErr <- e
 		}()
 		<-gate.Entered.Done()
@@ -929,17 +929,17 @@ func TestRoutedSessionAcquisitionFailures(t *testing.T) {
 		host := servertest.NewTestServerHost()
 		host.Seed("session-1")
 		host.SetNextHarnessCloseError(errors.New("close failed"))
-		srv := ctNewServer(t, host)
-		c := ctConnect(srv)
+		srv := tconfNewServer(t, host)
+		c := tconfConnect(srv)
 
-		ctx, cancel := context.WithTimeout(context.Background(), ctTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), tconfTimeout)
 		defer cancel()
 		_, _ = c.Hello(ctx)
 
 		gate := host.GateNextOpenSession()
 		attErr := make(chan error, 1)
 		go func() {
-			_, e := c.Attach(ctx, ctServerId, "session-1")
+			_, e := c.Attach(ctx, tconfServerId, "session-1")
 			attErr <- e
 		}()
 		<-gate.Entered.Done()
@@ -970,20 +970,20 @@ func TestRoutedSessionAcquisitionFailures(t *testing.T) {
 	})
 }
 
-type ctCustomServerServices struct {
+type tconfCustomServerServices struct {
 	onAttach func(server.RoutedServerPresentation) server.RoutedServerServiceAttachment
 }
 
-func (s *ctCustomServerServices) AttachClient(presentation server.RoutedServerPresentation, _ chord.Context) (server.RoutedServerServiceAttachment, error) {
+func (s *tconfCustomServerServices) AttachClient(presentation server.RoutedServerPresentation, _ chord.Context) (server.RoutedServerServiceAttachment, error) {
 	return s.onAttach(presentation), nil
 }
 
-type ctCustomServerServiceAttachment struct {
+type tconfCustomServerServiceAttachment struct {
 	presentation server.RoutedServerPresentation
 	onRelease    func()
 }
 
-func (a *ctCustomServerServiceAttachment) InvokeService(call chord.ServiceCall, _ chord.ServiceUpdatePublisher, callContext chord.Context) (chord.JsonValue, bool, error) {
+func (a *tconfCustomServerServiceAttachment) InvokeService(call chord.ServiceCall, _ chord.ServiceUpdatePublisher, callContext chord.Context) (chord.JsonValue, bool, error) {
 	if call.ServiceId != "pi.session-management" {
 		return nil, false, errors.New("Unexpected service")
 	}
@@ -1004,71 +1004,71 @@ func (a *ctCustomServerServiceAttachment) InvokeService(call chord.ServiceCall, 
 	return nil, false, errors.New("Unexpected service member")
 }
 
-func (a *ctCustomServerServiceAttachment) Release(chord.Context) error {
+func (a *tconfCustomServerServiceAttachment) Release(chord.Context) error {
 	a.onRelease()
 	return nil
 }
 
-type ctDelegateHost struct {
+type tconfDelegateHost struct {
 	backing        *servertest.TestServerHost
 	serverServices server.RoutedServerServiceHost
 }
 
-func (h *ctDelegateHost) ServerServices() server.RoutedServerServiceHost { return h.serverServices }
-func (h *ctDelegateHost) ResolveSession(sessionId string, callContext chord.Context) (server.SessionMetadata, error) {
+func (h *tconfDelegateHost) ServerServices() server.RoutedServerServiceHost { return h.serverServices }
+func (h *tconfDelegateHost) ResolveSession(sessionId string, callContext chord.Context) (server.SessionMetadata, error) {
 	return h.backing.ResolveSession(sessionId, callContext)
 }
-func (h *ctDelegateHost) OpenSession(metadata server.SessionMetadata, callContext chord.Context) (server.RoutedSessionHandle, error) {
+func (h *tconfDelegateHost) OpenSession(metadata server.SessionMetadata, callContext chord.Context) (server.RoutedSessionHandle, error) {
 	return h.backing.OpenSession(metadata, callContext)
 }
 
-type ctAmbiguousHost struct {
+type tconfAmbiguousHost struct {
 	serverServices server.RoutedServerServiceHost
 }
 
-func (h *ctAmbiguousHost) ServerServices() server.RoutedServerServiceHost { return h.serverServices }
-func (h *ctAmbiguousHost) ResolveSession(string, chord.Context) (ctBackendMetadata, error) {
-	return ctBackendMetadata{}, server.NewSessionAmbiguousError()
+func (h *tconfAmbiguousHost) ServerServices() server.RoutedServerServiceHost { return h.serverServices }
+func (h *tconfAmbiguousHost) ResolveSession(string, chord.Context) (tconfBackendMetadata, error) {
+	return tconfBackendMetadata{}, server.NewSessionAmbiguousError()
 }
-func (h *ctAmbiguousHost) OpenSession(ctBackendMetadata, chord.Context) (server.RoutedSessionHandle, error) {
+func (h *tconfAmbiguousHost) OpenSession(tconfBackendMetadata, chord.Context) (server.RoutedSessionHandle, error) {
 	return nil, errors.New("must not create a Harness for an ambiguous session")
 }
 
-type ctConcurrentTerminateHost struct {
+type tconfConcurrentTerminateHost struct {
 	serverServices server.RoutedServerServiceHost
 	terminated     <-chan error
 	onAttach       func() (server.RoutedSessionAttachment, error)
 }
 
-func (h *ctConcurrentTerminateHost) ServerServices() server.RoutedServerServiceHost {
+func (h *tconfConcurrentTerminateHost) ServerServices() server.RoutedServerServiceHost {
 	return h.serverServices
 }
-func (h *ctConcurrentTerminateHost) ResolveSession(string, chord.Context) (server.SessionMetadata, error) {
+func (h *tconfConcurrentTerminateHost) ResolveSession(string, chord.Context) (server.SessionMetadata, error) {
 	return server.BasicSessionMetadata{Id: "session-1"}, nil
 }
-func (h *ctConcurrentTerminateHost) OpenSession(server.SessionMetadata, chord.Context) (server.RoutedSessionHandle, error) {
-	return &ctConcurrentTerminateHandle{terminated: h.terminated, onAttach: h.onAttach}, nil
+func (h *tconfConcurrentTerminateHost) OpenSession(server.SessionMetadata, chord.Context) (server.RoutedSessionHandle, error) {
+	return &tconfConcurrentTerminateHandle{terminated: h.terminated, onAttach: h.onAttach}, nil
 }
 
-type ctConcurrentTerminateHandle struct {
+type tconfConcurrentTerminateHandle struct {
 	terminated <-chan error
 	onAttach   func() (server.RoutedSessionAttachment, error)
 }
 
-func (h *ctConcurrentTerminateHandle) AttachClient(chord.Context) (server.RoutedSessionAttachment, error) {
+func (h *tconfConcurrentTerminateHandle) AttachClient(chord.Context) (server.RoutedSessionAttachment, error) {
 	return h.onAttach()
 }
-func (h *ctConcurrentTerminateHandle) Terminated() <-chan error  { return h.terminated }
-func (h *ctConcurrentTerminateHandle) Close(chord.Context) error { return nil }
+func (h *tconfConcurrentTerminateHandle) Terminated() <-chan error  { return h.terminated }
+func (h *tconfConcurrentTerminateHandle) Close(chord.Context) error { return nil }
 
-type ctCountingAttachment struct {
+type tconfCountingAttachment struct {
 	onRelease func()
 }
 
-func (a *ctCountingAttachment) InvokeService(chord.ServiceCall, chord.ServiceUpdatePublisher, chord.Context) (chord.JsonValue, bool, error) {
+func (a *tconfCountingAttachment) InvokeService(chord.ServiceCall, chord.ServiceUpdatePublisher, chord.Context) (chord.JsonValue, bool, error) {
 	return nil, false, nil
 }
-func (a *ctCountingAttachment) Release(chord.Context) error {
+func (a *tconfCountingAttachment) Release(chord.Context) error {
 	a.onRelease()
 	return nil
 }

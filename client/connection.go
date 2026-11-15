@@ -60,25 +60,28 @@ func (q *connSendQueue) enqueue(frame []byte) bool {
 		return false
 	}
 	q.items = append(q.items, frame)
+	q.mu.Unlock()
 	select {
 	case q.notify <- struct{}{}:
 	default:
 	}
-	q.mu.Unlock()
 	return true
 }
 
 func (q *connSendQueue) stop() {
 	q.mu.Lock()
-	if !q.closed {
+	changed := !q.closed
+	if changed {
 		q.closed = true
 		q.items = nil
+	}
+	q.mu.Unlock()
+	if changed {
 		select {
 		case q.notify <- struct{}{}:
 		default:
 		}
 	}
-	q.mu.Unlock()
 }
 
 func (q *connSendQueue) run() {
@@ -114,7 +117,7 @@ func (q *connSendQueue) run() {
 
 type connConnection struct {
 	mu             sync.Mutex
-	inMu           sync.Mutex
+	decodeMu       sync.Mutex
 	options        connOptions
 	maxFrameLength int
 	lifecycle      connLifecycle
@@ -181,8 +184,6 @@ func (c *connConnection) Connect() (*protocol.ServerHello, error) {
 			c.handleData(id, chunk)
 		},
 		OnClose: func() {
-			c.inMu.Lock()
-			defer c.inMu.Unlock()
 			c.mu.Lock()
 			cur := c.isCurrentLocked(id)
 			c.mu.Unlock()
@@ -291,9 +292,6 @@ func (c *connConnection) openTransport(id int64, handlers ByteTransportHandlers,
 }
 
 func (c *connConnection) handleData(id int64, chunk []byte) {
-	c.inMu.Lock()
-	defer c.inMu.Unlock()
-
 	c.mu.Lock()
 	if c.lifecycle.state == ConnectionStateDisconnected || c.lifecycle.id != id {
 		c.mu.Unlock()
@@ -307,7 +305,16 @@ func (c *connConnection) handleData(id int64, chunk []byte) {
 	decoder := c.lifecycle.decoder
 	c.mu.Unlock()
 
+	c.decodeMu.Lock()
+	c.mu.Lock()
+	if c.lifecycle.state == ConnectionStateDisconnected || c.lifecycle.id != id {
+		c.mu.Unlock()
+		c.decodeMu.Unlock()
+		return
+	}
+	c.mu.Unlock()
 	messages, err := decoder.Push(chunk)
+	c.decodeMu.Unlock()
 	if err != nil {
 		c.failAndClose(ToError(err))
 		return
@@ -421,8 +428,12 @@ func (c *connConnection) handleClose(id int64) {
 	decoder := c.lifecycle.decoder
 	c.mu.Unlock()
 
+	c.decodeMu.Lock()
+	endErr := decoder.End()
+	c.decodeMu.Unlock()
+
 	var err error = NewDisconnectedError("Byte transport closed", nil)
-	if endErr := decoder.End(); endErr != nil {
+	if endErr != nil {
 		err = ToError(endErr)
 	}
 	c.fail(err)

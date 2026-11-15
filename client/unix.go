@@ -31,6 +31,8 @@ const (
 	unixReadBufferSize               = 32 * 1024
 )
 
+var unixErrTransportClosed = errors.New("Unix transport is closed")
+
 // UnixTransportOptions configures client connections to a local Unix socket server.
 type UnixTransportOptions struct {
 	Path            string `json:"path"`
@@ -255,7 +257,7 @@ func (t *unixByteTransport) Send(chunk []byte) error {
 	t.mu.Lock()
 	if t.closed {
 		t.mu.Unlock()
-		return errors.New("Unix transport is closed")
+		return unixErrTransportClosed
 	}
 	if t.pendingBytes+len(chunk) > t.maxPendingBytes {
 		t.mu.Unlock()
@@ -268,11 +270,11 @@ func (t *unixByteTransport) Send(chunk []byte) error {
 		done: make(chan error, 1),
 	}
 	t.queue = append(t.queue, req)
+	t.mu.Unlock()
 	select {
 	case t.notify <- struct{}{}:
 	default:
 	}
-	t.mu.Unlock()
 
 	return <-req.done
 }
@@ -285,11 +287,11 @@ func (t *unixByteTransport) Close() {
 	}
 	t.closed = true
 	t.terminal = true
+	t.mu.Unlock()
 	select {
 	case t.notify <- struct{}{}:
 	default:
 	}
-	t.mu.Unlock()
 	_ = t.conn.Close()
 }
 
@@ -319,11 +321,11 @@ func (t *unixByteTransport) readLoop() {
 			}
 			t.terminal = true
 			t.closed = true
+			t.mu.Unlock()
 			select {
 			case t.notify <- struct{}{}:
 			default:
 			}
-			t.mu.Unlock()
 			_ = t.conn.Close()
 
 			if errors.Is(err, io.EOF) {
@@ -354,9 +356,8 @@ func (t *unixByteTransport) writeLoop() {
 			t.queue = nil
 			t.pendingBytes = 0
 			t.mu.Unlock()
-			closeErr := errors.New("Unix transport is closed")
 			for _, req := range remaining {
-				req.done <- closeErr
+				req.done <- unixErrTransportClosed
 			}
 			return
 		}
@@ -496,6 +497,9 @@ func unixProbeServer(route UnixServerRoute, timeoutMs int) (UnixServerRoute, boo
 		errors.As(connectErr, &validationErr) ||
 		(errors.As(connectErr, &disconnected) && disconnected.Cause == nil) ||
 		(errors.As(connectErr, &serverErr) && serverErr.Code == "version") ||
+		errors.Is(connectErr, unixErrTransportClosed) ||
+		errors.Is(connectErr, io.EOF) ||
+		errors.Is(connectErr, net.ErrClosed) ||
 		errors.Is(connectErr, sysunix.ENOENT) ||
 		errors.Is(connectErr, sysunix.ECONNREFUSED) ||
 		errors.Is(connectErr, sysunix.ECONNRESET) ||

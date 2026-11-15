@@ -121,9 +121,12 @@ func (l *listUnixListener) Start(accept server.ByteConnectionAcceptor) error {
 	netListener, err := net.Listen("unix", ownedBindPath)
 	if err != nil {
 		l.mu.Lock()
-		_ = listRemovePath(l.ownedBindPath)
+		ownedBind := l.ownedBindPath
 		l.ownedBindPath = ""
 		l.mu.Unlock()
+		if ownedBind != "" {
+			_ = listRemovePath(ownedBind)
+		}
 		return err
 	}
 	if ul, ok := netListener.(*net.UnixListener); ok {
@@ -223,14 +226,19 @@ func (l *listUnixListener) Close() error {
 	}
 
 	l.mu.Lock()
-	if l.ownedBindPath != "" {
-		if err := listRemovePath(l.ownedBindPath); err != nil && cleanupErr == nil {
-			cleanupErr = err
-		}
-		l.ownedBindPath = ""
-	}
+	ownedBind := l.ownedBindPath
+	l.ownedBindPath = ""
 	clear(l.connections)
 	l.listener = nil
+	l.mu.Unlock()
+
+	if ownedBind != "" {
+		if err := listRemovePath(ownedBind); err != nil && cleanupErr == nil {
+			cleanupErr = err
+		}
+	}
+
+	l.mu.Lock()
 	l.closeErr = cleanupErr
 	l.mu.Unlock()
 

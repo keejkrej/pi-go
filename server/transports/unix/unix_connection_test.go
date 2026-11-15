@@ -14,7 +14,7 @@ import (
 	"github.com/keejkrej/pi-go/server/transports/unix"
 )
 
-type controlledSocket struct {
+type tucControlledSocket struct {
 	mu                sync.Mutex
 	firstWriteStarted chan struct{}
 	firstWriteRelease chan struct{}
@@ -27,19 +27,19 @@ type controlledSocket struct {
 	finalChunk        []byte
 }
 
-func newControlledSocket() *controlledSocket {
-	return &controlledSocket{
+func tucNewControlledSocket() *tucControlledSocket {
+	return &tucControlledSocket{
 		firstWriteStarted: make(chan struct{}),
 		firstWriteRelease: make(chan struct{}),
 		endedCh:           make(chan struct{}),
 	}
 }
 
-func (s *controlledSocket) Read([]byte) (int, error) {
+func (s *tucControlledSocket) Read([]byte) (int, error) {
 	return 0, io.EOF
 }
 
-func (s *controlledSocket) Write(p []byte) (int, error) {
+func (s *tucControlledSocket) Write(p []byte) (int, error) {
 	isFirst := false
 	s.firstWriteOnce.Do(func() {
 		isFirst = true
@@ -58,7 +58,7 @@ func (s *controlledSocket) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (s *controlledSocket) CloseWrite() error {
+func (s *tucControlledSocket) CloseWrite() error {
 	s.mu.Lock()
 	s.ended = true
 	s.mu.Unlock()
@@ -68,21 +68,21 @@ func (s *controlledSocket) CloseWrite() error {
 	return nil
 }
 
-func (s *controlledSocket) Close() error {
+func (s *tucControlledSocket) Close() error {
 	s.mu.Lock()
 	s.destroyed = true
 	s.mu.Unlock()
 	return nil
 }
 
-func (s *controlledSocket) snapshot() (ended, destroyed bool, finalChunk []byte) {
+func (s *tucControlledSocket) snapshot() (ended, destroyed bool, finalChunk []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.ended, s.destroyed, append([]byte(nil), s.finalChunk...)
 }
 
 func TestQueuesFinalProtocolErrorBehindPendingOutputBeforeClosing(t *testing.T) {
-	sock := newControlledSocket()
+	sock := tucNewControlledSocket()
 	conn := unix.NewUnixByteConnection(sock, 1_000, 64*1024)
 
 	pendingErrCh := make(chan error, 1)
