@@ -11,6 +11,7 @@ import (
 
 	"github.com/keejkrej/pi-go/ai"
 	"github.com/keejkrej/pi-go/codingagent/core"
+	_ "github.com/keejkrej/pi-go/codingagent/extensions"
 	"github.com/keejkrej/pi-go/codingagent/extensions/codemodeext"
 	"github.com/keejkrej/pi-go/codingagent/extensions/toolsearchext"
 	"github.com/keejkrej/pi-go/codingagent/utils"
@@ -65,8 +66,8 @@ func mainRun(ctx context.Context, opts mainOptions, out io.Writer) error {
 		},
 	}
 	// Built-in MCP extension (mcpext) is discovered automatically via
-	// codingagent/extensions.BuiltInExtensions once integrated, or callers may
-	// inject custom/MCP inline extensions through opts.ExtraExtensions.
+	// codingagent/extensions; callers may also inject custom/MCP inline
+	// extensions through opts.ExtraExtensions.
 	extensionFactories = append(extensionFactories, opts.ExtraExtensions...)
 
 	settingsManager := opts.SettingsManager

@@ -321,10 +321,7 @@ func gevHandleMessageStart(m *GuiMode, sess *core.AgentSession, th *gui.GuiTheme
 		if !msg.Display {
 			return
 		}
-		var customFn CustomMessageRenderer
-		if customRenderers != nil {
-			customFn = customRenderers[msg.CustomType]
-		}
+		customFn := gmResolveCustomMessageRenderer(m, sess, msg.CustomType, customRenderers)
 		cmc := NewCustomMessageCard(msg,
 			WithCustomRenderer(customFn),
 			WithCustomExpanded(expanded),

@@ -35,16 +35,17 @@ const (
 
 // PackageCommandOptions configures HandleConfigCommand and HandlePackageCommand for testing or embedding.
 type PackageCommandOptions struct {
-	Cwd              string
-	AgentDir         string
-	Stdout           io.Writer
-	Stderr           io.Writer
-	ConfigUiOptions  *cli.ConfigSelectorOptions
-	StartupUiOptions *cli.StartupUiOptions
-	ModelRuntime     *core.ModelRuntime
-	AllowUi          *bool
-	RefreshTimeout   time.Duration
-	HTTPClient       *http.Client
+	Cwd                string
+	AgentDir           string
+	Stdout             io.Writer
+	Stderr             io.Writer
+	ConfigUiOptions    *cli.ConfigSelectorOptions
+	StartupUiOptions   *cli.StartupUiOptions
+	ModelRuntime       *core.ModelRuntime
+	ExtensionFactories []core.InlineExtension
+	AllowUi            *bool
+	RefreshTimeout     time.Duration
+	HTTPClient         *http.Client
 }
 
 type pmcUpdateTargetType string
@@ -302,23 +303,26 @@ func HandleConfigCommand(ctx context.Context, args []string, opts ...*PackageCom
 
 	pmcReportSettingsErrors(sm, "config command", stderr)
 
+	builtinExts := core.CollectBuiltinExtensionNames(cfg.ExtensionFactories)
 	globalSm := core.SettingsManagerCreateWithOptions(cwd, agentDir, &core.SettingsManagerCreateOptions{
 		ProjectTrusted: &falseVal,
 	})
 	globalPaths, _ := core.NewDefaultPackageManager(core.DefaultPackageManagerOptions{
-		Cwd:             cwd,
-		AgentDir:        agentDir,
-		SettingsManager: globalSm,
-		HTTPClient:      cfg.HTTPClient,
+		Cwd:               cwd,
+		AgentDir:          agentDir,
+		SettingsManager:   globalSm,
+		BuiltinExtensions: builtinExts,
+		HTTPClient:        cfg.HTTPClient,
 	}).Resolve(ctx)
 
 	projectPaths := globalPaths
 	if sm.IsProjectTrusted() {
 		if resolved, err := core.NewDefaultPackageManager(core.DefaultPackageManagerOptions{
-			Cwd:             cwd,
-			AgentDir:        agentDir,
-			SettingsManager: sm,
-			HTTPClient:      cfg.HTTPClient,
+			Cwd:               cwd,
+			AgentDir:          agentDir,
+			SettingsManager:   sm,
+			BuiltinExtensions: builtinExts,
+			HTTPClient:        cfg.HTTPClient,
 		}).Resolve(ctx); err == nil {
 			projectPaths = resolved
 		}

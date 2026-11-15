@@ -240,16 +240,46 @@ func (m *GuiMode) buildSlashCommandList() []gui.SlashCommand {
 
 	if runner := sess.ExtensionRunner(); runner != nil {
 		for _, rc := range runner.GetRegisteredCommands() {
-			if _, dup := seen[rc.InvocationName]; !dup {
-				seen[rc.InvocationName] = struct{}{}
+			rcCopy := rc
+			cmdName := rcCopy.InvocationName
+			if cmdName == "" {
+				cmdName = rcCopy.Name
+			}
+			if cmdName == "" {
+				continue
+			}
+			if _, dup := seen[cmdName]; !dup {
+				seen[cmdName] = struct{}{}
 				desc := ""
-				if rc.Description != nil {
-					desc = *rc.Description
+				if rcCopy.Description != nil {
+					desc = *rcCopy.Description
 				}
-				cmds = append(cmds, gui.SlashCommand{
-					Name:        rc.InvocationName,
+				sc := gui.SlashCommand{
+					Name:        cmdName,
 					Description: desc,
-				})
+				}
+				if rcCopy.GetArgumentCompletions != nil {
+					sc.GetArgumentCompletions = func(prefix string) []gui.AutocompleteItem {
+						items, err := rcCopy.GetArgumentCompletions(m.currentCtx(), prefix)
+						if err != nil || len(items) == 0 {
+							return nil
+						}
+						out := make([]gui.AutocompleteItem, 0, len(items))
+						for _, it := range items {
+							itemDesc := ""
+							if it.Description != nil {
+								itemDesc = *it.Description
+							}
+							out = append(out, gui.AutocompleteItem{
+								Value:       it.Value,
+								Label:       it.Label,
+								Description: itemDesc,
+							})
+						}
+						return out
+					}
+				}
+				cmds = append(cmds, sc)
 			}
 		}
 	}

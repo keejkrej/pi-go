@@ -1217,7 +1217,7 @@ func (m *GuiMode) rebuildTranscript() {
 					if msg.Display {
 						cmid := fmt.Sprintf("custom:%s:%d", e.Id, i)
 						cmc := NewCustomMessageCard(msg,
-							WithCustomRenderer(customMsgRenderers[msg.CustomType]),
+							WithCustomRenderer(gmResolveCustomMessageRenderer(m, sess, msg.CustomType, customMsgRenderers)),
 							WithCustomExpanded(toolsExpanded),
 							WithCustomTheme(th),
 							WithCustomOnLink(gmOpenLink),
@@ -1275,7 +1275,7 @@ func (m *GuiMode) rebuildTranscript() {
 						cmsg.Details = jsonx.Some(e.Details)
 					}
 					cmc := NewCustomMessageCard(cmsg,
-						WithCustomRenderer(customMsgRenderers[e.CustomType]),
+						WithCustomRenderer(gmResolveCustomMessageRenderer(m, sess, e.CustomType, customMsgRenderers)),
 						WithCustomExpanded(toolsExpanded),
 						WithCustomTheme(th),
 						WithCustomOnLink(gmOpenLink),
@@ -1494,6 +1494,69 @@ func (m *GuiMode) updateProgramStatus(state gui.ProgramStatusState, msg string, 
 		Kind:    att,
 		Message: msg,
 	})
+}
+
+func gmResolveCustomMessageRenderer(
+	m *GuiMode,
+	sess *core.AgentSession,
+	customType string,
+	customRenderers map[string]CustomMessageRenderer,
+) CustomMessageRenderer {
+	if customRenderers != nil {
+		if fn := customRenderers[customType]; fn != nil {
+			return fn
+		}
+	}
+	if sess == nil || customType == "" {
+		return nil
+	}
+	runner := sess.ExtensionRunner()
+	if runner == nil {
+		return nil
+	}
+	extRenderer := runner.GetMessageRenderer(customType)
+	if extRenderer == nil {
+		return nil
+	}
+	return func(c *ui.Context, msg *core.CustomMessage, expanded bool, th *gui.GuiTheme) ui.Element {
+		var tuiTheme *theme.Theme
+		if m != nil && m.uiCtx != nil {
+			tuiTheme = m.uiCtx.Theme()
+		}
+		if tuiTheme == nil {
+			tuiTheme = theme.CurrentTheme()
+		}
+		comp := extRenderer(msg, core.MessageRenderOptions{Expanded: expanded}, tuiTheme)
+		if comp == nil {
+			return ui.Element{}
+		}
+		rawLines := comp.Render(92)
+		cleanLines := make([]string, 0, len(rawLines))
+		for _, line := range rawLines {
+			clean := strings.TrimRight(utils.StripAnsi(line), " \t\r")
+			cleanLines = append(cleanLines, clean)
+		}
+		for len(cleanLines) > 0 && cleanLines[len(cleanLines)-1] == "" {
+			cleanLines = cleanLines[:len(cleanLines)-1]
+		}
+		body := strings.TrimSpace(strings.Join(cleanLines, "\n"))
+		if body == "" {
+			return ui.Element{}
+		}
+		th = gui.ResolveGuiTheme(c, th)
+		card := ui.Column(c).
+			FillWidth().
+			Background(th.CustomMessageBg).
+			Border(1, th.BorderMuted).
+			Radius(th.Radius).
+			Padding(10, 14).
+			Gap(6)
+		card.Children(func() {
+			ui.Text(c, "["+customType+"]").TextColor(th.CustomMessageLabel).FontWeight(700)
+			ui.Text(c, body).TextColor(th.Text).Font("monospace").FontSize(12).Selectable().Wrap()
+		})
+		return card
+	}
 }
 
 // RefreshAutocomplete rebuilds the slash command + @file autocomplete provider on Editor.

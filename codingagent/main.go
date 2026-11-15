@@ -19,6 +19,8 @@ import (
 	"github.com/keejkrej/pi-go/ai"
 	"github.com/keejkrej/pi-go/codingagent/cli"
 	"github.com/keejkrej/pi-go/codingagent/core"
+	_ "github.com/keejkrej/pi-go/codingagent/extensions"
+	"github.com/keejkrej/pi-go/codingagent/extensions/mcpext"
 	"github.com/keejkrej/pi-go/codingagent/modes"
 	"github.com/keejkrej/pi-go/codingagent/modes/gui"
 	"github.com/keejkrej/pi-go/codingagent/modes/interactive"
@@ -48,6 +50,7 @@ type MainOptions struct {
 	AuthPath                *string
 	ModelsPath              *string
 	SessionDir              *string
+	ExtensionFactories      []core.InlineExtension
 	StartupUiOptions        *cli.StartupUiOptions
 	SessionPickerOptions    *cli.SessionPickerOptions
 	LoginTerminal           cli.LoginTerminal
@@ -1116,11 +1119,17 @@ func Main(ctx context.Context, args []string, opts ...*MainOptions) int {
 		_ = core.ConfigureHttpDispatcher()
 	}
 
+	var extFactories []core.InlineExtension
+	if opt != nil && len(opt.ExtensionFactories) > 0 {
+		extFactories = slices.Clone(opt.ExtensionFactories)
+	}
+
 	pkgOpts := &PackageCommandOptions{
-		Cwd:      cwd,
-		AgentDir: agentDir,
-		Stdout:   sio.stdout,
-		Stderr:   sio.stderr,
+		Cwd:                cwd,
+		AgentDir:           agentDir,
+		Stdout:             sio.stdout,
+		Stderr:             sio.stderr,
+		ExtensionFactories: extFactories,
 	}
 	if opt != nil && opt.StartupUiOptions != nil {
 		pkgOpts.StartupUiOptions = opt.StartupUiOptions
@@ -1131,8 +1140,23 @@ func Main(ctx context.Context, args []string, opts ...*MainOptions) int {
 	if handled, code := HandleConfigCommand(ctx, args, pkgOpts); handled {
 		return code
 	}
+	if len(args) > 0 && args[0] == "mcp" {
+		interactive := sio.stdinIsTTY
+		return mcpext.RunMcpCli(args[1:], mcpext.McpCommandOptions{
+			Cwd:         cwd,
+			AgentDir:    agentDir,
+			Interactive: &interactive,
+			Input:       sio.stdin,
+			Context:     ctx,
+			Log: func(line string) {
+				_, _ = fmt.Fprintln(sio.stdout, line)
+			},
+			Error: func(line string) {
+				_, _ = fmt.Fprintln(sio.stderr, line)
+			},
+		})
+	}
 
-	// Barebone build intentionally does not wire experimental/mcp commands.
 	parsed := core.ParseArgs(args)
 	if len(parsed.Diagnostics) > 0 {
 		hasArgError := false
@@ -1419,6 +1443,11 @@ func Main(ctx context.Context, args []string, opts ...*MainOptions) int {
 			NoContextFiles:                parsed.NoContextFiles,
 			SystemPrompt:                  parsed.SystemPrompt,
 			AppendSystemPrompt:            parsed.AppendSystemPrompt,
+		}
+		if len(extFactories) > 0 {
+			svcOpts.ResourceLoaderOptions = &core.DefaultResourceLoaderOptions{
+				ExtensionFactories: slices.Clone(extFactories),
+			}
 		}
 		if opt != nil && (opt.AuthPath != nil || opt.ModelsPath != nil) {
 			mrCtx, mrCancel := context.WithTimeout(rtCtx, 15*time.Second)

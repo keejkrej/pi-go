@@ -979,8 +979,8 @@ func (tc *ToolExecutionCard) renderGenericBody(
 		}
 	}
 	if snap.HasResult {
-		if textOut != "" {
-			tvRenderLinesBody(c, textOut, 15, false, snap.Expanded, "(no output)", th)
+		if cleanOut := utils.StripAnsi(textOut); cleanOut != "" {
+			tvRenderLinesBody(c, cleanOut, 15, false, snap.Expanded, "(no output)", th)
 		}
 		if snap.Expanded && snap.Result.Details != nil {
 			if pretty, err := jsonx.MarshalIndent(snap.Result.Details, "  "); err == nil && len(pretty) > 2 {

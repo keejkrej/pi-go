@@ -742,6 +742,12 @@ func (d *DefaultResourceLoader) rlLoadThemes(
 	}
 }
 
+// CollectBuiltinExtensionNames returns unique built-in extension names registered
+// globally or passed as built-in inline factories, preserving discovery order.
+func CollectBuiltinExtensionNames(extraFactories []InlineExtension) []string {
+	return rlCollectBuiltinExtensionNames(extraFactories)
+}
+
 func rlCollectBuiltinExtensionNames(extraFactories []InlineExtension) []string {
 	seen := make(map[string]struct{})
 	var names []string
