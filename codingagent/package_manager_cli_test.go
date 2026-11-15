@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,6 +20,7 @@ import (
 	"github.com/keejkrej/pi-go/codingagent/cli"
 	"github.com/keejkrej/pi-go/codingagent/core"
 	"github.com/keejkrej/pi-go/codingagent/modes/interactive/theme"
+	"github.com/keejkrej/pi-go/internal/jsonx"
 	"github.com/keejkrej/pi-go/tui"
 )
 
@@ -264,13 +264,15 @@ func TestHandlePackageCommandLifecycleAndUpdateModels(t *testing.T) {
 					"dist":    map[string]any{"tarball": srv.URL + "/tgz/cli-demo-1.2.0.tgz"},
 				}
 			}
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			if payload, err := jsonx.Marshal(map[string]any{
 				"name":      "cli-demo",
 				"dist-tags": map[string]any{"latest": v},
 				"versions":  versions,
-			})
+			}); err == nil {
+				_, _ = w.Write(payload)
+			}
 		case "/@cli/local-pkg":
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			if payload, err := jsonx.Marshal(map[string]any{
 				"name":      "@cli/local-pkg",
 				"dist-tags": map[string]any{"latest": "1.0.0"},
 				"versions": map[string]any{
@@ -280,7 +282,9 @@ func TestHandlePackageCommandLifecycleAndUpdateModels(t *testing.T) {
 						"dist":    map[string]any{"tarball": srv.URL + "/tgz/scoped-1.0.0.tgz"},
 					},
 				},
-			})
+			}); err == nil {
+				_, _ = w.Write(payload)
+			}
 		case "/tgz/cli-demo-1.0.0.tgz":
 			_, _ = w.Write(tarV1)
 		case "/tgz/cli-demo-1.2.0.tgz":

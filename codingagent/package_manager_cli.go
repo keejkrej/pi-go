@@ -827,23 +827,45 @@ func HandlePackageCommand(ctx context.Context, args []string, opts ...*PackageCo
 	var progressMu sync.Mutex
 	var updatedPackages []string
 	var warningCount int
+	lineCh := make(chan string)
+	writerDone := make(chan struct{})
+	go func() {
+		defer close(writerDone)
+		for msg := range lineCh {
+			_, _ = fmt.Fprintln(stdout, msg)
+		}
+	}()
+	var closeWriterOnce sync.Once
+	closeProgressWriter := func() {
+		closeWriterOnce.Do(func() {
+			pm.SetProgressCallback(nil)
+			close(lineCh)
+			<-writerDone
+		})
+	}
+	defer closeProgressWriter()
+
 	pm.SetProgressCallback(func(ev core.ProgressEvent) {
-		progressMu.Lock()
-		defer progressMu.Unlock()
 		switch {
 		case ev.Type == "result" && ev.Action == "update" && ev.Message != "":
+			progressMu.Lock()
 			updatedPackages = append(updatedPackages, ev.Message)
-		case ev.Type == "start" && ev.Message != "":
-			_, _ = fmt.Fprintln(stdout, ev.Message)
-		case ev.Type == "progress" && ev.Message != "":
-			warningCount++
-			_, _ = fmt.Fprintln(stdout, ev.Message)
+			progressMu.Unlock()
+		case (ev.Type == "start" || ev.Type == "progress") && ev.Message != "":
+			if ev.Type == "progress" {
+				progressMu.Lock()
+				warningCount++
+				progressMu.Unlock()
+			}
+			lineCh <- ev.Message
 		}
 	})
 
 	switch parsed.command {
 	case PackageCommandInstall:
-		if err := pm.InstallAndPersist(ctx, parsed.source, &core.PackageInstallOptions{Local: parsed.local}); err != nil {
+		err := pm.InstallAndPersist(ctx, parsed.source, &core.PackageInstallOptions{Local: parsed.local})
+		closeProgressWriter()
+		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 			return true, 1
 		}
@@ -852,6 +874,7 @@ func HandlePackageCommand(ctx context.Context, args []string, opts ...*PackageCo
 
 	case PackageCommandRemove:
 		removed, err := pm.RemoveAndPersist(ctx, parsed.source, &core.PackageRemoveOptions{Local: parsed.local})
+		closeProgressWriter()
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 			return true, 1
@@ -864,6 +887,7 @@ func HandlePackageCommand(ctx context.Context, args []string, opts ...*PackageCo
 		return true, 0
 
 	case PackageCommandList:
+		closeProgressWriter()
 		configured := pm.ListConfiguredPackages()
 		if len(configured) == 0 {
 			_, _ = fmt.Fprintln(stdout, "No packages installed.")
@@ -909,6 +933,9 @@ func HandlePackageCommand(ctx context.Context, args []string, opts ...*PackageCo
 		if target == nil {
 			target = &pmcUpdateTarget{kind: pmcUpdateSelf}
 		}
+		if target.kind != pmcUpdateAll && target.kind != pmcUpdateExtensions {
+			closeProgressWriter()
+		}
 		if parsed.showExtensionsSkippedNote {
 			_, _ = fmt.Fprintf(stdout, "Extensions are skipped. Run %s update --extensions to update extensions.\n", utils.AppName)
 		}
@@ -919,6 +946,7 @@ func HandlePackageCommand(ctx context.Context, args []string, opts ...*PackageCo
 			} else {
 				err = pm.Update(ctx)
 			}
+			closeProgressWriter()
 			if err != nil {
 				_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 				return true, 1

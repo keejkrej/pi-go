@@ -10,7 +10,6 @@ import (
 	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +21,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/keejkrej/pi-go/internal/jsonx"
 )
 
 type tpmTarEntry struct {
@@ -181,7 +182,11 @@ func tpmNewMockNpmRegistry(t *testing.T) *tpmMockNpmRegistry {
 			"versions":  versionsObj,
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
+		if payload, err := jsonx.Marshal(resp); err == nil {
+			_, _ = w.Write(payload)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	}))
 	t.Cleanup(reg.server.Close)
 	return reg
