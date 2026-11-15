@@ -193,3 +193,79 @@ type ReadResourceResult struct {
 	Contents ResourceContentsList `json:"contents"`
 	Meta     *jsonx.Object        `json:"_meta,omitzero"`
 }
+
+// PromptArgument describes a template argument accepted by a prompt.
+type PromptArgument struct {
+	Name        string  `json:"name"`
+	Title       *string `json:"title,omitzero"`
+	Description *string `json:"description,omitzero"`
+	Required    *bool   `json:"required,omitzero"`
+}
+
+// Prompt is one entry of prompts/list.
+type Prompt struct {
+	Name        string           `json:"name"`
+	Title       *string          `json:"title,omitzero"`
+	Description *string          `json:"description,omitzero"`
+	Arguments   []PromptArgument `json:"arguments,omitzero"`
+	Meta        *jsonx.Object    `json:"_meta,omitzero"`
+}
+
+// ListPromptsResult is one page of prompts/list.
+type ListPromptsResult struct {
+	Prompts    []Prompt      `json:"prompts"`
+	NextCursor *string       `json:"nextCursor,omitzero"`
+	Meta       *jsonx.Object `json:"_meta,omitzero"`
+}
+
+// PromptMessageRole is PromptMessage.role.
+type PromptMessageRole string
+
+const (
+	PromptMessageRoleUser      PromptMessageRole = "user"
+	PromptMessageRoleAssistant PromptMessageRole = "assistant"
+)
+
+// PromptMessage is one message returned by prompts/get.
+type PromptMessage struct {
+	Role    PromptMessageRole `json:"role"`
+	Content ContentBlock      `json:"content"`
+}
+
+// UnmarshalJSON decodes a PromptMessage, resolving the polymorphic ContentBlock.
+func (m *PromptMessage) UnmarshalJSON(data []byte) error {
+	v, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	obj, err := jsonToObject(v)
+	if err != nil {
+		return err
+	}
+	if obj == nil {
+		return nil
+	}
+	var raw struct {
+		Role    PromptMessageRole `json:"role"`
+		Content any               `json:"content"`
+	}
+	if err := jsonx.Decode(obj, &raw); err != nil {
+		return err
+	}
+	block, err := DecodeContentBlock(raw.Content)
+	if err != nil {
+		return err
+	}
+	*m = PromptMessage{
+		Role:    raw.Role,
+		Content: block,
+	}
+	return nil
+}
+
+// GetPromptResult is the result of prompts/get.
+type GetPromptResult struct {
+	Description *string         `json:"description,omitzero"`
+	Messages    []PromptMessage `json:"messages"`
+	Meta        *jsonx.Object   `json:"_meta,omitzero"`
+}
