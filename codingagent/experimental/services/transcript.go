@@ -33,17 +33,17 @@ func AsTranscript(raw any) Transcript {
 		return impl
 	}
 	if view, ok := raw.(connServiceView); ok {
-		return &connTranscriptClient{
+		return &tranTranscriptClient{
 			state: connWrapServiceStateMember[durable.ConversationView](view, "state"),
 		}
 	}
 	panic(fmt.Sprintf("services: unsupported Transcript handle %T", raw))
 }
 
-type connTranscriptClient struct {
+type tranTranscriptClient struct {
 	state chord.ReplicatedState[durable.ConversationView]
 }
 
-func (c *connTranscriptClient) State() chord.ReplicatedState[durable.ConversationView] {
+func (c *tranTranscriptClient) State() chord.ReplicatedState[durable.ConversationView] {
 	return c.state
 }

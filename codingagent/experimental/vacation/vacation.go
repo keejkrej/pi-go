@@ -3,6 +3,7 @@
 package vacation
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -16,286 +17,316 @@ import (
 	"github.com/keejkrej/pi-go/internal/typebox"
 )
 
-// VacationExtensionName identifies the built-in durable vacation extension.
-const VacationExtensionName = "pi.vacation"
+type vacaSearchData struct {
+	seconds int
+	results []string
+}
 
-// VacationDoc tracks active/latest durable sleep/vacation window per conversation.
-var VacationDoc = vacaMustDefineDoc()
+// Canned results; each topic takes a different time, so a crash can land between them.
+var vacaSearches = map[string]vacaSearchData{
+	"weather": {
+		seconds: 6,
+		results: []string{
+			"Saturday: 24°C and sunny",
+			"Sunday: 21°C, a short shower around 3 pm",
+		},
+	},
+	"museums": {
+		seconds: 10,
+		results: []string{
+			"Kunsthistorisches Museum: open 10-18, book a time slot",
+			"Belvedere: Klimt's The Kiss, quietest before 11",
+			"Albertina: Monet to Picasso, open until 21 on Friday",
+		},
+	},
+	"trains": {
+		seconds: 30,
+		results: []string{
+			"Railjet from Salzburg: 2h 22m, every 30 min",
+			"Nightjet from Munich: arrives 06:20",
+		},
+	},
+}
 
-func vacaMustDefineDoc() *durable.DocToken {
-	tok, err := durable.DefineDoc(durable.DocDefinition{
-		Kind:    "pi.vacation",
-		Version: 1,
-		Scope:   durable.DocumentScopeConversation,
-		History: durable.DocumentHistoryLatest,
-		Fork:    durable.DocumentForkInitial,
-		Initial: func() durable.JsonObject {
-			return jsonx.NewObject()
+var vacaSearchStepDelay = 2 * time.Second
+
+type vacaSearchArgs struct {
+	Topic string `json:"topic"`
+	City  string `json:"city"`
+}
+
+func vacaCreateSearchExtension() *durable.Extension {
+	props := omap.NewMap[string, *typebox.Schema]()
+	props.Set("topic", typebox.Union([]*typebox.Schema{
+		typebox.Literal("weather"),
+		typebox.Literal("museums"),
+		typebox.Literal("trains"),
+	}))
+	props.Set("city", typebox.String())
+	schema := typebox.Object(props, jsonx.ObjectOf("required", []any{"topic", "city"}))
+
+	searchTool := durable.DefineTool(&durable.ToolRegistration{
+		Name:        "search",
+		Description: "Search travel information about a city. Topics: weather, museums, trains. Slow; call several in parallel.",
+		Parameters:  schema,
+		// Only reads, so a call cut off by a crash simply runs again.
+		Replay: durable.ToolReplaySafe,
+		Execute: func(args any, api durable.ToolExecutionApi, ctx chord.Context) (*durable.ToolExecutionResult, error) {
+			var input vacaSearchArgs
+			if err := jsonx.Decode(args, &input); err != nil {
+				return nil, err
+			}
+			found, ok := vacaSearches[input.Topic]
+			if !ok {
+				return nil, fmt.Errorf("unknown search topic %q", input.Topic)
+			}
+			steps := int(math.Ceil(float64(found.seconds) / 2.0))
+			for step := 1; step <= steps; step++ {
+				if ctx != nil && ctx.AbortSignal() != nil {
+					if err := ctx.AbortSignal().Err(); err != nil {
+						return nil, err
+					}
+				}
+				api.Output(fmt.Sprintf("searching %s in %s: source %d/%d\n", input.Topic, input.City, step, steps))
+				timer := time.NewTimer(vacaSearchStepDelay)
+				if ctx != nil && ctx.AbortSignal() != nil {
+					select {
+					case <-ctx.AbortSignal().Done():
+						timer.Stop()
+						return nil, ctx.AbortSignal().Err()
+					case <-timer.C:
+					}
+				} else {
+					<-timer.C
+				}
+			}
+			for _, result := range found.results {
+				api.Output(fmt.Sprintf("- %s\n", result))
+			}
+			return &durable.ToolExecutionResult{}, nil
 		},
 	})
-	if err != nil {
-		panic(err)
+
+	return durable.DefineExtension(&durable.Extension{
+		Name:  "vacation-search",
+		Tools: []*durable.ToolRegistration{searchTool},
+	})
+}
+
+// Search is what the research subagent gets: only search.
+var Search *durable.Extension = vacaCreateSearchExtension()
+
+type vacaResearchInput struct {
+	Task string `json:"task"`
+}
+
+type vacaResearchState struct {
+	Phase  string `json:"phase"`
+	Report string `json:"report,omitzero"`
+}
+
+type vacaResearchArgs struct {
+	Task string `json:"task"`
+}
+
+func vacaEntryAssistantText(entry *durable.EntryRecord) string {
+	if entry == nil || len(entry.Model) == 0 {
+		return ""
 	}
-	return tok
+	msg, ok := entry.Model[0].(*ai.AssistantMessage)
+	if !ok || msg == nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, part := range msg.Content {
+		if tc, ok := part.(*ai.TextContent); ok && tc != nil {
+			b.WriteString(tc.Text)
+		}
+	}
+	return b.String()
 }
 
-// VacationTaskInput configures one durable sleep/vacation task.
-type VacationTaskInput struct {
-	UntilMs int64  `json:"untilMs"`
-	Reason  string `json:"reason,omitzero"`
-}
-
-// VacationTaskState holds the durable phase checkpoint for VacationTask.
-type VacationTaskState struct {
-	Phase   string `json:"phase"`
-	UntilMs int64  `json:"untilMs"`
-	Reason  string `json:"reason,omitzero"`
-}
-
-// VacationTaskResult reports completion metadata of a finished VacationTask.
-type VacationTaskResult struct {
-	WokeAtMs int64  `json:"wokeAtMs"`
-	UntilMs  int64  `json:"untilMs"`
-	Reason   string `json:"reason,omitzero"`
-}
-
-// VacationState is persisted in VacationDoc for UI/inspection.
-type VacationState struct {
-	Active  bool    `json:"active"`
-	UntilMs int64   `json:"untilMs,omitzero"`
-	Reason  *string `json:"reason,omitzero"`
-	TaskId  int64   `json:"taskId,omitzero"`
-}
-
-// VacationToolInput specifies the arguments accepted by the `vacation` / `sleep` tool.
-type VacationToolInput struct {
-	DurationSeconds *float64 `json:"durationSeconds,omitzero"`
-	DurationMs      *int64   `json:"durationMs,omitzero"`
-	Until           *string  `json:"until,omitzero"`
-	Reason          *string  `json:"reason,omitzero"`
-}
-
-// VacationTask is the durable sleep task resumed cleanly across process restarts.
-var VacationTask = durable.DefineTask[VacationTaskInput, VacationTaskState, VacationTaskResult, struct{}](
-	durable.TaskDefinition[VacationTaskInput, VacationTaskState, VacationTaskResult, struct{}]{
-		Name:    "vacation.sleep",
+// Delivers the task to its subagent and posts the report to the main conversation as a new message.
+var vacaResearchTask = durable.DefineTask[vacaResearchInput, vacaResearchState, any, struct{}](
+	durable.TaskDefinition[vacaResearchInput, vacaResearchState, any, struct{}]{
+		Name:    "vacation.research",
 		Version: 1,
-		Initial: func(input VacationTaskInput) VacationTaskState {
-			return VacationTaskState{
-				Phase:   "sleep",
-				UntilMs: input.UntilMs,
-				Reason:  input.Reason,
-			}
+		Initial: func(_ vacaResearchInput) vacaResearchState {
+			return vacaResearchState{Phase: "deliver"}
 		},
-		Phases: map[string]durable.PhaseHandler[VacationTaskInput, VacationTaskState, VacationTaskResult, struct{}]{
-			"sleep": func(ctx chord.Context, task durable.RunningTask[VacationTaskInput, VacationTaskState], runtime *durable.TaskRuntime[VacationTaskInput, VacationTaskState, VacationTaskResult, struct{}]) error {
-				if task.AbortRequested {
-					return runtime.Commit(ctx, func(_ durable.Tx, _ durable.RunningTask[VacationTaskInput, VacationTaskState]) (*durable.NextTaskState[VacationTaskState, VacationTaskResult], error) {
-						return &durable.NextTaskState[VacationTaskState, VacationTaskResult]{
-							Status:  durable.TaskStateTerminal,
-							Outcome: &durable.TypedTaskOutcome[VacationTaskResult]{Status: durable.TaskOutcomeAborted},
-						}, nil
-					})
-				}
-
-				if runtime.Now() < task.Input.UntilMs {
-					if err := runtime.Sleep(ctx, task.Input.UntilMs); err != nil {
-						return err
+		Phases: map[string]durable.PhaseHandler[vacaResearchInput, vacaResearchState, any, struct{}]{
+			"deliver": func(ctx chord.Context, task durable.RunningTask[vacaResearchInput, vacaResearchState], runtime *durable.TaskRuntime[vacaResearchInput, vacaResearchState, any, struct{}]) error {
+				// The subagent's conversation is owned by this task. No Session call may run inside a commit.
+				var owned *durable.ConversationId
+				if err := runtime.Commit(ctx, func(tx durable.Tx, running durable.RunningTask[vacaResearchInput, vacaResearchState]) (*durable.NextTaskState[vacaResearchState, any], error) {
+					tid := running.Id
+					page, scanErr := tx.ScanConversations(durable.ConversationQuery{OwnerTaskId: &tid}, 1, nil)
+					if scanErr != nil {
+						return nil, scanErr
 					}
-				}
-
-				wokeAt := runtime.Now()
-				return runtime.Commit(ctx, func(tx durable.Tx, _ durable.RunningTask[VacationTaskInput, VacationTaskState]) (*durable.NextTaskState[VacationTaskState, VacationTaskResult], error) {
-					if doc, err := tx.Doc(VacationDoc, task.ConversationId); err == nil && doc.Value != nil {
-						doc.Value.Set("active", false)
+					if len(page.Items) > 0 {
+						id := page.Items[0].Id
+						owned = &id
 					}
-					return &durable.NextTaskState[VacationTaskState, VacationTaskResult]{
-						Status:     durable.TaskStateTerminal,
-						Checkpoint: VacationTaskState{Phase: "done", UntilMs: task.Input.UntilMs, Reason: task.Input.Reason},
-						Outcome: &durable.TypedTaskOutcome[VacationTaskResult]{
+					return nil, nil
+				}); err != nil {
+					return err
+				}
+				if owned == nil {
+					return errors.New("research child conversation not found")
+				}
+				child, err := runtime.Conversation(ctx, *owned)
+				if err != nil {
+					return err
+				}
+				if child == nil {
+					return fmt.Errorf("research child conversation %d not found", *owned)
+				}
+				// A rerun after a crash gets the same submission back.
+				sub, err := child.Submit(durable.InputSubmissionDraft{
+					RequestId: fmt.Sprintf("research:%d", task.Id),
+					Content:   durable.UserInput{Text: &task.Input.Task},
+				}, ctx)
+				if err != nil {
+					return err
+				}
+				settled, err := sub.Wait(ctx)
+				if err != nil {
+					return err
+				}
+				return runtime.Commit(ctx, func(tx durable.Tx, running durable.RunningTask[vacaResearchInput, vacaResearchState]) (*durable.NextTaskState[vacaResearchState, any], error) {
+					reason := "?"
+					if settled.Status == durable.SubmissionStatusUnanswered && settled.Reason != nil && *settled.Reason != "" {
+						reason = *settled.Reason
+					}
+					report := fmt.Sprintf("[research report] The research failed: %s", reason)
+					if settled.Status == durable.SubmissionStatusDone && settled.Type == durable.SubmissionTypeInput && settled.Answer != nil {
+						entry, entryErr := tx.TypedEntry(durable.AssistantEntry, *settled.Answer)
+						if entryErr != nil {
+							return nil, entryErr
+						}
+						report = "[research report] " + vacaEntryAssistantText(entry)
+					}
+					return &durable.NextTaskState[vacaResearchState, any]{
+						Status:     durable.TaskStateRunning,
+						Checkpoint: vacaResearchState{Phase: "report", Report: report},
+					}, nil
+				})
+			},
+			"report": func(ctx chord.Context, task durable.RunningTask[vacaResearchInput, vacaResearchState], runtime *durable.TaskRuntime[vacaResearchInput, vacaResearchState, any, struct{}]) error {
+				mainConv, err := runtime.Conversation(ctx, runtime.ConversationId())
+				if err != nil {
+					return err
+				}
+				if mainConv == nil {
+					return fmt.Errorf("main conversation %d not found", runtime.ConversationId())
+				}
+				report := task.Checkpoint.Report
+				if _, err := mainConv.Submit(durable.InputSubmissionDraft{
+					RequestId: fmt.Sprintf("research-report:%d", task.Id),
+					Content:   durable.UserInput{Text: &report},
+					WhenBusy:  durable.SubmissionWhenBusyFollowUp,
+				}, ctx); err != nil {
+					return err
+				}
+				return runtime.Commit(ctx, func(_ durable.Tx, _ durable.RunningTask[vacaResearchInput, vacaResearchState]) (*durable.NextTaskState[vacaResearchState, any], error) {
+					return &durable.NextTaskState[vacaResearchState, any]{
+						Status: durable.TaskStateTerminal,
+						Outcome: &durable.TypedTaskOutcome[any]{
 							Status: durable.TaskOutcomeCompleted,
 							HasRes: true,
-							Result: VacationTaskResult{
-								WokeAtMs: wokeAt,
-								UntilMs:  task.Input.UntilMs,
-								Reason:   task.Input.Reason,
-							},
+							Result: nil,
 						},
 					}, nil
 				})
 			},
 		},
-		Abort: func(ctx chord.Context, task durable.RunningTask[VacationTaskInput, VacationTaskState], runtime *durable.TaskRuntime[VacationTaskInput, VacationTaskState, VacationTaskResult, struct{}]) error {
-			return runtime.Commit(ctx, func(tx durable.Tx, _ durable.RunningTask[VacationTaskInput, VacationTaskState]) (*durable.NextTaskState[VacationTaskState, VacationTaskResult], error) {
-				if doc, err := tx.Doc(VacationDoc, task.ConversationId); err == nil && doc.Value != nil {
-					doc.Value.Set("active", false)
-				}
-				return &durable.NextTaskState[VacationTaskState, VacationTaskResult]{
-					Status:  durable.TaskStateTerminal,
-					Outcome: &durable.TypedTaskOutcome[VacationTaskResult]{Status: durable.TaskOutcomeAborted},
+		Abort: func(ctx chord.Context, _ durable.RunningTask[vacaResearchInput, vacaResearchState], runtime *durable.TaskRuntime[vacaResearchInput, vacaResearchState, any, struct{}]) error {
+			return runtime.Commit(ctx, func(_ durable.Tx, _ durable.RunningTask[vacaResearchInput, vacaResearchState]) (*durable.NextTaskState[vacaResearchState, any], error) {
+				return &durable.NextTaskState[vacaResearchState, any]{
+					Status: durable.TaskStateTerminal,
+					Outcome: &durable.TypedTaskOutcome[any]{
+						Status: durable.TaskOutcomeAborted,
+					},
 				}, nil
 			})
 		},
 	},
 )
 
-type vacaMemoRecord struct {
-	TaskId durable.TaskId `json:"taskId"`
-}
-
-func vacaTextResult(text string, details durable.JsonValue, isError bool) *durable.ToolExecutionResult {
-	return &durable.ToolExecutionResult{
-		Content:    ai.ContentList{&ai.TextContent{Type: "text", Text: text}},
-		HasContent: true,
-		Details:    details,
-		HasDetails: details != nil,
-		IsError:    isError,
-	}
-}
-
-func vacaResolveUntilMs(input VacationToolInput, nowMs int64) (int64, error) {
-	if input.Until != nil && strings.TrimSpace(*input.Until) != "" {
-		parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(*input.Until))
-		if err != nil {
-			parsed, err = time.Parse(time.RFC3339, strings.TrimSpace(*input.Until))
-			if err != nil {
-				return 0, fmt.Errorf("invalid ISO timestamp %q: %w", *input.Until, err)
-			}
-		}
-		return parsed.UnixMilli(), nil
-	}
-	if input.DurationMs != nil {
-		if *input.DurationMs < 0 {
-			return 0, fmt.Errorf("durationMs must be non-negative")
-		}
-		return nowMs + *input.DurationMs, nil
-	}
-	if input.DurationSeconds != nil {
-		if *input.DurationSeconds < 0 {
-			return 0, fmt.Errorf("durationSeconds must be non-negative")
-		}
-		return nowMs + int64(math.Round(*input.DurationSeconds*1000)), nil
-	}
-	return 0, fmt.Errorf("one of durationSeconds, durationMs, or until is required")
-}
-
-// CreateVacationExtension defines the durable vacation sleep tool, prompt section, and task.
-func CreateVacationExtension() *durable.Extension {
+func vacaCreateVacationExtension() *durable.Extension {
 	props := omap.NewMap[string, *typebox.Schema]()
-	props.Set("durationSeconds", typebox.Optional(typebox.Number(jsonx.ObjectOf(
-		"description", "Number of seconds to sleep.",
-	))))
-	props.Set("durationMs", typebox.Optional(typebox.Integer(jsonx.ObjectOf(
-		"description", "Number of milliseconds to sleep.",
-	))))
-	props.Set("until", typebox.Optional(typebox.String(jsonx.ObjectOf(
-		"description", "ISO-8601/RFC3339 timestamp to sleep until.",
-	))))
-	props.Set("reason", typebox.Optional(typebox.String(jsonx.ObjectOf(
-		"description", "Optional reason for pausing execution.",
-	))))
-	schema := typebox.Object(props)
+	props.Set("task", typebox.String(jsonx.ObjectOf(
+		"description", "What to research, with the city and dates",
+	)))
+	schema := typebox.Object(props, jsonx.ObjectOf("required", []any{"task"}))
 
-	sleepTool := durable.DefineTool(&durable.ToolRegistration{
-		Name:          "sleep",
-		Description:   "Durably suspend until a delay elapses or target time is reached, surviving process restarts.",
-		Parameters:    schema,
-		Replay:        durable.ToolReplaySafe,
-		ExecutionMode: durable.ToolExecutionModeParallel,
+	researchTool := durable.DefineTool(&durable.ToolRegistration{
+		Name:        "research",
+		Description: "Start a research subagent in the background. It searches while you keep talking with the user; its report arrives later as a message starting with [research report].",
+		Parameters:  schema,
 		Execute: func(args any, api durable.ToolExecutionApi, ctx chord.Context) (*durable.ToolExecutionResult, error) {
-			var input VacationToolInput
+			var input vacaResearchArgs
 			if err := jsonx.Decode(args, &input); err != nil {
-				return vacaTextResult("Invalid sleep arguments: "+err.Error(), nil, true), nil
-			}
-			nowMs := time.Now().UnixMilli()
-			untilMs, err := vacaResolveUntilMs(input, nowMs)
-			if err != nil {
-				return vacaTextResult(err.Error(), nil, true), nil
-			}
-			reason := ""
-			if input.Reason != nil {
-				reason = strings.TrimSpace(*input.Reason)
-			}
-
-			var memo vacaMemoRecord
-			if existing, ok, memoErr := api.Memo(ctx, "sleep"); memoErr == nil && ok {
-				_ = jsonx.Decode(existing, &memo)
-			}
-			if memo.TaskId == 0 {
-				convId := api.ConversationId()
-				taskId, createErr := api.CreateTask(ctx, VacationTask, VacationTaskInput{
-					UntilMs: untilMs,
-					Reason:  reason,
-				}, durable.TaskOptions{
-					Ownership: durable.TaskOwnership{
-						Kind: durable.TaskOwnershipConversation,
-					},
-					ConversationId: &convId,
-				})
-				if createErr != nil {
-					return nil, createErr
-				}
-				_, _ = api.Commit(ctx, func(tx durable.Tx) (any, error) {
-					if doc, docErr := tx.Doc(VacationDoc, convId); docErr == nil && doc.Value != nil {
-						doc.Value.Set("active", true)
-						doc.Value.Set("untilMs", untilMs)
-						doc.Value.Set("taskId", int64(taskId))
-						if reason != "" {
-							doc.Value.Set("reason", reason)
-						}
-					}
-					return nil, nil
-				})
-				encodedMemo, _ := jsonx.Encode(vacaMemoRecord{TaskId: taskId})
-				putVal, putErr := api.MemoPut(ctx, "sleep", encodedMemo)
-				if putErr != nil {
-					return nil, putErr
-				}
-				_ = jsonx.Decode(putVal, &memo)
-				if memo.TaskId == 0 {
-					memo.TaskId = taskId
-				}
-			}
-
-			settled, err := api.WaitForTask(ctx, memo.TaskId)
-			if err != nil {
 				return nil, err
 			}
-			if settled != nil && settled.State.Outcome != nil && settled.State.Outcome.Status != durable.TaskOutcomeCompleted {
-				encodedOutcome, _ := jsonx.Encode(settled.State.Outcome)
-				return vacaTextResult(fmt.Sprintf("Sleep ended early (%s)", settled.State.Outcome.Status), encodedOutcome, true), nil
-			}
-
-			var res VacationTaskResult
-			if settled != nil && settled.State.Outcome != nil {
-				if rawRes, ok := settled.State.Outcome.Result.Get(); ok {
-					_ = jsonx.Decode(rawRes, &res)
+			if _, err := api.Commit(ctx, func(tx durable.Tx) (any, error) {
+				// Background: the main conversation stays free while the research runs.
+				convId := api.ConversationId()
+				bg := true
+				owner, createTaskErr := tx.CreateTask(
+					vacaResearchTask,
+					vacaResearchInput{Task: input.Task},
+					durable.TaskOptions{
+						Ownership:      durable.TaskOwnership{Kind: durable.TaskOwnershipConversation},
+						ConversationId: &convId,
+						Background:     &bg,
+					},
+				)
+				if createTaskErr != nil {
+					return nil, createTaskErr
 				}
+				child, createConvErr := tx.CreateConversation(durable.ConversationCreateTxOptions{
+					Ownership: durable.ConversationOwnership{
+						Kind:   durable.ConversationOwnershipTask,
+						TaskId: owner,
+					},
+				})
+				if createConvErr != nil {
+					return nil, createConvErr
+				}
+				if cfgErr := durable.Configure(tx, child.Id, durable.AgentChange{
+					Extensions:   jsonx.Some(durable.AgentExtensionsSet(Search)),
+					Instructions: jsonx.Some("You are a research subagent for a vacation planner. Search weather, museums, and trains in parallel, in one step, then report the findings in a few short bullet points."),
+				}); cfgErr != nil {
+					return nil, cfgErr
+				}
+				return nil, nil
+			}); err != nil {
+				return nil, err
 			}
-			if res.WokeAtMs == 0 {
-				res.WokeAtMs = time.Now().UnixMilli()
-				res.UntilMs = untilMs
-				res.Reason = reason
-			}
-			summary := fmt.Sprintf("Woke up at %s", time.UnixMilli(res.WokeAtMs).UTC().Format(time.RFC3339))
-			if reason != "" {
-				summary += " (reason: " + reason + ")"
-			}
-			encodedRes, _ := jsonx.Encode(res)
-			return vacaTextResult(summary, encodedRes, false), nil
+			return &durable.ToolExecutionResult{
+				Content:    ai.ContentList{&ai.TextContent{Type: "text", Text: "Research started in the background."}},
+				HasContent: true,
+			}, nil
 		},
 	})
 
-	section := durable.SimplePromptSection(
-		"vacation",
-		"You have a durable `sleep` tool. Use `sleep` whenever asked to wait, pause, poll on a schedule, or resume work at a later time.",
-		true,
-	)
-
 	return durable.DefineExtension(&durable.Extension{
-		Name:     VacationExtensionName,
-		Tools:    []*durable.ToolRegistration{sleepTool},
-		Sections: []*durable.PromptSection{section},
-		Tasks:    []durable.AnyTask{VacationTask},
+		Name:  "vacation",
+		Tools: []*durable.ToolRegistration{researchTool},
+		Tasks: []durable.AnyTask{vacaResearchTask},
+		Sections: []*durable.PromptSection{
+			durable.Section(
+				"preamble",
+				func(_ durable.PromptInput, _ chord.Context) (string, bool, error) {
+					return "You are a friendly vacation planning assistant. Keep answers short. Hand all research to the research tool; while it runs, keep chatting with the user. When a [research report] arrives, turn it into a short plan.", true, nil
+				},
+				false,
+			),
+		},
 	})
 }
+
+// Vacation is what the main conversation gets: the prompt, research, and the task that delivers its report.
+var Vacation *durable.Extension = vacaCreateVacationExtension()

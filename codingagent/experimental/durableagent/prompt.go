@@ -3,193 +3,127 @@
 package durableagent
 
 import (
-	"fmt"
-	"strings"
 	"sync"
 
-	"github.com/keejkrej/pi-go/ai"
 	"github.com/keejkrej/pi-go/chord"
 	"github.com/keejkrej/pi-go/codingagent/core"
+	"github.com/keejkrej/pi-go/codingagent/utils"
 	"github.com/keejkrej/pi-go/durable"
 )
 
-// DurablePromptExtensionName identifies the coding-agent system prompt extension.
-const DurablePromptExtensionName = "pi.durable-prompt"
-
-// DurablePromptExtensionOptions configures CreateDurablePromptExtension.
-type DurablePromptExtensionOptions struct {
-	Cwd        string
-	AgentDir   string
-	SkillPaths []string
+type promptResources struct {
+	contextFiles []core.ContextFile
+	skills       []core.Skill
 }
 
-type promptCacheKey struct {
-	cwd        string
-	agentDir   string
-	toolList   string
-	appendText string
+var promptContributions = map[string]core.ToolSystemPromptContribution{
+	"read":  core.ReadToolSystemPromptContribution,
+	"bash":  core.BashToolSystemPromptContribution,
+	"edit":  core.EditToolSystemPromptContribution,
+	"write": core.WriteToolSystemPromptContribution,
 }
 
-// CreateDurablePromptExtension builds the durable extension that renders coding-agent prompt sections.
-func CreateDurablePromptExtension(options DurablePromptExtensionOptions) *durable.Extension {
+// pi's section order; BuildSystemPromptSections omits the ones without content.
+var promptKeys = []string{"preamble", "tools", "rules", "docs", "project_context", "skills", "cwd"}
+
+// CreatePiPrompt returns pi's system prompt as one extension: the sections of
+// BuildSystemPromptSections for the request's tools and the conversation's directory.
+// Context files and skills load once per directory, like pi at startup.
+func CreatePiPrompt(settings *core.SettingsManager, fallbackCwd string) *durable.Extension {
 	var mu sync.Mutex
-	contextFilesCache := make(map[string][]core.ContextFile)
-	skillsCache := make(map[string][]core.Skill)
+	resources := make(map[string]promptResources)
 
-	loadResources := func(cwd, agentDir string) ([]core.ContextFile, []core.Skill) {
-		key := cwd + "\x00" + agentDir
+	load := func(cwd string) promptResources {
 		mu.Lock()
-		cf, hasCf := contextFilesCache[key]
-		sk, hasSk := skillsCache[key]
+		found, ok := resources[cwd]
 		mu.Unlock()
-		if hasCf && hasSk {
-			return cf, sk
+		if ok {
+			return found
 		}
-		loadedCf := core.LoadProjectContextFiles(&core.LoadProjectContextFilesOptions{
-			Cwd:      cwd,
-			AgentDir: agentDir,
-		})
-		skillsRes := core.LoadSkills(&core.LoadSkillsOptions{
-			Cwd:        cwd,
-			AgentDir:   agentDir,
-			SkillPaths: options.SkillPaths,
-		})
+		agentDir := utils.GetAgentDir()
+		var skillPaths []string
+		if settings != nil {
+			skillPaths = settings.GetSkillPaths()
+		}
+		includeDefaults := true
+		loaded := promptResources{
+			contextFiles: core.LoadProjectContextFiles(&core.LoadProjectContextFilesOptions{
+				Cwd:      cwd,
+				AgentDir: agentDir,
+			}),
+			skills: core.LoadSkills(&core.LoadSkillsOptions{
+				Cwd:             cwd,
+				AgentDir:        agentDir,
+				SkillPaths:      skillPaths,
+				IncludeDefaults: &includeDefaults,
+			}).Skills,
+		}
 		mu.Lock()
-		contextFilesCache[key] = loadedCf
-		skillsCache[key] = skillsRes.Skills
+		if existing, exists := resources[cwd]; exists {
+			loaded = existing
+		} else {
+			resources[cwd] = loaded
+		}
 		mu.Unlock()
-		return loadedCf, skillsRes.Skills
+		return loaded
 	}
 
-	renderSection := func(sectionKey string) durable.PromptRenderFn {
-		return func(input durable.PromptInput, _ chord.Context) (string, bool, error) {
-			cwd := options.Cwd
-			if input.Agent != nil && input.Agent.Cwd != nil && strings.TrimSpace(*input.Agent.Cwd) != "" {
-				cwd = *input.Agent.Cwd
-			}
-			if cwd == "" {
-				cwd = "."
-			}
-			agentDir := options.AgentDir
-
-			toolNames := make([]string, 0)
-			if input.Agent != nil {
-				for _, t := range input.Agent.Tools {
-					if t != nil {
-						toolNames = append(toolNames, t.Name)
-					}
+	buildSections := func(input durable.PromptInput) (core.SystemPromptSections, error) {
+		cwd := fallbackCwd
+		if input.Agent != nil && input.Agent.Cwd != nil && *input.Agent.Cwd != "" {
+			cwd = *input.Agent.Cwd
+		}
+		if input.Env != nil && input.Env.Cwd() != "" {
+			cwd = input.Env.Cwd()
+		}
+		selectedTools := make([]string, 0)
+		if input.Agent != nil {
+			for _, t := range input.Agent.Tools {
+				if t != nil {
+					selectedTools = append(selectedTools, t.Name)
 				}
 			}
-
-			toolSnippets := make(map[string]string)
-			toolGuidelines := make(map[string][]string)
-			for _, name := range toolNames {
-				if contrib, ok := core.BuiltinToolSystemPromptContributions[core.ToolName(name)]; ok {
-					if contrib.Snippet != "" {
-						toolSnippets[name] = contrib.Snippet
-					}
-					if len(contrib.Guidelines) > 0 {
-						toolGuidelines[name] = contrib.Guidelines
-					}
-				}
+		}
+		snippets := make(map[string]string)
+		guidelines := make(map[string][]string)
+		for _, name := range selectedTools {
+			contribution, ok := promptContributions[name]
+			if !ok {
+				continue
 			}
+			snippets[name] = contribution.Snippet
+			guidelines[name] = append([]string(nil), contribution.Guidelines...)
+		}
+		loaded := load(cwd)
+		return core.BuildSystemPromptSections(core.BuildSystemPromptOptions{
+			Cwd:            cwd,
+			SelectedTools:  selectedTools,
+			ToolSnippets:   snippets,
+			ToolGuidelines: guidelines,
+			ContextFiles:   loaded.contextFiles,
+			Skills:         loaded.skills,
+		})
+	}
 
-			cf, sk := loadResources(cwd, agentDir)
-			var appendPrompt *string
-			if input.Agent != nil && input.Agent.Instructions != nil && strings.TrimSpace(*input.Agent.Instructions) != "" {
-				appendPrompt = input.Agent.Instructions
-			}
-
-			sections, err := core.BuildSystemPromptSections(core.BuildSystemPromptOptions{
-				SelectedTools:      toolNames,
-				ToolSnippets:       toolSnippets,
-				ToolGuidelines:     toolGuidelines,
-				AppendSystemPrompt: appendPrompt,
-				Cwd:                cwd,
-				ContextFiles:       cf,
-				Skills:             sk,
-			})
+	sections := make([]*durable.PromptSection, 0, len(promptKeys))
+	for _, key := range promptKeys {
+		sectionKey := key
+		// The built sections carry their own tags.
+		sections = append(sections, durable.Section(sectionKey, func(input durable.PromptInput, _ chord.Context) (string, bool, error) {
+			built, err := buildSections(input)
 			if err != nil {
 				return "", false, err
 			}
-			text, ok := sections.Get(sectionKey)
-			if !ok || strings.TrimSpace(text) == "" {
+			text, ok := built.Get(sectionKey)
+			if !ok || text == "" {
 				return "", false, nil
 			}
 			return text, true, nil
-		}
-	}
-
-	sectionKeys := []string{
-		"preamble",
-		"tools",
-		"rules",
-		"docs",
-		"addendum",
-		"project_context",
-		"skills",
-		"cwd",
-	}
-	sections := make([]*durable.PromptSection, 0, len(sectionKeys))
-	for _, key := range sectionKeys {
-		// BuildSystemPromptSections already wraps non-preamble sections with XML tags, so Tag is false.
-		sections = append(sections, durable.Section(key, renderSection(key), false))
+		}, false))
 	}
 
 	return durable.DefineExtension(&durable.Extension{
-		Name:     DurablePromptExtensionName,
+		Name:     "pi-prompt",
 		Sections: sections,
 	})
-}
-
-// FormatDurableInstructions joins custom instructions cleanly for durable agent configuration.
-func FormatDurableInstructions(base, extra *string) *string {
-	var parts []string
-	if base != nil && strings.TrimSpace(*base) != "" {
-		parts = append(parts, strings.TrimSpace(*base))
-	}
-	if extra != nil && strings.TrimSpace(*extra) != "" {
-		parts = append(parts, strings.TrimSpace(*extra))
-	}
-	if len(parts) == 0 {
-		return nil
-	}
-	joined := fmt.Sprintf("%s", strings.Join(parts, "\n\n"))
-	return &joined
-}
-
-// promptExtractMessageText returns concatenated text blocks from a transcript ai.Message.
-func promptExtractMessageText(msg any) string {
-	switch m := msg.(type) {
-	case *ai.UserMessage:
-		if m == nil {
-			return ""
-		}
-		if m.Content.Text != nil {
-			return *m.Content.Text
-		}
-		return promptJoinTextContent(m.Content.Blocks)
-	case *ai.AssistantMessage:
-		if m == nil {
-			return ""
-		}
-		return promptJoinTextContent(m.Content)
-	case *ai.ToolResultMessage:
-		if m == nil {
-			return ""
-		}
-		return promptJoinTextContent(m.Content)
-	default:
-		return ""
-	}
-}
-
-func promptJoinTextContent(blocks ai.ContentList) string {
-	var parts []string
-	for _, b := range blocks {
-		if tc, ok := b.(*ai.TextContent); ok && tc != nil && tc.Text != "" {
-			parts = append(parts, tc.Text)
-		}
-	}
-	return strings.Join(parts, "\n")
 }

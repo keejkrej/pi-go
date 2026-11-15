@@ -1,57 +1,247 @@
-// Unit tests for codingagent/experimental/vacation.
+// Unit and integration tests for codingagent/experimental/vacation.
 
-package vacation_test
+package vacation
 
 import (
-	"bytes"
 	"context"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/keejkrej/pi-go/ai"
 	"github.com/keejkrej/pi-go/ai/providers"
 	"github.com/keejkrej/pi-go/chord"
-	"github.com/keejkrej/pi-go/codingagent/experimental/vacation"
 	"github.com/keejkrej/pi-go/durable"
 	"github.com/keejkrej/pi-go/durable/storage"
 	"github.com/keejkrej/pi-go/internal/jsonx"
 )
 
-func tevaOpenHarness(
-	t *testing.T,
-	responses []providers.FauxResponseStep,
-) (durable.Harness, durable.Conversation) {
+func tevaSetTestAgentDir(t *testing.T) string {
 	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("PI_CODING_AGENT_DIR", dir)
+	return dir
+}
+
+func tevaWaitUntil(t *testing.T, timeout time.Duration, cond func() bool, desc string) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", desc)
+}
+
+func TestVacationParseArgs(t *testing.T) {
+	opts, err := ParseArgs(nil)
+	if err != nil {
+		t.Fatalf("ParseArgs(nil) failed: %v", err)
+	}
+	if opts.ContinueSession {
+		t.Fatal("expected ContinueSession=false")
+	}
+
+	for _, flag := range []string{"-c", "--continue"} {
+		opts, err = ParseArgs([]string{flag})
+		if err != nil {
+			t.Fatalf("ParseArgs(%q) failed: %v", flag, err)
+		}
+		if !opts.ContinueSession {
+			t.Fatalf("expected ContinueSession=true for %q", flag)
+		}
+	}
+
+	if _, err := ParseArgs([]string{"--wat"}); err == nil || !strings.Contains(err.Error(), "Unknown argument: --wat") {
+		t.Fatalf("expected Unknown argument error, got %v", err)
+	}
+}
+
+func TestVacationSelectSession(t *testing.T) {
+	agentDir := tevaSetTestAgentDir(t)
+	cwd := t.TempDir()
+	resolvedCwd, err := filepath.EvalSymlinks(cwd)
+	if err != nil {
+		t.Fatalf("EvalSymlinks failed: %v", err)
+	}
+
+	if _, err := SelectSession(context.Background(), cwd, true); err == nil || !strings.Contains(err.Error(), "No vacation session exists for "+resolvedCwd) {
+		t.Fatalf("expected missing continue session error, got %v", err)
+	}
+
+	loc1, err := SelectSession(context.Background(), cwd, false)
+	if err != nil {
+		t.Fatalf("SelectSession(new) failed: %v", err)
+	}
+	dirPattern := regexp.MustCompile(`^\d{13}-[0-9a-f-]{36}$`)
+	if !dirPattern.MatchString(loc1.Id) {
+		t.Fatalf("unexpected session directory id %q", loc1.Id)
+	}
+	expectedRoot := filepath.Join(agentDir, "experimental", "vacation-sessions")
+	if !strings.HasPrefix(loc1.Directory, expectedRoot+string(filepath.Separator)) {
+		t.Fatalf("expected directory under %q, got %q", expectedRoot, loc1.Directory)
+	}
+	if err := os.WriteFile(loc1.Database, nil, 0o644); err != nil {
+		t.Fatalf("write marker failed: %v", err)
+	}
+
+	shortCtx, cancel := context.WithTimeout(context.Background(), 120*time.Millisecond)
+	defer cancel()
+	if _, err := SelectSession(shortCtx, cwd, true); err == nil || !strings.Contains(err.Error(), "Session is already open in another process") {
+		t.Fatalf("expected lock contention error, got %v", err)
+	}
+	if err := loc1.Release(); err != nil {
+		t.Fatalf("release loc1 failed: %v", err)
+	}
+
+	resumed, err := SelectSession(context.Background(), cwd, true)
+	if err != nil {
+		t.Fatalf("SelectSession(continue) failed: %v", err)
+	}
+	defer func() {
+		_ = resumed.Release()
+	}()
+	if resumed.Created || resumed.Id != loc1.Id {
+		t.Fatalf("expected resumed newest session %q (created=false), got %q (created=%v)", loc1.Id, resumed.Id, resumed.Created)
+	}
+}
+
+func tevaFindTool(snap durable.RegistrySnapshot, name string) *durable.ToolRegistration {
+	for _, rt := range snap.Tools() {
+		if rt.Tool != nil && rt.Tool.Name == name {
+			return rt.Tool
+		}
+	}
+	return nil
+}
+
+func TestVacationRegistryAndSearchAbort(t *testing.T) {
+	registry, err := CreateVacationRegistry()
+	if err != nil {
+		t.Fatalf("CreateVacationRegistry failed: %v", err)
+	}
+	snap := registry.Snapshot()
+	searchTool := tevaFindTool(snap, "search")
+	if searchTool == nil {
+		t.Fatal("expected search tool in vacation registry")
+	}
+	if tevaFindTool(snap, "research") == nil {
+		t.Fatal("expected research tool in vacation registry")
+	}
+	for _, banned := range []string{"read", "bash", "edit", "write", "subagent"} {
+		if tevaFindTool(snap, banned) != nil {
+			t.Fatalf("did not expect coding/subagent tool %q in vacation registry", banned)
+		}
+	}
+
+	abortCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, execErr := searchTool.Execute(
+		jsonx.ObjectOf("topic", "trains", "city", "Vienna"),
+		nil,
+		chord.WithAbortSignal(abortCtx, chord.BackgroundContext),
+	)
+	if execErr == nil {
+		t.Fatal("expected search tool to return error on aborted signal")
+	}
+}
+
+func TestVacationBackgroundResearchEndToEnd(t *testing.T) {
+	_ = tevaSetTestAgentDir(t)
+	prevDelay := vacaSearchStepDelay
+	vacaSearchStepDelay = 2 * time.Millisecond
+	defer func() {
+		vacaSearchStepDelay = prevDelay
+	}()
+
 	faux, err := providers.FauxProvider(nil)
 	if err != nil {
-		t.Fatalf("FauxProvider: %v", err)
+		t.Fatalf("FauxProvider failed: %v", err)
 	}
-	faux.SetResponses(responses)
-
+	model := faux.GetModel()
 	models := ai.CreateModels(nil)
 	models.SetProvider(faux.Provider)
 
-	registry := durable.CreateRegistry()
-	if err := registry.Install(vacation.CreateVacationExtension()); err != nil {
-		t.Fatalf("install VacationExtension: %v", err)
-	}
+	var (
+		mu             sync.Mutex
+		subTools       []string
+		sawMainFollow  bool
+		subagentAsked  bool
+		mainStarted    bool
+		subSearchAsked bool
+	)
+	step := providers.FauxResponseFactory(func(_ context.Context, transcript *ai.TranscriptContext, _ *ai.SimpleStreamOptions, _ *providers.FauxProviderState, _ *ai.Model) (*ai.AssistantMessage, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		sys := ""
+		var transcriptTools []*ai.Tool
+		if transcript != nil {
+			sys = ai.GetCurrentSystemPrompt(transcript.Messages)
+			transcriptTools = ai.GetCurrentTools(transcript.Messages)
+		}
+		isSubagent := strings.Contains(sys, "research subagent for a vacation planner")
+		toolUse := ai.StopReasonToolUse
 
-	ctx := chord.WithAbortSignal(context.Background(), chord.BackgroundContext)
+		if isSubagent {
+			if !subagentAsked {
+				subagentAsked = true
+				for _, tl := range transcriptTools {
+					if tl != nil {
+						subTools = append(subTools, tl.Name)
+					}
+				}
+				return providers.FauxAssistantMessage(providers.FauxAssistantBlocks{
+					providers.FauxToolCall("search", jsonx.ObjectOf("topic", "weather", "city", "Vienna"), nil),
+				}, &providers.FauxAssistantMessageOptions{StopReason: &toolUse}), nil
+			}
+			subSearchAsked = true
+			return providers.FauxAssistantMessage(providers.FauxAssistantText("Sunny 24C in Vienna."), nil), nil
+		}
+
+		for _, msg := range transcript.Messages {
+			if um, ok := msg.(*ai.UserMessage); ok && um != nil && um.Content.Text != nil {
+				if strings.Contains(*um.Content.Text, "[research report] Sunny 24C in Vienna.") {
+					sawMainFollow = true
+				}
+			}
+		}
+		if sawMainFollow {
+			return providers.FauxAssistantMessage(providers.FauxAssistantText("Vienna plan: pack sunglasses."), nil), nil
+		}
+		if !mainStarted {
+			mainStarted = true
+			return providers.FauxAssistantMessage(providers.FauxAssistantBlocks{
+				providers.FauxToolCall("research", jsonx.ObjectOf("task", "Vienna weekend"), nil),
+			}, &providers.FauxAssistantMessageOptions{StopReason: &toolUse}), nil
+		}
+		return providers.FauxAssistantMessage(providers.FauxAssistantText("Research running, ask me anything meanwhile."), nil), nil
+	})
+	faux.SetResponses([]providers.FauxResponseStep{step, step, step, step, step})
+
+	registry, err := CreateVacationRegistry()
+	if err != nil {
+		t.Fatalf("CreateVacationRegistry failed: %v", err)
+	}
 	harness, err := durable.HarnessOpen(storage.NewMemoryStorage(), durable.HarnessOptions{
 		Models:   models,
 		Registry: registry,
-	}, ctx)
+	}, chord.BackgroundContext)
 	if err != nil {
-		t.Fatalf("HarnessOpen: %v", err)
+		t.Fatalf("HarnessOpen failed: %v", err)
 	}
-	t.Cleanup(func() {
+	defer func() {
 		_ = harness.Close(chord.BackgroundContext)
-	})
+	}()
 
-	model := faux.GetModel()
-	root, err := harness.Root(ctx, durable.RootOptions{
+	root, err := harness.Root(chord.BackgroundContext, durable.RootOptions{
 		Agent: &durable.AgentChange{
+			Extensions: jsonx.Some(durable.AgentExtensionsSet(Vacation)),
 			Model: jsonx.Some(durable.ModelRef{
 				Provider: string(model.Provider),
 				ModelId:  model.Id,
@@ -59,160 +249,76 @@ func tevaOpenHarness(
 		},
 	})
 	if err != nil {
-		t.Fatalf("Root: %v", err)
+		t.Fatalf("harness.Root failed: %v", err)
 	}
-	return harness, root
-}
+	if err := harness.Resume(); err != nil {
+		t.Fatalf("harness.Resume failed: %v", err)
+	}
 
-func TestParseVacationArgs(t *testing.T) {
-	opts, err := vacation.ParseVacationArgs([]string{
-		"--print",
-		"--agent-dir", "/tmp/agent-vaca",
-		"--model", "claude-sonnet",
-		"take a break",
-	})
-	if err != nil {
-		t.Fatalf("ParseVacationArgs: %v", err)
-	}
-	if !opts.PrintMode || opts.Prompt != "take a break" {
-		t.Fatalf("unexpected opts: %+v", opts)
-	}
-	if !strings.HasSuffix(opts.SessionDir, "vacation-sessions") {
-		t.Fatalf("expected vacation-sessions dir, got %s", opts.SessionDir)
-	}
-}
-
-func TestVacationSleepToolAndResume(t *testing.T) {
-	stopToolUse := ai.StopReasonToolUse
-	harness, root := tevaOpenHarness(t, []providers.FauxResponseStep{
-		providers.FauxResponseMessage{
-			Message: providers.FauxAssistantMessage(providers.FauxAssistantBlocks{
-				providers.FauxToolCall("sleep", jsonx.ObjectOf(
-					"durationMs", 25,
-					"reason", "coffee break",
-				), nil),
-			}, &providers.FauxAssistantMessageOptions{StopReason: &stopToolUse}),
-		},
-		providers.FauxResponseMessage{
-			Message: providers.FauxAssistantMessage(providers.FauxAssistantText("back from vacation"), nil),
-		},
-	})
-
-	ctx := chord.WithAbortSignal(context.Background(), chord.BackgroundContext)
-	prompt := "sleep briefly"
+	userMsg := "Plan Vienna"
 	sub, err := root.Submit(durable.SubmissionDraft{
-		RequestId: "vaca-1",
-		Type:      durable.SubmissionTypeInput,
-		Content:   durable.UserInput{Text: &prompt},
-	}, ctx)
+		Type:    durable.SubmissionTypeInput,
+		Content: durable.UserInput{Text: &userMsg},
+	}, chord.BackgroundContext)
 	if err != nil {
-		t.Fatalf("Submit: %v", err)
+		t.Fatalf("Submit failed: %v", err)
 	}
-	settled, err := sub.Wait(ctx)
+	settled, err := sub.Wait(chord.BackgroundContext)
 	if err != nil {
-		t.Fatalf("Wait: %v", err)
+		t.Fatalf("sub.Wait failed: %v", err)
 	}
 	if settled.Status != durable.SubmissionStatusDone {
-		t.Fatalf("expected submission done, got %s", settled.Status)
-	}
-	if err := harness.WaitForIdle(ctx); err != nil {
-		t.Fatalf("WaitForIdle: %v", err)
+		t.Fatalf("expected initial turn done, got %s", settled.Status)
 	}
 
-	view, err := root.Context(ctx)
-	if err != nil {
-		t.Fatalf("Context: %v", err)
-	}
-	var sawSleepResult bool
-	var sawWakeReply bool
-	for _, m := range view.Messages {
-		if tr, ok := m.(*ai.ToolResultMessage); ok && tr.ToolName == "sleep" {
-			sawSleepResult = true
-			if len(tr.Content) == 0 {
-				t.Fatalf("expected sleep tool content")
-			}
-			if tc, ok := tr.Content[0].(*ai.TextContent); !ok || !strings.Contains(tc.Text, "coffee break") {
-				t.Fatalf("expected coffee break in sleep output (isError=%v), got %+v", tr.IsError, tr.Content[0])
-			}
+	// Wait for background research task to deliver [research report] and trigger follow-up answer.
+	tevaWaitUntil(t, 5*time.Second, func() bool {
+		page, pageErr := root.Entries(durable.ConversationEntryQuery{}, 50, nil, chord.BackgroundContext)
+		if pageErr != nil {
+			return false
 		}
-		if am, ok := m.(*ai.AssistantMessage); ok {
-			for _, block := range am.Content {
-				if tc, ok := block.(*ai.TextContent); ok && strings.Contains(tc.Text, "back from vacation") {
-					sawWakeReply = true
+		for _, item := range page.Items {
+			if item.Kind == durable.AssistantEntry.Kind && len(item.Model) > 0 {
+				if am, ok := item.Model[0].(*ai.AssistantMessage); ok && am != nil {
+					for _, part := range am.Content {
+						if tc, ok := part.(*ai.TextContent); ok && tc != nil && strings.Contains(tc.Text, "Vienna plan: pack sunglasses.") {
+							return true
+						}
+					}
 				}
 			}
 		}
-	}
-	if !sawSleepResult || !sawWakeReply {
-		t.Fatalf("expected sleep tool result (%v) and final reply (%v)", sawSleepResult, sawWakeReply)
-	}
+		return false
+	}, "background research report delivered and answered on main conversation")
 
-	doc, err := harness.Snapshot(ctx, vacation.VacationDoc, root.Id())
-	if err != nil {
-		t.Fatalf("Snapshot VacationDoc: %v", err)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(subTools) != 1 || subTools[0] != "search" {
+		t.Fatalf("expected subagent to have only [search], got %v", subTools)
 	}
-	if active, ok := doc.Get("active"); !ok || active != false {
-		t.Fatalf("expected VacationDoc.active=false after wake, got %v", active)
+	if !subSearchAsked || !sawMainFollow {
+		t.Fatalf("expected full search -> report cycle (subSearchAsked=%v sawMainFollow=%v)", subSearchAsked, sawMainFollow)
 	}
 }
 
-func TestVacationTaskAbort(t *testing.T) {
-	registry := durable.CreateRegistry()
-	if err := registry.Install(vacation.CreateVacationExtension()); err != nil {
-		t.Fatalf("install: %v", err)
-	}
-	models := ai.CreateModels(nil)
-	ctx := chord.WithAbortSignal(context.Background(), chord.BackgroundContext)
-	harness, err := durable.HarnessOpen(storage.NewMemoryStorage(), durable.HarnessOptions{
-		Models:   models,
-		Registry: registry,
-	}, ctx)
-	if err != nil {
-		t.Fatalf("HarnessOpen: %v", err)
-	}
-	t.Cleanup(func() { _ = harness.Close(chord.BackgroundContext) })
+func TestVacationOpenDurable(t *testing.T) {
+	_ = tevaSetTestAgentDir(t)
+	cwd := t.TempDir()
 
-	root, err := harness.Root(ctx)
+	res, err := OpenDurable(context.Background(), &OpenDurableOptions{Cwd: cwd})
 	if err != nil {
-		t.Fatalf("Root: %v", err)
+		t.Fatalf("OpenDurable(vacation) failed: %v", err)
 	}
-	var tid durable.TaskId
-	_, err = root.Commit(ctx, func(tx durable.Tx) (any, error) {
-		convId := root.Id()
-		var cErr error
-		tid, cErr = tx.CreateTask(vacation.VacationTask, vacation.VacationTaskInput{
-			UntilMs: time.Now().Add(10 * time.Second).UnixMilli(),
-			Reason:  "long nap",
-		}, durable.TaskOptions{
-			Ownership: durable.TaskOwnership{
-				Kind: durable.TaskOwnershipConversation,
-			},
-			ConversationId: &convId,
-		})
-		return nil, cErr
-	})
-	if err != nil {
-		t.Fatalf("CreateTask: %v", err)
-	}
+	defer func() {
+		_ = res.Close()
+	}()
 
-	if _, err := harness.AbortTask(ctx, tid); err != nil {
-		t.Fatalf("AbortTask: %v", err)
+	snap := res.View.Current()
+	agentDoc := AgentOf(snap.Conversation)
+	if agentDoc.Extensions == nil || len(agentDoc.Extensions.List) != 1 || agentDoc.Extensions.List[0] != Vacation.Name {
+		t.Fatalf("expected root agent extensions=[vacation], got %+v", agentDoc.Extensions)
 	}
-	settled, err := harness.WaitForTask(ctx, tid)
-	if err != nil {
-		t.Fatalf("WaitForTask: %v", err)
-	}
-	if settled.State.Outcome == nil || settled.State.Outcome.Status != durable.TaskOutcomeAborted {
-		t.Fatalf("expected TaskOutcomeAborted, got %+v", settled.State.Outcome)
-	}
-}
-
-func TestVacationRunHelp(t *testing.T) {
-	var out, errOut bytes.Buffer
-	if err := vacation.Run(context.Background(), []string{"--help"}, &out, &errOut); err != nil {
-		t.Fatalf("Run --help: %v", err)
-	}
-	if !strings.Contains(out.String(), "Usage: vacation-pi") {
-		t.Fatalf("expected usage text, got: %s", out.String())
+	if snap.Tasks == nil {
+		t.Fatal("expected tasks panel open initially")
 	}
 }

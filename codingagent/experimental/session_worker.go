@@ -27,7 +27,6 @@ import (
 	"github.com/keejkrej/pi-go/codingagent/utils"
 	"github.com/keejkrej/pi-go/durable"
 	"github.com/keejkrej/pi-go/durable/storage/sqlite"
-	"github.com/keejkrej/pi-go/durable/tools"
 	"github.com/keejkrej/pi-go/internal/jsonx"
 	"github.com/keejkrej/pi-go/internal/lockfile"
 )
@@ -1105,83 +1104,90 @@ func swCreateCodingAgentHarness(databasePath string, options SessionWorkerOption
 		return nil, err
 	}
 	settingsManager := core.SettingsManagerCreate(cwd, agentDir)
-	if _, err := durableagent.ApplyHttpSettings(settingsManager); err != nil {
-		modelRuntime.Close()
-		return nil, err
-	}
+	durableagent.ConfigureHarnessHttp(settingsManager)
+	envs := durableagent.NewExecutionEnvs(cwd)
 
 	storage, err := sqlite.OpenNodeSqliteStorage(databasePath)
 	if err != nil {
+		envs.Cleanup(chord.BackgroundContext)
 		modelRuntime.Close()
 		return nil, err
 	}
 
-	promptExt := durableagent.CreateDurablePromptExtension(durableagent.DurablePromptExtensionOptions{
-		Cwd:      cwd,
-		AgentDir: agentDir,
-	})
-	subagentExt := durableagent.CreateSubagentExtension()
-	extensions := []*durable.Extension{
-		tools.CodingTools,
-		promptExt,
-		subagentExt,
-	}
-	registry := durable.CreateRegistry()
-	for _, ext := range extensions {
-		if extErr := registry.Install(ext); extErr != nil {
-			_ = storage.Close(chord.BackgroundContext)
-			modelRuntime.Close()
-			return nil, fmt.Errorf("install extension %q: %w", ext.Name, extErr)
-		}
-	}
-	harnessSettings, err := durableagent.BuildHarnessSettings(settingsManager, extensions)
+	registry, err := durableagent.CreateCodingRegistry(settingsManager, cwd)
 	if err != nil {
 		_ = storage.Close(chord.BackgroundContext)
+		envs.Cleanup(chord.BackgroundContext)
 		modelRuntime.Close()
 		return nil, err
 	}
 
-	harness, err := durable.HarnessOpen(storage, durable.HarnessOptions{
-		Models:         modelRuntime,
-		Registry:       registry,
-		StaticSettings: &harnessSettings,
-		Env:            durableagent.CreateHarnessEnv(cwd, settingsManager.GetShellPath()),
+	var harness durable.Harness
+	cleanupErr := func(baseErr error) error {
+		var errs []error
+		if harness != nil {
+			if cErr := harness.Close(chord.BackgroundContext); cErr != nil {
+				errs = append(errs, cErr)
+			}
+		} else {
+			if cErr := storage.Close(chord.BackgroundContext); cErr != nil {
+				errs = append(errs, cErr)
+			}
+		}
+		envs.Cleanup(chord.BackgroundContext)
+		modelRuntime.Close()
+		if len(errs) > 0 {
+			return fmt.Errorf("Session worker Harness startup and cleanup failed: %w", errors.Join(append([]error{baseErr}, errs...)...))
+		}
+		return baseErr
+	}
+
+	harness, err = durable.HarnessOpen(storage, durable.HarnessOptions{
+		Models:   modelRuntime,
+		Registry: registry,
+		Settings: durableagent.CreateHarnessSettings(settingsManager),
+		Env:      envs.Env,
+		OnReport: func(reportErr error) {
+			if reportErr != nil {
+				_, _ = fmt.Fprintln(os.Stderr, reportErr)
+			}
+		},
 	}, chord.BackgroundContext)
 	if err != nil {
-		_ = storage.Close(chord.BackgroundContext)
-		modelRuntime.Close()
-		return nil, err
+		return nil, cleanupErr(err)
 	}
 
+	// The initial model applies only when the root conversation is created; later starts keep its durable model.
 	existingConv, err := harness.Conversation(durable.RootConversationId, chord.BackgroundContext)
 	if err != nil {
-		_ = harness.Close(chord.BackgroundContext)
-		modelRuntime.Close()
-		return nil, err
+		return nil, cleanupErr(err)
 	}
 
 	agentChange := durable.AgentChange{
 		Cwd: jsonx.Some(cwd),
 	}
 	if existingConv == nil {
-		var cliProvider, cliModel *string
+		var cliTarget *durableagent.CliModelTarget
 		if options.Model != "" {
-			m := options.Model
-			cliModel = &m
+			var cliProvider *string
 			if options.Provider != "" {
 				p := options.Provider
 				cliProvider = &p
 			}
+			cliTarget = &durableagent.CliModelTarget{
+				Provider: cliProvider,
+				Model:    options.Model,
+			}
 		}
-		initial, err := durableagent.ResolveHarnessModel(ctx, modelRuntime, settingsManager, cliProvider, cliModel, nil)
+		initial, err := durableagent.FindInitialAgentModel(ctx, settingsManager, modelRuntime, cliTarget)
 		if err != nil {
-			_ = harness.Close(chord.BackgroundContext)
-			modelRuntime.Close()
-			return nil, err
+			return nil, cleanupErr(err)
 		}
-		agentChange.Model = jsonx.Some(initial.ModelRef)
-		if initial.ThinkingLevel != "" {
-			agentChange.ThinkingLevel = jsonx.Some(initial.ThinkingLevel)
+		if initial != nil && initial.Model != nil {
+			agentChange.Model = jsonx.Some(*initial.Model)
+		}
+		if initial != nil && initial.ThinkingLevel != nil && *initial.ThinkingLevel != "" {
+			agentChange.ThinkingLevel = jsonx.Some(*initial.ThinkingLevel)
 		}
 	}
 
@@ -1189,16 +1195,12 @@ func swCreateCodingAgentHarness(databasePath string, options SessionWorkerOption
 		Agent: &agentChange,
 	})
 	if err != nil {
-		_ = harness.Close(chord.BackgroundContext)
-		modelRuntime.Close()
-		return nil, err
+		return nil, cleanupErr(err)
 	}
 
 	facetLoader, err := plugins.CreateSessionPluginFacetLoader(options.PluginManifestPaths)
 	if err != nil {
-		_ = harness.Close(chord.BackgroundContext)
-		modelRuntime.Close()
-		return nil, err
+		return nil, cleanupErr(err)
 	}
 
 	return &services.SessionWorkerRuntime{
@@ -1207,6 +1209,10 @@ func swCreateCodingAgentHarness(databasePath string, options SessionWorkerOption
 		ModelRuntime:    modelRuntime,
 		SettingsManager: settingsManager,
 		FacetLoader:     facetLoader,
+		Cleanup: func(cleanupCtx chord.Context) error {
+			envs.Cleanup(cleanupCtx)
+			return nil
+		},
 	}, nil
 }
 

@@ -1,279 +1,352 @@
-// Unit tests for codingagent/experimental/durableagent.
+// Ported/adapted unit and integration tests for codingagent/experimental/durableagent.
 
-package durableagent_test
+package durableagent
 
 import (
-	"bytes"
 	"context"
+	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/keejkrej/pi-go/ai"
 	"github.com/keejkrej/pi-go/ai/providers"
 	"github.com/keejkrej/pi-go/chord"
-	"github.com/keejkrej/pi-go/codingagent/experimental/durableagent"
+	"github.com/keejkrej/pi-go/codingagent/core"
 	"github.com/keejkrej/pi-go/durable"
 	"github.com/keejkrej/pi-go/durable/storage"
 	"github.com/keejkrej/pi-go/durable/tools"
 	"github.com/keejkrej/pi-go/internal/jsonx"
 )
 
-func tedaOpenHarness(
-	t *testing.T,
-	responses []providers.FauxResponseStep,
-	cwd string,
-) (*providers.FauxProviderHandle, durable.Harness, durable.Conversation) {
+func tedaSetTestAgentDir(t *testing.T) string {
 	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("PI_CODING_AGENT_DIR", dir)
+	return dir
+}
+
+func tedaWaitUntil(t *testing.T, timeout time.Duration, cond func() bool, desc string) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", desc)
+}
+
+func TestDurableagentParseArgs(t *testing.T) {
+	opts, err := ParseArgs(nil)
+	if err != nil {
+		t.Fatalf("ParseArgs(nil) failed: %v", err)
+	}
+	if opts.ContinueSession {
+		t.Fatal("expected ContinueSession=false for empty args")
+	}
+
+	for _, flag := range []string{"-c", "--continue"} {
+		opts, err = ParseArgs([]string{flag})
+		if err != nil {
+			t.Fatalf("ParseArgs(%q) failed: %v", flag, err)
+		}
+		if !opts.ContinueSession {
+			t.Fatalf("expected ContinueSession=true for %q", flag)
+		}
+	}
+
+	if _, err := ParseArgs([]string{"--bogus"}); err == nil || !strings.Contains(err.Error(), "Unknown argument: --bogus") {
+		t.Fatalf("expected unknown argument error, got %v", err)
+	}
+}
+
+func TestDurableagentSelectSession(t *testing.T) {
+	agentDir := tedaSetTestAgentDir(t)
+	cwd := t.TempDir()
+	resolvedCwd, err := filepath.EvalSymlinks(cwd)
+	if err != nil {
+		t.Fatalf("EvalSymlinks failed: %v", err)
+	}
+
+	if _, err := SelectSession(context.Background(), cwd, true); err == nil || !strings.Contains(err.Error(), "No durable session exists for "+resolvedCwd) {
+		t.Fatalf("expected missing continue session error, got %v", err)
+	}
+
+	loc1, err := SelectSession(context.Background(), cwd, false)
+	if err != nil {
+		t.Fatalf("SelectSession(new #1) failed: %v", err)
+	}
+	if !loc1.Created {
+		t.Fatal("expected first session Created=true")
+	}
+	dirPattern := regexp.MustCompile(`^\d{13}-[0-9a-f-]{36}$`)
+	if !dirPattern.MatchString(loc1.Id) {
+		t.Fatalf("unexpected session directory id %q", loc1.Id)
+	}
+	if filepath.Base(loc1.Database) != "session.sqlite" {
+		t.Fatalf("expected session.sqlite database path, got %q", loc1.Database)
+	}
+	expectedParent := filepath.Join(agentDir, "experimental", "durable-sessions")
+	if !strings.HasPrefix(loc1.Directory, expectedParent+string(filepath.Separator)) {
+		t.Fatalf("expected session directory under %q, got %q", expectedParent, loc1.Directory)
+	}
+	if loc1.Cwd != resolvedCwd {
+		t.Fatalf("expected resolved cwd %q, got %q", resolvedCwd, loc1.Cwd)
+	}
+	if err := os.WriteFile(loc1.Database, nil, 0o644); err != nil {
+		t.Fatalf("write marker db failed: %v", err)
+	}
+	if err := loc1.Release(); err != nil {
+		t.Fatalf("release loc1 failed: %v", err)
+	}
+
+	time.Sleep(5 * time.Millisecond)
+	loc2, err := SelectSession(context.Background(), cwd, false)
+	if err != nil {
+		t.Fatalf("SelectSession(new #2) failed: %v", err)
+	}
+	if loc2.Id == loc1.Id {
+		t.Fatal("expected distinct session ids")
+	}
+
+	shortCtx, cancel := context.WithTimeout(context.Background(), 120*time.Millisecond)
+	defer cancel()
+	if _, err := SelectSession(shortCtx, cwd, true); err == nil || !strings.Contains(err.Error(), "Session is already open in another process") {
+		t.Fatalf("expected lock contention error while newest session locked, got %v", err)
+	}
+
+	if err := loc2.Release(); err != nil {
+		t.Fatalf("release loc2 failed: %v", err)
+	}
+
+	resumed, err := SelectSession(context.Background(), cwd, true)
+	if err != nil {
+		t.Fatalf("SelectSession(continue) failed: %v", err)
+	}
+	defer func() {
+		_ = resumed.Release()
+	}()
+	if resumed.Created {
+		t.Fatal("expected resumed session Created=false")
+	}
+	if resumed.Id != loc2.Id {
+		t.Fatalf("expected newest session %q, got %q", loc2.Id, resumed.Id)
+	}
+}
+
+func TestDurableagentCreatePiPromptAndSubagent(t *testing.T) {
+	_ = tedaSetTestAgentDir(t)
+	cwd := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cwd, "AGENTS.md"), []byte("Use strict durable invariants.\n"), 0o644); err != nil {
+		t.Fatalf("write AGENTS.md failed: %v", err)
+	}
+
 	faux, err := providers.FauxProvider(nil)
 	if err != nil {
-		t.Fatalf("FauxProvider: %v", err)
+		t.Fatalf("FauxProvider failed: %v", err)
 	}
-	faux.SetResponses(responses)
-
+	model := faux.GetModel()
 	models := ai.CreateModels(nil)
 	models.SetProvider(faux.Provider)
 
+	var (
+		mu             sync.Mutex
+		prompts        []string
+		childHadSub    bool
+		sawProjectCtx  bool
+		sawNoDoubleTag bool
+	)
+	callNum := 0
+	step := providers.FauxResponseFactory(func(_ context.Context, transcript *ai.TranscriptContext, _ *ai.SimpleStreamOptions, _ *providers.FauxProviderState, _ *ai.Model) (*ai.AssistantMessage, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		callNum++
+		sys := ""
+		var transcriptTools []*ai.Tool
+		if transcript != nil {
+			sys = ai.GetCurrentSystemPrompt(transcript.Messages)
+			transcriptTools = ai.GetCurrentTools(transcript.Messages)
+		}
+		prompts = append(prompts, sys)
+		if strings.Contains(sys, "Use strict durable invariants.") {
+			sawProjectCtx = true
+		}
+		if !strings.Contains(sys, "<preamble>") {
+			sawNoDoubleTag = true
+		}
+		toolUse := ai.StopReasonToolUse
+		switch callNum {
+		case 1:
+			return providers.FauxAssistantMessage(providers.FauxAssistantBlocks{
+				providers.FauxToolCall("subagent", jsonx.ObjectOf("task", "say hi from child"), nil),
+			}, &providers.FauxAssistantMessageOptions{StopReason: &toolUse}), nil
+		case 2:
+			for _, tl := range transcriptTools {
+				if tl != nil && tl.Name == "subagent" {
+					childHadSub = true
+				}
+			}
+			return providers.FauxAssistantMessage(providers.FauxAssistantText("child says hello"), nil), nil
+		default:
+			return providers.FauxAssistantMessage(providers.FauxAssistantText("parent complete"), nil), nil
+		}
+	})
+	faux.SetResponses([]providers.FauxResponseStep{step, step, step})
+
+	settingsManager := core.SettingsManagerInMemory(&core.Settings{})
 	registry := durable.CreateRegistry()
 	if err := registry.Install(tools.CodingTools); err != nil {
-		t.Fatalf("install CodingTools: %v", err)
+		t.Fatalf("install CodingTools failed: %v", err)
 	}
-	if err := registry.Install(durableagent.CreateDurablePromptExtension(durableagent.DurablePromptExtensionOptions{
-		Cwd: cwd,
-	})); err != nil {
-		t.Fatalf("install PromptExtension: %v", err)
+	if err := registry.Install(CreatePiPrompt(settingsManager, cwd)); err != nil {
+		t.Fatalf("install CreatePiPrompt failed: %v", err)
 	}
-	if err := registry.Install(durableagent.CreateSubagentExtension()); err != nil {
-		t.Fatalf("install SubagentExtension: %v", err)
+	if err := registry.Install(Subagent); err != nil {
+		t.Fatalf("install Subagent failed: %v", err)
 	}
 
-	ctx := chord.WithAbortSignal(context.Background(), chord.BackgroundContext)
+	envs := NewExecutionEnvs(cwd)
+	defer envs.Cleanup(chord.BackgroundContext)
+
 	harness, err := durable.HarnessOpen(storage.NewMemoryStorage(), durable.HarnessOptions{
 		Models:   models,
 		Registry: registry,
-		Env:      durableagent.CreateHarnessEnv(cwd, nil),
-	}, ctx)
+		Env:      envs.Env,
+	}, chord.BackgroundContext)
 	if err != nil {
-		t.Fatalf("HarnessOpen: %v", err)
+		t.Fatalf("HarnessOpen failed: %v", err)
 	}
-	t.Cleanup(func() {
+	defer func() {
 		_ = harness.Close(chord.BackgroundContext)
-	})
+	}()
 
-	model := faux.GetModel()
-	instr := "Follow durable instructions."
-	root, err := harness.Root(ctx, durable.RootOptions{
+	root, err := harness.Root(chord.BackgroundContext, durable.RootOptions{
 		Agent: &durable.AgentChange{
 			Model: jsonx.Some(durable.ModelRef{
 				Provider: string(model.Provider),
 				ModelId:  model.Id,
 			}),
-			Cwd:          jsonx.Some(cwd),
-			Instructions: jsonx.Some(instr),
+			Cwd: jsonx.Some(cwd),
 		},
 	})
 	if err != nil {
-		t.Fatalf("Root: %v", err)
+		t.Fatalf("harness.Root failed: %v", err)
 	}
-	return faux, harness, root
-}
-
-func TestParseDurableAgentArgs(t *testing.T) {
-	opts, err := durableagent.ParseDurableAgentArgs([]string{
-		"-p",
-		"--continue",
-		"--provider=anthropic",
-		"--model", "claude-sonnet",
-		"--thinking", "high",
-		"--cwd", "/tmp/work",
-		"--instructions", "be concise",
-		"hello", "world",
-	})
-	if err != nil {
-		t.Fatalf("ParseDurableAgentArgs: %v", err)
-	}
-	if !opts.PrintMode || !opts.Continue {
-		t.Fatalf("expected print & continue flags set: %+v", opts)
-	}
-	if opts.Provider == nil || *opts.Provider != "anthropic" {
-		t.Fatalf("unexpected provider: %v", opts.Provider)
-	}
-	if opts.Model == nil || *opts.Model != "claude-sonnet" {
-		t.Fatalf("unexpected model: %v", opts.Model)
-	}
-	if opts.Thinking == nil || *opts.Thinking != ai.ModelThinkingLevelHigh {
-		t.Fatalf("unexpected thinking: %v", opts.Thinking)
-	}
-	if opts.Cwd != "/tmp/work" || opts.Prompt != "hello world" {
-		t.Fatalf("unexpected cwd/prompt: %+v", opts)
+	if err := harness.Resume(); err != nil {
+		t.Fatalf("harness.Resume failed: %v", err)
 	}
 
-	if _, err := durableagent.ParseDurableAgentArgs([]string{"--unknown-flag"}); err == nil {
-		t.Fatalf("expected error for unknown flag")
-	}
-}
-
-func TestDurablePromptAndSubagentExecution(t *testing.T) {
-	cwd := t.TempDir()
-	stopToolUse := ai.StopReasonToolUse
-	_, harness, root := tedaOpenHarness(t, []providers.FauxResponseStep{
-		// Parent assistant issues subagent tool call
-		providers.FauxResponseMessage{
-			Message: providers.FauxAssistantMessage(providers.FauxAssistantBlocks{
-				providers.FauxToolCall("subagent", jsonx.ObjectOf("prompt", "child task prompt"), nil),
-			}, &providers.FauxAssistantMessageOptions{StopReason: &stopToolUse}),
-		},
-		// Child conversation runs and replies
-		providers.FauxResponseMessage{
-			Message: providers.FauxAssistantMessage(providers.FauxAssistantText("child finished work"), nil),
-		},
-		// Parent assistant summarizes child output
-		providers.FauxResponseMessage{
-			Message: providers.FauxAssistantMessage(providers.FauxAssistantText("parent done: child finished work"), nil),
-		},
-	}, cwd)
-
-	ctx := chord.WithAbortSignal(context.Background(), chord.BackgroundContext)
-	inputText := "delegate work"
+	promptText := "delegate greeting"
 	sub, err := root.Submit(durable.SubmissionDraft{
-		RequestId: "sub-1",
-		Type:      durable.SubmissionTypeInput,
-		Content:   durable.UserInput{Text: &inputText},
-	}, ctx)
+		Type:    durable.SubmissionTypeInput,
+		Content: durable.UserInput{Text: &promptText},
+	}, chord.BackgroundContext)
 	if err != nil {
-		t.Fatalf("Submit: %v", err)
+		t.Fatalf("Submit failed: %v", err)
 	}
-	settled, err := sub.Wait(ctx)
+	settled, err := sub.Wait(chord.BackgroundContext)
 	if err != nil {
-		t.Fatalf("Wait: %v", err)
+		t.Fatalf("sub.Wait failed: %v", err)
 	}
 	if settled.Status != durable.SubmissionStatusDone {
-		t.Fatalf("expected submission done, got %s", settled.Status)
-	}
-	if err := harness.WaitForIdle(ctx); err != nil {
-		t.Fatalf("WaitForIdle: %v", err)
+		t.Fatalf("expected submission done, got %s reason=%v detail=%v", settled.Status, settled.Reason, settled.Detail)
 	}
 
-	view, err := root.Context(ctx)
-	if err != nil {
-		t.Fatalf("Context: %v", err)
+	mu.Lock()
+	defer mu.Unlock()
+	if callNum != 3 {
+		t.Fatalf("expected 3 faux calls (parent -> child -> parent), got %d", callNum)
 	}
-	var foundToolResult, foundFinal bool
-	for _, msg := range view.Messages {
-		if tr, ok := msg.(*ai.ToolResultMessage); ok && tr.ToolName == "subagent" {
-			foundToolResult = true
-			t.Logf("subagent tool result (isError=%v): %+v", tr.IsError, tedaPromptText(tr.Content))
-		}
-		if am, ok := msg.(*ai.AssistantMessage); ok {
-			t.Logf("assistant stop=%s err=%v content=%q", am.StopReason, am.ErrorMessage, tedaPromptText(am.Content))
-			for _, block := range am.Content {
-				if tc, ok := block.(*ai.TextContent); ok && strings.Contains(tc.Text, "parent done: child finished work") {
-					foundFinal = true
-				}
+	if childHadSub {
+		t.Fatal("expected subagent extension to be removed from child conversation")
+	}
+	if !sawProjectCtx {
+		t.Fatalf("expected AGENTS.md content in system prompt, prompts=%v", prompts)
+	}
+	if !sawNoDoubleTag {
+		t.Fatal("expected preamble section not to be double-wrapped with <preamble>")
+	}
+}
+
+func TestDurableagentOpenDurableAndController(t *testing.T) {
+	_ = tedaSetTestAgentDir(t)
+	cwd := t.TempDir()
+	resolvedCwd, err := filepath.EvalSymlinks(cwd)
+	if err != nil {
+		t.Fatalf("EvalSymlinks failed: %v", err)
+	}
+
+	res, err := OpenDurable(context.Background(), &OpenDurableOptions{Cwd: cwd})
+	if err != nil {
+		t.Fatalf("OpenDurable(new) failed: %v", err)
+	}
+
+	snap := res.View.Current()
+	if snap.Session.Cwd != resolvedCwd {
+		t.Fatalf("expected session cwd %q, got %q", resolvedCwd, snap.Session.Cwd)
+	}
+	if len(snap.Conversations) != 1 || snap.Conversations[0].Label != "main" {
+		t.Fatalf("expected single main conversation, got %+v", snap.Conversations)
+	}
+	if snap.Tasks == nil {
+		t.Fatal("expected task panel open initially")
+	}
+
+	if err := res.Controller.ToggleTasks(context.Background()); err != nil {
+		t.Fatalf("ToggleTasks(off) failed: %v", err)
+	}
+	tedaWaitUntil(t, 2*time.Second, func() bool {
+		return res.View.Current().Tasks == nil
+	}, "tasks toggled off")
+
+	if err := res.Controller.ToggleTasks(context.Background()); err != nil {
+		t.Fatalf("ToggleTasks(on) failed: %v", err)
+	}
+	tedaWaitUntil(t, 2*time.Second, func() bool {
+		return res.View.Current().Tasks != nil
+	}, "tasks toggled back on")
+
+	if AgentOf(snap.Conversation).Model == nil {
+		sawNoModelNotice := false
+		for _, n := range snap.Notices {
+			if strings.Contains(n.Message, "No model configured") {
+				sawNoModelNotice = true
+				break
 			}
 		}
-	}
-	if !foundToolResult {
-		t.Fatalf("expected subagent tool result in parent context")
-	}
-	if !foundFinal {
-		t.Fatalf("expected final parent reply containing child result")
-	}
-
-	// Verify system prompt entry rendered sections without double XML wrapping
-	var foundSystem bool
-	for _, entry := range view.Entries {
-		if entry.Kind == durable.SystemEntry.Kind {
-			foundSystem = true
-			if entry.Data != nil {
-				raw, _ := entry.Data.(string)
-				if strings.Contains(raw, "<tools>\n<tools>") {
-					t.Fatalf("detected double XML tag wrapping in system prompt: %s", raw)
-				}
-			}
+		if !sawNoModelNotice {
+			t.Fatalf("expected no-model warning notice, got %+v", snap.Notices)
+		}
+		if err := res.Controller.CycleThinking(context.Background()); err == nil || !strings.Contains(err.Error(), "No model selected") {
+			t.Fatalf("expected No model selected error from CycleThinking, got %v", err)
+		}
+	} else {
+		if err := res.Controller.SetModel(context.Background(), durable.ModelRef{Provider: "missing", ModelId: "missing"}); err == nil || !strings.Contains(err.Error(), "Unknown model") {
+			t.Fatalf("expected Unknown model error from SetModel, got %v", err)
 		}
 	}
-	if !foundSystem {
-		t.Fatalf("expected system prompt entry in durable transcript")
-	}
-}
 
-func TestLockedSessionStorageAndListing(t *testing.T) {
-	dir := t.TempDir()
-	dbPath := durableagent.NewDurableSessionPath(dir)
-	if filepath.Dir(dbPath) != dir {
-		t.Fatalf("unexpected session path dir: %s", dbPath)
+	firstSessionId := snap.Session.Id
+	if err := res.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
 	}
 
-	ctx := context.Background()
-	st, release, err := durableagent.OpenLockedSessionStorage(ctx, dbPath)
+	resumed, err := OpenDurable(context.Background(), &OpenDurableOptions{
+		Cwd:             cwd,
+		ContinueSession: true,
+	})
 	if err != nil {
-		t.Fatalf("OpenLockedSessionStorage: %v", err)
+		t.Fatalf("OpenDurable(continue) failed: %v", err)
 	}
-
-	// Concurrent lock on same DB must fail
-	if _, _, lockErr := durableagent.OpenLockedSessionStorage(ctx, dbPath); lockErr == nil {
-		t.Fatalf("expected concurrent session lock acquisition to fail")
+	defer func() {
+		_ = resumed.Close()
+	}()
+	if resumed.View.Current().Session.Id != firstSessionId {
+		t.Fatalf("expected resumed session id %q, got %q", firstSessionId, resumed.View.Current().Session.Id)
 	}
-
-	sess := durable.NewSession(st)
-	chordCtx := chord.WithAbortSignal(ctx, chord.BackgroundContext)
-	if commitErr := sess.Commit(chordCtx, func(tx durable.Tx) error {
-		rec, createErr := tx.CreateConversation(durable.ConversationCreateTxOptions{
-			Ownership: durable.ConversationOwnership{Kind: durable.ConversationOwnershipOwnerless},
-		})
-		if createErr != nil {
-			return createErr
-		}
-		msg := &ai.UserMessage{Role: "user", Content: ai.UserMessageContent{Text: tedaPtrString("first durable question")}, Timestamp: time.Now().UnixMilli()}
-		_, err := tx.AppendTypedEntry(durable.UserEntry, rec.Id, durable.EntryDraft{
-			Model: ai.MessageList{msg},
-		})
-		return err
-	}); commitErr != nil {
-		t.Fatalf("sess.Commit: %v", commitErr)
-	}
-	if err := sess.Close(chordCtx); err != nil {
-		t.Fatalf("sess.Close: %v", err)
-	}
-	if err := release(); err != nil {
-		t.Fatalf("release lock: %v", err)
-	}
-
-	listed, err := durableagent.ListDurableSessions(ctx, dir)
-	if err != nil {
-		t.Fatalf("ListDurableSessions: %v", err)
-	}
-	if len(listed) != 1 {
-		t.Fatalf("expected 1 session, got %d", len(listed))
-	}
-	if listed[0].Locked {
-		t.Fatalf("expected session unlocked after release")
-	}
-	if listed[0].EntryCount != 1 || listed[0].FirstText != "first durable question" {
-		t.Fatalf("unexpected summary: %+v", listed[0])
-	}
-}
-
-func TestDurableAgentRunHelp(t *testing.T) {
-	var out, errOut bytes.Buffer
-	if err := durableagent.Run(context.Background(), []string{"--help"}, &out, &errOut); err != nil {
-		t.Fatalf("Run --help: %v", err)
-	}
-	if !strings.Contains(out.String(), "Usage: durable-pi") {
-		t.Fatalf("expected usage text, got: %s", out.String())
-	}
-}
-
-func tedaPtrString(s string) *string { return &s }
-
-func tedaPromptText(blocks ai.ContentList) string {
-	var parts []string
-	for _, b := range blocks {
-		if tc, ok := b.(*ai.TextContent); ok {
-			parts = append(parts, tc.Text)
-		}
-	}
-	return strings.Join(parts, "|")
 }
