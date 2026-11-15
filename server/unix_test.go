@@ -3,6 +3,7 @@
 package server_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/keejkrej/pi-go/chord"
 	"github.com/keejkrej/pi-go/client"
+	"github.com/keejkrej/pi-go/internal/jsonx"
 	"github.com/keejkrej/pi-go/protocol"
 	"github.com/keejkrej/pi-go/server"
 	"github.com/keejkrej/pi-go/server/servertest"
@@ -338,5 +340,159 @@ func TestDiscoverUnixServers(t *testing.T) {
 		if !errors.Is(err, syscall.ENOTDIR) {
 			t.Fatalf("expected ENOTDIR error, got %T (%v)", err, err)
 		}
+	})
+}
+
+type tunixRemoteEndpointAttachment struct {
+	endpoint chord.RemoteServiceEndpoint
+}
+
+func (a *tunixRemoteEndpointAttachment) InvokeService(call chord.ServiceCall, publish chord.ServiceUpdatePublisher, callContext chord.Context) (chord.JsonValue, bool, error) {
+	return a.endpoint.Invoke(call, publish, callContext)
+}
+
+func (a *tunixRemoteEndpointAttachment) Release(chord.Context) error {
+	a.endpoint.Dispose()
+	return nil
+}
+
+type tunixRemoteServiceHost struct {
+	provider *chord.RemoteServiceProvider
+}
+
+func (h *tunixRemoteServiceHost) AttachClient(server.RoutedServerPresentation, chord.Context) (server.RoutedServerServiceAttachment, error) {
+	return &tunixRemoteEndpointAttachment{
+		endpoint: chord.CreateRemoteServiceEndpoint(h.provider),
+	}, nil
+}
+
+func TestUnixServerClientServiceCatalogueWithRemoteServiceEndpoint(t *testing.T) {
+	tunixRunCatalogueCase := func(t *testing.T, withService bool) {
+		t.Helper()
+		dir := tunixMakeDirectory(t)
+		serverId := tunixServerId(0xca7a109)
+		sockPath := filepath.Join(dir, string(serverId)+".sock")
+
+		var allow []chord.RemoteServiceProviderEntry
+		type counterSvcIface struct{}
+		var counterSvc *chord.Service[counterSvcIface]
+		if withService {
+			var err error
+			counterSvc, err = chord.DefineService[counterSvcIface]("test.counter", nil)
+			if err != nil {
+				t.Fatalf("DefineService failed: %v", err)
+			}
+			allow = []chord.RemoteServiceProviderEntry{{Id: counterSvc.Id}}
+		}
+		provider, err := chord.NewRemoteServiceProvider(allow)
+		if err != nil {
+			t.Fatalf("NewRemoteServiceProvider failed: %v", err)
+		}
+		if withService {
+			state, err := chord.NewReplicatedState[any](jsonx.ObjectOf("value", float64(42)))
+			if err != nil {
+				t.Fatalf("NewReplicatedState failed: %v", err)
+			}
+			if err := provider.Provide(counterSvc, jsonx.ObjectOf(
+				"state", state,
+				"ping", func(msg any, _ chord.Context) (chord.JsonValue, bool, error) {
+					return msg, true, nil
+				},
+			)); err != nil {
+				t.Fatalf("Provide failed: %v", err)
+			}
+		}
+
+		listener, err := unix.CreateUnixListener(unix.UnixListenerOptions{Path: sockPath})
+		if err != nil {
+			t.Fatalf("CreateUnixListener failed: %v", err)
+		}
+
+		var errMu sync.Mutex
+		var serverErrs []error
+		srv, err := server.NewServer[server.SessionMetadata](
+			&tunixUnusedHost{serverServices: &tunixRemoteServiceHost{provider: provider}},
+			server.ServerOptions{
+				Listeners: []server.ServerListener{listener},
+				ServerId:  serverId,
+				OnError: func(err error) {
+					errMu.Lock()
+					serverErrs = append(serverErrs, err)
+					errMu.Unlock()
+				},
+			},
+		)
+		if err != nil {
+			t.Fatalf("NewServer failed: %v", err)
+		}
+		t.Cleanup(func() { _ = srv.Close() })
+		if err := srv.Start(); err != nil {
+			t.Fatalf("srv.Start failed: %v", err)
+		}
+
+		factory, err := client.CreateUnixTransportFactory(client.UnixTransportOptions{Path: sockPath})
+		if err != nil {
+			t.Fatalf("CreateUnixTransportFactory failed: %v", err)
+		}
+		c, err := client.NewClient(client.ClientOptions{
+			ServerId:         serverId,
+			TransportFactory: factory,
+		})
+		if err != nil {
+			t.Fatalf("NewClient failed: %v", err)
+		}
+		t.Cleanup(func() { _ = c.Dispose() })
+
+		hello, err := c.Connect()
+		if err != nil || hello.ServerId != serverId {
+			t.Fatalf("Connect failed: hello=%+v err=%v", hello, err)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		target := &protocol.ServerTarget{ServerId: serverId}
+
+		catalogue, err := c.ServiceCatalogue(ctx, target)
+		if err != nil {
+			t.Fatalf("ServiceCatalogue failed: %v", err)
+		}
+
+		if withService {
+			want := []chord.ServiceCatalogueEntry{{ServiceId: counterSvc.Id, Mode: chord.ServiceModeSingleton}}
+			if !reflect.DeepEqual(catalogue, want) {
+				t.Fatalf("unexpected catalogue: got %#v want %#v", catalogue, want)
+			}
+
+			val, ok, err := c.Request(ctx, target, chord.ServiceCall{
+				ServiceId: counterSvc.Id,
+				Member:    "ping",
+				Args:      []chord.JsonValue{"pong"},
+			})
+			if err != nil || !ok || val != "pong" {
+				t.Fatalf("subsequent Request failed after ServiceCatalogue: val=%#v ok=%v err=%v", val, ok, err)
+			}
+
+			sub, err := c.SubscribeService(ctx, target, counterSvc.Id, chord.ServiceModeSingleton, nil)
+			if err != nil {
+				t.Fatalf("SubscribeService failed after ServiceCatalogue: %v", err)
+			}
+			_ = sub.Dispose()
+		} else if catalogue == nil || len(catalogue) != 0 {
+			t.Fatalf("expected non-nil empty catalogue, got %#v", catalogue)
+		}
+
+		errMu.Lock()
+		gotErrs := append([]error(nil), serverErrs...)
+		errMu.Unlock()
+		if len(gotErrs) != 0 {
+			t.Fatalf("expected 0 server OnError callbacks, got %v", gotErrs)
+		}
+	}
+
+	t.Run("encodes populated catalogue over unix socket", func(t *testing.T) {
+		tunixRunCatalogueCase(t, true)
+	})
+	t.Run("encodes empty catalogue as non-nil JSON array", func(t *testing.T) {
+		tunixRunCatalogueCase(t, false)
 	})
 }

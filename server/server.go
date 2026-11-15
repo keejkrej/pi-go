@@ -686,6 +686,21 @@ func (s *Server[M]) handleRequest(state *connState, envelope *protocol.RequestEn
 		state.mu.Lock()
 		delete(state.serviceStateEncoders, unsub.SubscriptionId)
 		state.mu.Unlock()
+	} else if _, isCatalogue := control.(chord.ServiceControlCallCatalogue); isCatalogue {
+		if !resOk {
+			handleErr(protocol.NewProtocolValidationError("Invalid service catalogue"))
+			return
+		}
+		catalogue, parseErr := chord.ParseServiceCatalogue(resVal)
+		if parseErr != nil {
+			handleErr(parseErr)
+			return
+		}
+		wireCatalogue := make([]any, len(catalogue))
+		for i, entry := range catalogue {
+			wireCatalogue[i] = jsonx.ObjectOf("serviceId", entry.ServiceId, "mode", string(entry.Mode))
+		}
+		resVal = wireCatalogue
 	}
 
 	var resultOpt jsonx.Opt[chord.JsonValue]
