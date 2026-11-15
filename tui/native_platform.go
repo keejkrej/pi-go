@@ -2,6 +2,12 @@
 
 package tui
 
+import (
+	"os"
+	"runtime"
+	"sync"
+)
+
 // ModifierKey is a native modifier polled outside the terminal stream.
 type ModifierKey string
 
@@ -53,7 +59,15 @@ type npVirtualTerminalInput interface {
 // It is nil on linux and on every other GOOS, and nil when the arch is not amd64 or arm64.
 // The Go port does not load a .node prebuild; the helper calls the GOOS np* functions.
 func GetNativePlatformHelper() npNativePlatformHelper {
-	panic("unported: GetNativePlatformHelper")
+	platform := npCurrentPlatform()
+	if platform != "darwin" && platform != "win32" {
+		return nil
+	}
+	helper := npLoadNativePlatformHelper(platform, "")
+	if h, ok := helper.(npNativePlatformHelper); ok {
+		return h
+	}
+	return nil
 }
 
 // GetNativeClipboard returns the clipboard helper.
@@ -61,7 +75,21 @@ func GetNativePlatformHelper() npNativePlatformHelper {
 // Darwin and Windows return GetNativePlatformHelper. Linux returns the X11 helper when DISPLAY
 // is set, and nil otherwise (Wayland paste uses wl-paste). Other GOOS values are nil.
 func GetNativeClipboard() NativeClipboard {
-	panic("unported: GetNativeClipboard")
+	platform := npCurrentPlatform()
+	if platform == "darwin" || platform == "win32" {
+		h := GetNativePlatformHelper()
+		if h == nil {
+			return nil
+		}
+		return h
+	}
+	if platform == "linux" {
+		if os.Getenv("DISPLAY") == "" {
+			return nil
+		}
+		return npLoadNativePlatformHelper("linux", "-x11")
+	}
+	return nil
 }
 
 // npLoadNativePlatformHelper returns the cached helper for platform and suffix.
@@ -70,6 +98,44 @@ func GetNativeClipboard() NativeClipboard {
 // Only amd64 and arm64 are supported. This does not load a .node binary.
 // Darwin and Windows values also implement npNativePlatformHelper. Windows values implement
 // npVirtualTerminalInput. Darwin values implement NativeClipboardFilePaths. Linux values do not.
+var (
+	npMu          sync.Mutex
+	npHelperCache = make(map[string]NativeClipboard)
+)
+
+func npCurrentPlatform() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "win32"
+	default:
+		return runtime.GOOS
+	}
+}
+
 func npLoadNativePlatformHelper(platform string, suffix string) NativeClipboard {
-	panic("unported: npLoadNativePlatformHelper")
+	if platform == "" {
+		platform = npCurrentPlatform()
+		if suffix == "" && platform == "linux" {
+			suffix = "-x11"
+		}
+	}
+	key := platform + "\x00" + suffix
+
+	npMu.Lock()
+	if cached, ok := npHelperCache[key]; ok {
+		npMu.Unlock()
+		return cached
+	}
+	npMu.Unlock()
+
+	helper := npPlatformNewHelper(platform, suffix)
+
+	npMu.Lock()
+	if cached, ok := npHelperCache[key]; ok {
+		npMu.Unlock()
+		return cached
+	}
+	npHelperCache[key] = helper
+	npMu.Unlock()
+	return helper
 }

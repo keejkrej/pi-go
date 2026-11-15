@@ -2,6 +2,7 @@ package xspawn
 
 import (
 	"os"
+	"runtime"
 	"strings"
 )
 
@@ -438,6 +439,9 @@ func winResolve(cwd string, elem ...string) string {
 			prs := []rune(path)
 			sep0 := len(prs) > 0 && isPathSep(prs[0])
 			if len(elem) == 0 || (len(elem) == 1 && (elem[0] == "" || elem[0] == ".") && sep0) {
+				if runtime.GOOS != "windows" {
+					path = strings.ReplaceAll(path, "/", `\`)
+				}
 				return path
 			}
 		} else {

@@ -2,6 +2,15 @@
 
 package tui
 
+import (
+	"math"
+	"regexp"
+	"strconv"
+	"strings"
+
+	"github.com/keejkrej/pi-go/internal/js"
+)
+
 // RgbColor is an sRGB triple. Channels may be fractional; OSC parsing stores rounded integers.
 type RgbColor struct {
 	R float64 `json:"r"`
@@ -28,12 +37,62 @@ type TerminalColors struct {
 }
 
 func tcHexToRgb(hex string) RgbColor {
-	panic("unported: tcHexToRgb")
+	normalized := hex
+	if strings.HasPrefix(normalized, "#") {
+		normalized = normalized[1:]
+	}
+	r, _ := strconv.ParseInt(normalized[0:2], 16, 64)
+	g, _ := strconv.ParseInt(normalized[2:4], 16, 64)
+	b, _ := strconv.ParseInt(normalized[4:6], 16, 64)
+	return RgbColor{R: float64(r), G: float64(g), B: float64(b)}
 }
+
+var (
+	tcHexPattern             = regexp.MustCompile(`(?i)^[0-9a-f]+$`)
+	tcHex6Pattern            = regexp.MustCompile(`(?i)^[0-9a-f]{6}$`)
+	tcHex12Pattern           = regexp.MustCompile(`(?i)^[0-9a-f]{12}$`)
+	tcRgbaPrefixPattern      = regexp.MustCompile(`(?i)^rgba?:`)
+	tcOscColorResponseRegex  = regexp.MustCompile(tcOscColorResponsePattern)
+	tcColorSchemeReportRegex = regexp.MustCompile(tcColorSchemeReportPattern)
+)
 
 // tcParseOscHexChannel parses one OSC hex channel. Nil means the channel is not hex.
 func tcParseOscHexChannel(channel string) *int {
-	panic("unported: tcParseOscHexChannel")
+	if !tcHexPattern.MatchString(channel) {
+		return nil
+	}
+	maxVal := math.Pow(16, float64(len(channel))) - 1
+	if maxVal <= 0 {
+		return nil
+	}
+	var parsed float64
+	if len(channel) <= 13 {
+		v, err := strconv.ParseUint(channel, 16, 64)
+		if err != nil {
+			return nil
+		}
+		parsed = float64(v)
+	} else {
+		for i := 0; i < len(channel); i++ {
+			c := channel[i]
+			var digit float64
+			switch {
+			case c >= '0' && c <= '9':
+				digit = float64(c - '0')
+			case c >= 'a' && c <= 'f':
+				digit = float64(c - 'a' + 10)
+			case c >= 'A' && c <= 'F':
+				digit = float64(c - 'A' + 10)
+			}
+			parsed = parsed*16 + digit
+		}
+	}
+	if math.IsInf(maxVal, 0) {
+		v := 0
+		return &v
+	}
+	out := int(math.Round((parsed / maxVal) * 255))
+	return &out
 }
 
 // OscColorTarget is what an OSC color reply reports: the default foreground (OSC 10),
@@ -75,15 +134,69 @@ const tcColorSchemeReportPattern = "^(?:\x1b\\[\\?997;(1|2)n)+$"
 // ParseOscColorResponse parses an OSC 10, 11, or 4 color reply.
 // Nil means data is not such a reply. A non-nil result with nil Rgb is a reply whose color did not parse.
 func ParseOscColorResponse(data string) *OscColorResponse {
-	panic("unported: ParseOscColorResponse")
+	match := tcOscColorResponseRegex.FindStringSubmatch(data)
+	if match == nil {
+		return nil
+	}
+	var target OscColorTarget
+	switch match[1] {
+	case "10":
+		target = &OscColorTargetForeground{}
+	case "11":
+		target = &OscColorTargetBackground{}
+	default:
+		idx, _ := strconv.Atoi(match[2])
+		target = &OscColorTargetIndex{Index: idx}
+	}
+	return &OscColorResponse{
+		Target: target,
+		Rgb:    tcParseOscColorValue(match[3]),
+	}
 }
 
 func tcParseOscColorValue(rawValue string) *RgbColor {
-	panic("unported: tcParseOscColorValue")
+	value := js.Trim(rawValue)
+	if strings.HasPrefix(value, "#") {
+		hex := value[1:]
+		if tcHex6Pattern.MatchString(hex) {
+			rgb := tcHexToRgb(value)
+			return &rgb
+		}
+		if tcHex12Pattern.MatchString(hex) {
+			r := tcParseOscHexChannel(hex[0:4])
+			g := tcParseOscHexChannel(hex[4:8])
+			b := tcParseOscHexChannel(hex[8:12])
+			if r != nil && g != nil && b != nil {
+				return &RgbColor{R: float64(*r), G: float64(*g), B: float64(*b)}
+			}
+		}
+		return nil
+	}
+
+	rgbValue := tcRgbaPrefixPattern.ReplaceAllString(value, "")
+	parts := strings.Split(rgbValue, "/")
+	if len(parts) < 3 {
+		return nil
+	}
+	r := tcParseOscHexChannel(parts[0])
+	g := tcParseOscHexChannel(parts[1])
+	b := tcParseOscHexChannel(parts[2])
+	if r != nil && g != nil && b != nil {
+		return &RgbColor{R: float64(*r), G: float64(*g), B: float64(*b)}
+	}
+	return nil
 }
 
 // ParseTerminalColorSchemeReport parses a DECRPM color-scheme report.
 // Nil means data is not a report. The returned scheme is "light" for mode 2 and "dark" otherwise.
 func ParseTerminalColorSchemeReport(data string) *TerminalColorScheme {
-	panic("unported: ParseTerminalColorSchemeReport")
+	match := tcColorSchemeReportRegex.FindStringSubmatch(data)
+	if match == nil {
+		return nil
+	}
+	scheme := TerminalColorSchemeDark
+	if match[1] == "2" {
+		scheme = TerminalColorSchemeLight
+	}
+	return &scheme
 }

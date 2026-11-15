@@ -15,23 +15,38 @@ type MouseRegion struct {
 // NewMouseRegion returns a region that forwards render and invalidate to child
 // and handles mouse events with onMouse after the child declines them.
 func NewMouseRegion(child Component, onMouse MouseRegionHandler) *MouseRegion {
-	panic("unported: NewMouseRegion")
+	return &MouseRegion{
+		child:   child,
+		onMouse: onMouse,
+	}
 }
 
 // Render returns the child render.
 func (m *MouseRegion) Render(width int) []string {
-	panic("unported: MouseRegion.Render")
+	return m.child.Render(width)
 }
 
 // HandleMouse offers the event to the child, then to onMouse.
 // The TypeScript return may be a TuiMouseDispatchResult; this signature matches the other component skeletons.
 func (m *MouseRegion) HandleMouse(event TuiMouseEvent) *TuiMouseEventResult {
-	panic("unported: MouseRegion.HandleMouse")
+	if childResult := DispatchMouseEvent(m.child, event); childResult != nil {
+		handled := childResult.Handled
+		return &TuiMouseEventResult{
+			Handled: &handled,
+			Capture: childResult.Capture,
+			Focus:   childResult.Focus,
+			Render:  childResult.Render,
+		}
+	}
+	if m.onMouse != nil {
+		return m.onMouse(event)
+	}
+	return nil
 }
 
 // Invalidate invalidates the child.
 func (m *MouseRegion) Invalidate() {
-	panic("unported: MouseRegion.Invalidate")
+	m.child.Invalidate()
 }
 
 var _ Component = (*MouseRegion)(nil)

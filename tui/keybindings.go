@@ -1,8 +1,9 @@
-// Ported from packages/tui/src/keybindings.ts (pi v1.0.0).
+// Ported from packages/tui/src/keybindings.ts (pi v1.5.2).
 
 package tui
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/keejkrej/pi-go/internal/omap"
@@ -113,62 +114,229 @@ type KeybindingsManager struct {
 	conflicts    []KeybindingConflict
 }
 
+func keybNormalizeKeys(keys *KeybindingKeys) []KeyId {
+	if keys == nil {
+		return []KeyId{}
+	}
+	if keys.Single != nil {
+		return []KeyId{*keys.Single}
+	}
+	seen := make(map[KeyId]struct{}, len(keys.Keys))
+	result := make([]KeyId, 0, len(keys.Keys))
+	for _, key := range keys.Keys {
+		if _, ok := seen[key]; !ok {
+			seen[key] = struct{}{}
+			result = append(result, key)
+		}
+	}
+	return result
+}
+
 // NewKeybindingsManager builds a manager. Nil userBindings means no user config.
 func NewKeybindingsManager(definitions KeybindingDefinitions, userBindings KeybindingsConfig) *KeybindingsManager {
-	panic("unported: NewKeybindingsManager")
+	if definitions == nil {
+		definitions = omap.NewMap[string, *KeybindingDefinition]()
+	}
+	if userBindings == nil {
+		userBindings = omap.NewMap[string, *KeybindingKeys]()
+	}
+	m := &KeybindingsManager{
+		definitions:  definitions,
+		userBindings: userBindings,
+		keysById:     make(map[Keybinding][]KeyId),
+	}
+	m.rebuild()
+	return m
 }
 
 func (m *KeybindingsManager) rebuild() {
-	panic("unported: KeybindingsManager.rebuild")
+	m.keysById = make(map[Keybinding][]KeyId)
+	m.conflicts = nil
+
+	userClaims := omap.NewMap[KeyId, *omap.Map[Keybinding, struct{}]]()
+	for _, keybinding := range m.userBindings.Keys() {
+		if _, ok := m.definitions.Get(keybinding); !ok {
+			continue
+		}
+		keys, _ := m.userBindings.Get(keybinding)
+		for _, key := range keybNormalizeKeys(keys) {
+			claimants, ok := userClaims.Get(key)
+			if !ok {
+				claimants = omap.NewMap[Keybinding, struct{}]()
+				userClaims.Set(key, claimants)
+			}
+			claimants.Set(Keybinding(keybinding), struct{}{})
+		}
+	}
+
+	for _, key := range userClaims.Keys() {
+		claimants, _ := userClaims.Get(key)
+		if claimants.Len() > 1 {
+			ids := make([]string, 0, claimants.Len())
+			for _, kb := range claimants.Keys() {
+				ids = append(ids, string(kb))
+			}
+			m.conflicts = append(m.conflicts, KeybindingConflict{
+				Key:         key,
+				Keybindings: ids,
+			})
+		}
+	}
+
+	for _, id := range m.definitions.Keys() {
+		def, _ := m.definitions.Get(id)
+		if def == nil {
+			continue
+		}
+		userKeys, hasUser := m.userBindings.Get(id)
+		var keys []KeyId
+		if !hasUser || userKeys == nil {
+			keys = keybNormalizeKeys(&def.DefaultKeys)
+		} else {
+			keys = keybNormalizeKeys(userKeys)
+		}
+		m.keysById[Keybinding(id)] = keys
+	}
 }
 
 // Matches reports whether data matches any key bound to keybinding.
 func (m *KeybindingsManager) Matches(data string, keybinding Keybinding) bool {
-	panic("unported: KeybindingsManager.Matches")
+	m.mu.Lock()
+	keys := m.keysById[keybinding]
+	m.mu.Unlock()
+	for _, key := range keys {
+		if MatchesKey(data, key) {
+			return true
+		}
+	}
+	return false
 }
 
 // GetKeys returns a copy of the keys bound to keybinding.
 func (m *KeybindingsManager) GetKeys(keybinding Keybinding) []KeyId {
-	panic("unported: KeybindingsManager.GetKeys")
+	m.mu.Lock()
+	keys := m.keysById[keybinding]
+	m.mu.Unlock()
+	if len(keys) == 0 {
+		return []KeyId{}
+	}
+	return slices.Clone(keys)
 }
 
 // GetDefinition returns the definition for keybinding. Nil if it is not in the table.
 func (m *KeybindingsManager) GetDefinition(keybinding Keybinding) *KeybindingDefinition {
-	panic("unported: KeybindingsManager.GetDefinition")
+	m.mu.Lock()
+	def, _ := m.definitions.Get(string(keybinding))
+	m.mu.Unlock()
+	return def
 }
 
 // GetConflicts returns a copy of user-binding conflicts.
 func (m *KeybindingsManager) GetConflicts() []KeybindingConflict {
-	panic("unported: KeybindingsManager.GetConflicts")
+	m.mu.Lock()
+	out := make([]KeybindingConflict, len(m.conflicts))
+	for i, c := range m.conflicts {
+		out[i] = KeybindingConflict{
+			Key:         c.Key,
+			Keybindings: slices.Clone(c.Keybindings),
+		}
+	}
+	m.mu.Unlock()
+	return out
 }
 
 // SetUserBindings replaces the user config and rebuilds.
 func (m *KeybindingsManager) SetUserBindings(userBindings KeybindingsConfig) {
-	panic("unported: KeybindingsManager.SetUserBindings")
+	if userBindings == nil {
+		userBindings = omap.NewMap[string, *KeybindingKeys]()
+	}
+	m.mu.Lock()
+	m.userBindings = userBindings
+	m.rebuild()
+	m.mu.Unlock()
 }
 
 // GetUserBindings returns a shallow copy of the user config.
 func (m *KeybindingsManager) GetUserBindings() KeybindingsConfig {
-	panic("unported: KeybindingsManager.GetUserBindings")
+	m.mu.Lock()
+	out := omap.NewMap[string, *KeybindingKeys]()
+	if m.userBindings != nil {
+		for _, k := range m.userBindings.Keys() {
+			v, _ := m.userBindings.Get(k)
+			out.Set(k, v)
+		}
+	}
+	m.mu.Unlock()
+	return out
 }
 
 // GetResolvedBindings returns the effective keys for every defined action.
 // One key is the string form; any other length, including zero, is the array form.
 func (m *KeybindingsManager) GetResolvedBindings() KeybindingsConfig {
-	panic("unported: KeybindingsManager.GetResolvedBindings")
+	m.mu.Lock()
+	resolved := omap.NewMap[string, *KeybindingKeys]()
+	if m.definitions != nil {
+		for _, id := range m.definitions.Keys() {
+			keys := m.keysById[Keybinding(id)]
+			if len(keys) == 1 {
+				k := keys[0]
+				resolved.Set(id, &KeybindingKeys{Single: &k})
+			} else {
+				cp := make([]KeyId, len(keys))
+				copy(cp, keys)
+				resolved.Set(id, &KeybindingKeys{Keys: cp})
+			}
+		}
+	}
+	m.mu.Unlock()
+	return resolved
 }
 
-// keybGlobal is the process-wide manager. Nil until SetKeybindings or GetKeybindings.
-var keybGlobal *KeybindingsManager
+var (
+	keybMu sync.Mutex
+	// keybGlobal is the process-wide manager. Nil until SetKeybindings or GetKeybindings.
+	keybGlobal *KeybindingsManager
+)
 
 // SetKeybindings installs the process-wide manager.
 func SetKeybindings(keybindings *KeybindingsManager) {
-	panic("unported: SetKeybindings")
+	keybMu.Lock()
+	keybGlobal = keybindings
+	keybMu.Unlock()
 }
 
 // GetKeybindings returns the process-wide manager, creating one from TuiKeybindings on first use.
 func GetKeybindings() *KeybindingsManager {
-	panic("unported: GetKeybindings")
+	keybMu.Lock()
+	if keybGlobal == nil {
+		keybGlobal = NewKeybindingsManager(TuiKeybindings, nil)
+	}
+	mgr := keybGlobal
+	keybMu.Unlock()
+	return mgr
+}
+
+// GetSelectPageIndex returns the selection index after a tui.select.pageUp or
+// tui.select.pageDown key, moved by pageSize and clamped to 0..itemCount-1.
+// Nil means data is not a selection page key, and 0 is returned for a page key on
+// an empty list, so callers must still check that the list has items before selecting.
+func GetSelectPageIndex(keybindings *KeybindingsManager, data string, selectedIndex, itemCount, pageSize int) *int {
+	var direction int
+	if keybindings.Matches(data, KeybindingTuiSelectPageUp) {
+		direction = -1
+	} else if keybindings.Matches(data, KeybindingTuiSelectPageDown) {
+		direction = 1
+	} else {
+		return nil
+	}
+	idx := selectedIndex + direction*pageSize
+	if idx > itemCount-1 {
+		idx = itemCount - 1
+	}
+	if idx < 0 {
+		idx = 0
+	}
+	return &idx
 }
 
 func keybTuiKeybindings() KeybindingDefinitions {
@@ -206,11 +374,11 @@ func keybTuiKeybindings() KeybindingDefinitions {
 		Description: keybDesc("Move cursor word right"),
 	})
 	m.Set(string(KeybindingTuiEditorCursorLineStart), &KeybindingDefinition{
-		DefaultKeys: keybMany("home", "ctrl+home", "ctrl+a"),
+		DefaultKeys: keybMany("home", "ctrl+a"),
 		Description: keybDesc("Move to line start"),
 	})
 	m.Set(string(KeybindingTuiEditorCursorLineEnd), &KeybindingDefinition{
-		DefaultKeys: keybMany("end", "ctrl+end", "ctrl+e"),
+		DefaultKeys: keybMany("end", "ctrl+e"),
 		Description: keybDesc("Move to line end"),
 	})
 	m.Set(string(KeybindingTuiEditorJumpForward), &KeybindingDefinition{
@@ -355,11 +523,11 @@ func keybTuiKeybindings() KeybindingDefinitions {
 		Description: keybDesc("Close transcript search"),
 	})
 	m.Set(string(KeybindingTuiAltScreenTop), &KeybindingDefinition{
-		DefaultKeys: keybOne("home"),
+		DefaultKeys: keybOne("ctrl+home"),
 		Description: keybDesc("Scroll viewport to top"),
 	})
 	m.Set(string(KeybindingTuiAltScreenBottom), &KeybindingDefinition{
-		DefaultKeys: keybOne("end"),
+		DefaultKeys: keybOne("ctrl+end"),
 		Description: keybDesc("Scroll viewport to bottom"),
 	})
 	return m

@@ -1,6 +1,8 @@
 package typebox
 
 import (
+	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 
@@ -348,4 +350,156 @@ func TestNilCompileMutate(t *testing.T) {
 func mustGet(o *jsonx.Object, k string) any {
 	v, _ := o.Get(k)
 	return v
+}
+
+func TestSchemaUnmarshalJSON(t *testing.T) {
+	t.Run("object schema preserves order and compiles", func(t *testing.T) {
+		props := omap.NewMap[string, *Schema]()
+		props.Set("zeta", String())
+		props.Set("alpha", Optional(Integer()))
+		orig := Object(props)
+
+		raw, err := jsonx.Marshal(orig)
+		if err != nil {
+			t.Fatalf("Marshal failed: %v", err)
+		}
+
+		var decoded *Schema
+		if err := jsonx.Unmarshal(raw, &decoded); err != nil {
+			t.Fatalf("Unmarshal object schema failed: %v", err)
+		}
+		if decoded == nil || decoded.Object == nil || decoded.boolSchema != nil {
+			t.Fatalf("unexpected decoded schema state: %+v", decoded)
+		}
+		if got, want := jsonx.MustStringify(decoded), string(raw); got != want {
+			t.Fatalf("key-order roundtrip mismatch:\n got %s\nwant %s", got, want)
+		}
+
+		v, err := Compile(decoded)
+		if err != nil {
+			t.Fatalf("Compile decoded schema failed: %v", err)
+		}
+		valid := jsonx.ObjectOf("zeta", "ok", "alpha", float64(7))
+		if !v.Check(valid) {
+			t.Fatalf("expected decoded schema to validate %v, errs=%v", valid, v.Errors(valid))
+		}
+		invalid := jsonx.ObjectOf("zeta", float64(1))
+		if v.Check(invalid) {
+			t.Fatalf("expected decoded schema to reject invalid payload")
+		}
+	})
+
+	t.Run("boolean schemas", func(t *testing.T) {
+		for _, tc := range []struct {
+			raw     string
+			want    string
+			validOk bool
+		}{
+			{raw: "true", want: "true", validOk: true},
+			{raw: "false", want: "false", validOk: false},
+		} {
+			var decoded *Schema
+			if err := jsonx.Unmarshal([]byte(tc.raw), &decoded); err != nil {
+				t.Fatalf("Unmarshal(%s) failed: %v", tc.raw, err)
+			}
+			if decoded == nil || decoded.boolSchema == nil || decoded.Object != nil {
+				t.Fatalf("unexpected boolean schema %s: %+v", tc.raw, decoded)
+			}
+			if got := jsonx.MustStringify(decoded); got != tc.want {
+				t.Fatalf("boolean roundtrip %s got %s", tc.raw, got)
+			}
+			if got := Check(decoded, jsonx.ObjectOf("a", "b")); got != tc.validOk {
+				t.Fatalf("Check(%s) got %v want %v", tc.raw, got, tc.validOk)
+			}
+		}
+
+		// Re-unmarshaling an object onto an existing boolean schema clears boolSchema.
+		var reused Schema
+		if err := jsonx.Unmarshal([]byte("false"), &reused); err != nil {
+			t.Fatalf("Unmarshal(false) failed: %v", err)
+		}
+		if err := jsonx.Unmarshal([]byte(`{"type":"string"}`), &reused); err != nil {
+			t.Fatalf("Unmarshal(object onto bool schema) failed: %v", err)
+		}
+		if reused.boolSchema != nil || reused.Object == nil || jsonx.MustStringify(&reused) != `{"type":"string"}` {
+			t.Fatalf("expected reused schema to become object, got %s (bool=%v)", jsonx.MustStringify(&reused), reused.boolSchema)
+		}
+
+		// Re-unmarshaling a boolean onto an existing object schema clears Object.
+		if err := jsonx.Unmarshal([]byte("true"), &reused); err != nil {
+			t.Fatalf("Unmarshal(true onto object schema) failed: %v", err)
+		}
+		if reused.boolSchema == nil || !*reused.boolSchema || reused.Object != nil || jsonx.MustStringify(&reused) != "true" {
+			t.Fatalf("expected reused schema to become true, got %s", jsonx.MustStringify(&reused))
+		}
+	})
+
+	t.Run("null and nil pointer handling", func(t *testing.T) {
+		type holder struct {
+			Params *Schema `json:"params"`
+		}
+		h := holder{Params: String()}
+		if err := jsonx.Unmarshal([]byte(`{"params":null}`), &h); err != nil {
+			t.Fatalf("Unmarshal(null field) failed: %v", err)
+		}
+		if h.Params != nil {
+			t.Fatalf("expected nil pointer field after null, got %+v", h.Params)
+		}
+
+		existing := String()
+		if err := existing.UnmarshalJSON([]byte("null")); err != nil {
+			t.Fatalf("direct UnmarshalJSON(null) failed: %v", err)
+		}
+		if jsonx.MustStringify(existing) != `{"type":"string"}` {
+			t.Fatalf("expected direct UnmarshalJSON(null) to leave Schema unchanged, got %s", jsonx.MustStringify(existing))
+		}
+
+		var nilSchema *Schema
+		if err := nilSchema.UnmarshalJSON([]byte("{}")); err == nil {
+			t.Fatal("expected error calling UnmarshalJSON on nil *Schema")
+		}
+	})
+
+	t.Run("invalid JSON and non-schema JSON types", func(t *testing.T) {
+		for _, badJSON := range []string{"", "{", "[]]", "undefined"} {
+			var s *Schema
+			if err := jsonx.Unmarshal([]byte(badJSON), &s); err == nil {
+				t.Fatalf("expected syntax error for %q", badJSON)
+			}
+		}
+		for _, wrongType := range []struct {
+			raw      string
+			wantKind string
+		}{
+			{raw: `"string"`, wantKind: "string"},
+			{raw: `42`, wantKind: "number"},
+			{raw: `[1,2]`, wantKind: "array"},
+		} {
+			var s Schema
+			err := jsonx.Unmarshal([]byte(wrongType.raw), &s)
+			var ute *json.UnmarshalTypeError
+			if !errors.As(err, &ute) || ute.Value != wrongType.wantKind {
+				t.Fatalf("expected *json.UnmarshalTypeError(%s) for %s, got %v", wrongType.wantKind, wrongType.raw, err)
+			}
+		}
+	})
+
+	t.Run("embedded struct roundtrip with empty schema", func(t *testing.T) {
+		type toolLike struct {
+			Name       string  `json:"name"`
+			Parameters *Schema `json:"parameters"`
+		}
+		in := toolLike{Name: "emptyObj", Parameters: &Schema{}}
+		raw, err := jsonx.Marshal(in)
+		if err != nil {
+			t.Fatalf("Marshal toolLike failed: %v", err)
+		}
+		var out toolLike
+		if err := jsonx.Unmarshal(raw, &out); err != nil {
+			t.Fatalf("Unmarshal toolLike failed: %v", err)
+		}
+		if out.Name != "emptyObj" || out.Parameters == nil || out.Parameters.Object == nil || jsonx.MustStringify(out.Parameters) != "{}" {
+			t.Fatalf("unexpected roundtrip toolLike: %+v", out)
+		}
+	})
 }

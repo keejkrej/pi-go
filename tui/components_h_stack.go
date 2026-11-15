@@ -12,12 +12,65 @@ type HStack struct {
 
 // NewHStack returns a horizontal stack.
 func NewHStack(children []StackChild, options *StackOptions) *HStack {
-	panic("unported: NewHStack")
+	h := &HStack{}
+	cstInitStack(&h.Stack, LayoutNodeTypeHstack, children, options)
+	return h
 }
 
 // Render draws the visible children left to right at the stack's cross-axis alignment.
 func (h *HStack) Render(width int) []string {
-	panic("unported: HStack.Render")
+	safeWidth := max(1, width)
+	viewport := LayoutViewport{Width: safeWidth, Height: cstMaxSafeInteger}
+	entries := VisibleStackEntries(h.entries, viewport)
+	if len(entries) == 0 {
+		return []string{}
+	}
+
+	intrinsicWidths := make([]int, len(entries))
+	for i, entry := range entries {
+		lines := entry.Component.Render(safeWidth)
+		maxW := 0
+		for _, line := range lines {
+			if w := VisibleWidth(line); w > maxW {
+				maxW = w
+			}
+		}
+		intrinsicWidths[i] = maxW
+	}
+	widths := AllocateStackSizes(entries, intrinsicWidths, &safeWidth, h.gap)
+	rendered := make([][]string, len(entries))
+	height := 0
+	for i, entry := range entries {
+		if widths[i] == 0 {
+			rendered[i] = []string{}
+		} else {
+			rendered[i] = entry.Component.Render(widths[i])
+		}
+		if len(rendered[i]) > height {
+			height = len(rendered[i])
+		}
+	}
+	result := make([]string, height)
+	x := 0
+	for i, lines := range rendered {
+		childWidth := widths[i]
+		offset := 0
+		switch h.align {
+		case StackLayoutAlignCenter:
+			offset = (height - len(lines)) / 2
+		case StackLayoutAlignEnd:
+			offset = height - len(lines)
+		}
+		for row, line := range lines {
+			target := row + offset
+			if target < 0 || target >= len(result) {
+				continue
+			}
+			result[target] = CompositeTuiLine(result[target], line, x, childWidth, safeWidth)
+		}
+		x += childWidth + h.gap
+	}
+	return result
 }
 
 var (

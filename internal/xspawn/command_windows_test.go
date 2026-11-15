@@ -219,7 +219,34 @@ func TestPlanMatchesNodeParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	parseJS := `C:\Users\ctyja\workspace\pi\node_modules\cross-spawn\lib\parse.js`
+	parseJS := ""
+	{
+		home, _ := os.UserHomeDir()
+		var cands []string
+		for _, env := range []struct{ key, sub string }{
+			{"CROSS_SPAWN_PARSE_JS", ""},
+			{"PI_REPO_DIR", filepath.Join("node_modules", "cross-spawn", "lib", "parse.js")},
+			{"PI_DIR", filepath.Join("node_modules", "cross-spawn", "lib", "parse.js")},
+		} {
+			if v := os.Getenv(env.key); v != "" {
+				if env.sub != "" {
+					cands = append(cands, filepath.Join(v, env.sub))
+				} else {
+					cands = append(cands, v)
+				}
+			}
+		}
+		if home != "" {
+			cands = append(cands, filepath.Join(home, "workspace", "pi", "node_modules", "cross-spawn", "lib", "parse.js"))
+		}
+		cands = append(cands, filepath.Join("/Users/jack", "workspace", "pi", "node_modules", "cross-spawn", "lib", "parse.js"))
+		for _, c := range cands {
+			if _, err := os.Stat(c); err == nil {
+				parseJS = c
+				break
+			}
+		}
+	}
 	if _, err := os.Stat(parseJS); err != nil {
 		t.Skip(err)
 	}

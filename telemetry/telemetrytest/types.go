@@ -1,14 +1,18 @@
-// Ported from packages/telemetry/src/testing/types.ts (pi v1.0.0).
+// Ported from packages/telemetry/src/testing/types.ts (pi v1.5.2).
 
 package telemetrytest
 
 import "github.com/keejkrej/pi-go/telemetry"
 
 // TelemetryAdapterFixture is a fresh adapter instance and normalized snapshot reader owned by one conformance case.
+// Optional Propagation/Metrics/GetMetrics fields may be nil when an adapter does not support those capabilities.
 // AsyncDispose is Symbol.asyncDispose. Nil AsyncDispose means the fixture has nothing to release.
 type TelemetryAdapterFixture struct {
 	Context      telemetry.TelemetryContext
+	Propagation  telemetry.TelemetryPropagation
+	Metrics      telemetry.TelemetryMetrics
 	GetSpans     func() ([]telemetry.RecordedTelemetrySpan, error)
+	GetMetrics   func() ([]telemetry.RecordedTelemetryMeasurement, error)
 	AsyncDispose func() error
 }
 

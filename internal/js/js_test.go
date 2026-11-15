@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -315,8 +316,16 @@ func TestDate_GapAndOverlapUseOffsetBeforeTransition(t *testing.T) {
 }
 
 func TestParseInt_LeadingZerosUseV8ChunkBoundary(t *testing.T) {
-	// Node 24 parseInt on x64. Leading zeros change the 32-bit chunk split for
-	// a generic radix; the bits below are the trimmed-digit result.
+	// Node 24 parseInt. Leading zeros change the 32-bit chunk split for a
+	// generic radix; the bits below are the trimmed-digit result. Non-x86
+	// architectures (e.g. arm64) use FMA during 32-bit chunk accumulation.
+	fma := runtime.GOARCH != "amd64" && runtime.GOARCH != "386"
+	bits6A := uint64(0x43537be29597ffff)
+	bits6B := uint64(0x44a674d53220093d)
+	if fma {
+		bits6A = 0x43537be295980000
+		bits6B = 0x44a674d53220093c
+	}
 	cases := []struct {
 		radix int
 		s     string
@@ -326,8 +335,8 @@ func TestParseInt_LeadingZerosUseV8ChunkBoundary(t *testing.T) {
 		{3, "00" + "1010101010101010101010101010101010101010", 0x43cfa2a1cf67b5fc},
 		{3, strings.Repeat("0", 8) + strings.Repeat("1", 80), 0x47cbccbc7be2c629},
 		{3, "-" + strings.Repeat("0", 3) + strings.Repeat("1", 40), 0xc3d517168a4523fd},
-		{6, "0" + strings.Repeat("5", 21), 0x43537be29597ffff},
-		{6, "0123450123450123450123450123450", 0x44a674d53220093d},
+		{6, "0" + strings.Repeat("5", 21), bits6A},
+		{6, "0123450123450123450123450123450", bits6B},
 		{36, "0" + strings.Repeat("z", 20), 0x466517168a4523fd},
 		{36, "00" + strings.Repeat("z", 12), 0x43d070872e384000},
 		{11, "0" + strings.Repeat("a", 30), 0x466b87c1e83d2037},

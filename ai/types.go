@@ -1,9 +1,10 @@
-// Ported from packages/ai/src/types.ts (pi v1.0.0).
+// Ported from packages/ai/src/types.ts (pi v1.5.2).
 
 package ai
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
 
@@ -30,16 +31,16 @@ type Api string
 type KnownApi = Api
 
 const (
-	KnownApiOpenaiCompletions    KnownApi = "openai-completions"
-	KnownApiMistralConversations KnownApi = "mistral-conversations"
-	KnownApiOpenaiResponses      KnownApi = "openai-responses"
-	KnownApiAzureOpenaiResponses KnownApi = "azure-openai-responses"
-	KnownApiOpenaiCodexResponses KnownApi = "openai-codex-responses"
-	KnownApiAnthropicMessages    KnownApi = "anthropic-messages"
+	KnownApiOpenaiCompletions     KnownApi = "openai-completions"
+	KnownApiMistralConversations  KnownApi = "mistral-conversations"
+	KnownApiOpenaiResponses       KnownApi = "openai-responses"
+	KnownApiAzureOpenaiResponses  KnownApi = "azure-openai-responses"
+	KnownApiOpenaiCodexResponses  KnownApi = "openai-codex-responses"
+	KnownApiAnthropicMessages     KnownApi = "anthropic-messages"
 	KnownApiBedrockConverseStream KnownApi = "bedrock-converse-stream"
-	KnownApiGoogleGenerativeAi   KnownApi = "google-generative-ai"
-	KnownApiGoogleVertex         KnownApi = "google-vertex"
-	KnownApiPiMessages           KnownApi = "pi-messages"
+	KnownApiGoogleGenerativeAi    KnownApi = "google-generative-ai"
+	KnownApiGoogleVertex          KnownApi = "google-vertex"
+	KnownApiPiMessages            KnownApi = "pi-messages"
 )
 
 // ImageApi is an open image-generation API id.
@@ -60,6 +61,7 @@ const (
 	KnownClassifierApiTypesafeSystemOne            KnownClassifierApi = "typesafe-system-one"
 	KnownClassifierApiCloudflareWorkersAiSystemOne KnownClassifierApi = "cloudflare-workers-ai-system-one"
 	KnownClassifierApiLlamaCppClassify             KnownClassifierApi = "llama-cpp-classify"
+	KnownClassifierApiOpenaiDecisions              KnownClassifierApi = "openai-decisions"
 )
 
 // ProviderId is a provider id, including custom ids.
@@ -75,7 +77,7 @@ const (
 	KnownProviderGoogle                    KnownProvider = "google"
 	KnownProviderGoogleVertex              KnownProvider = "google-vertex"
 	KnownProviderOpenai                    KnownProvider = "openai"
-	KnownProviderAzureOpenaiResponses      KnownProvider = "azure-openai-responses"
+	KnownProviderAzure                     KnownProvider = "azure"
 	KnownProviderOpenaiCodex               KnownProvider = "openai-codex"
 	KnownProviderRadius                    KnownProvider = "radius"
 	KnownProviderTypesafe                  KnownProvider = "typesafe"
@@ -107,6 +109,7 @@ const (
 	KnownProviderQwenTokenPlan             KnownProvider = "qwen-token-plan"
 	KnownProviderQwenTokenPlanCn           KnownProvider = "qwen-token-plan-cn"
 	KnownProviderQwenTokenPlanIndividual   KnownProvider = "qwen-token-plan-individual"
+	KnownProviderQwenTokenPlanIndividualCn KnownProvider = "qwen-token-plan-individual-cn"
 	KnownProviderXiaomi                    KnownProvider = "xiaomi"
 	KnownProviderXiaomiTokenPlanCn         KnownProvider = "xiaomi-token-plan-cn"
 	KnownProviderXiaomiTokenPlanAms        KnownProvider = "xiaomi-token-plan-ams"
@@ -120,6 +123,45 @@ const (
 	ToolChoiceAuto ToolChoice = "auto"
 	ToolChoiceNone ToolChoice = "none"
 )
+
+// SamplingParams is arbitrary sampling parameters merged into provider requests.
+type SamplingParams = *jsonx.Object
+
+// SamplingParamsByThinkingLevel maps pi thinking levels to sampling parameter overrides.
+type SamplingParamsByThinkingLevel struct {
+	Off     SamplingParams `json:"off,omitzero"`
+	Minimal SamplingParams `json:"minimal,omitzero"`
+	Low     SamplingParams `json:"low,omitzero"`
+	Medium  SamplingParams `json:"medium,omitzero"`
+	High    SamplingParams `json:"high,omitzero"`
+	Xhigh   SamplingParams `json:"xhigh,omitzero"`
+	Max     SamplingParams `json:"max,omitzero"`
+}
+
+// Get returns the sampling params configured for the given thinking level, if any.
+func (s *SamplingParamsByThinkingLevel) Get(level ModelThinkingLevel) SamplingParams {
+	if s == nil {
+		return nil
+	}
+	switch level {
+	case ModelThinkingLevelOff:
+		return s.Off
+	case ModelThinkingLevelMinimal:
+		return s.Minimal
+	case ModelThinkingLevelLow:
+		return s.Low
+	case ModelThinkingLevelMedium:
+		return s.Medium
+	case ModelThinkingLevelHigh:
+		return s.High
+	case ModelThinkingLevelXhigh:
+		return s.Xhigh
+	case ModelThinkingLevelMax:
+		return s.Max
+	default:
+		return nil
+	}
+}
 
 // ThinkingLevel is a pi reasoning effort.
 type ThinkingLevel string
@@ -207,22 +249,60 @@ type UnknownChatTemplateKwargValue struct{ Raw *jsonx.Object }
 
 func (*UnknownChatTemplateKwargValue) isChatTemplateKwargValue() {}
 
-func (*UnknownChatTemplateKwargValue) MarshalJSON() ([]byte, error) {
-	panic("unported: UnknownChatTemplateKwargValue.MarshalJSON")
+func (u *UnknownChatTemplateKwargValue) MarshalJSON() ([]byte, error) {
+	if u == nil || u.Raw == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(u.Raw)
 }
 
-func (*UnknownChatTemplateKwargValue) UnmarshalJSON(data []byte) error {
-	panic("unported: UnknownChatTemplateKwargValue.UnmarshalJSON")
+func (u *UnknownChatTemplateKwargValue) UnmarshalJSON(data []byte) error {
+	return typUnmarshalUnknownRaw(data, &u.Raw)
 }
 
 // UnmarshalChatTemplateKwargValue decodes one kwarg value.
 func UnmarshalChatTemplateKwargValue(data []byte) (ChatTemplateKwargValue, error) {
-	panic("unported: UnmarshalChatTemplateKwargValue")
+	v, err := jsonx.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeChatTemplateKwargValue(v)
 }
 
 // DecodeChatTemplateKwargValue decodes one kwarg value from a jsonx value.
 func DecodeChatTemplateKwargValue(v any) (ChatTemplateKwargValue, error) {
-	panic("unported: DecodeChatTemplateKwargValue")
+	switch x := v.(type) {
+	case nil:
+		return ChatTemplateKwargNull{}, nil
+	case string:
+		return ChatTemplateKwargString(x), nil
+	case float64:
+		return ChatTemplateKwargNumber(x), nil
+	case int:
+		return ChatTemplateKwargNumber(float64(x)), nil
+	case int64:
+		return ChatTemplateKwargNumber(float64(x)), nil
+	case bool:
+		return ChatTemplateKwargBool(x), nil
+	case *jsonx.Object:
+		if rawVar, ok := x.Get("$var"); ok {
+			if name, ok := rawVar.(string); ok {
+				switch ChatTemplateKwargVarName(name) {
+				case ChatTemplateKwargVarNameThinkingEnabled,
+					ChatTemplateKwargVarNameThinkingEffort,
+					ChatTemplateKwargVarNameThinkingBudget:
+					var out ChatTemplateKwargVar
+					if err := jsonx.Decode(x, &out); err != nil {
+						return nil, err
+					}
+					return &out, nil
+				}
+			}
+		}
+		return &UnknownChatTemplateKwargValue{Raw: x}, nil
+	default:
+		return nil, fmt.Errorf("invalid chat template kwarg value: %T", v)
+	}
 }
 
 // ThinkingTokenBudgetField is the request field that caps reasoning tokens.
@@ -284,9 +364,9 @@ type FetchFunction func(ctx context.Context, req *http.Request) (*http.Response,
 type SessionAffinityFormat string
 
 const (
-	SessionAffinityFormatOpenai         SessionAffinityFormat = "openai"
+	SessionAffinityFormatOpenai          SessionAffinityFormat = "openai"
 	SessionAffinityFormatOpenaiNosession SessionAffinityFormat = "openai-nosession"
-	SessionAffinityFormatOpenrouter     SessionAffinityFormat = "openrouter"
+	SessionAffinityFormatOpenrouter      SessionAffinityFormat = "openrouter"
 )
 
 // ProviderResponse is the HTTP response handed to onResponse.
@@ -300,16 +380,17 @@ type ProviderResponse struct {
 // the call, not a field. Nil HTTPClient means the process default client.
 // OnPayload returns a nil any to keep the payload unchanged.
 type ProviderRequestOptions[TModel any] struct {
-	TelemetryContext telemetry.TelemetryContext                                      `json:"-"`
-	ApiKey           *string                                                         `json:"apiKey,omitzero"`
-	HTTPClient       *http.Client                                                    `json:"-"`
-	Env              ProviderEnv                                                     `json:"env,omitzero"`
-	OnPayload        func(payload any, model *TModel) (any, error)                   `json:"-"`
-	OnResponse       func(response *ProviderResponse, model *TModel) error           `json:"-"`
-	Headers          ProviderHeaders                                                 `json:"headers,omitzero"`
-	TimeoutMs        *int64                                                          `json:"timeoutMs,omitzero"`
-	MaxRetries       *int                                                            `json:"maxRetries,omitzero"`
-	MaxRetryDelayMs  *int64                                                          `json:"maxRetryDelayMs,omitzero"`
+	TelemetryContext telemetry.TelemetryContext                            `json:"-"`
+	ApiKey           *string                                               `json:"apiKey,omitzero"`
+	HTTPClient       *http.Client                                          `json:"-"`
+	Env              ProviderEnv                                           `json:"env,omitzero"`
+	OnPayload        func(payload any, model *TModel) (any, error)         `json:"-"`
+	OnResponse       func(response *ProviderResponse, model *TModel) error `json:"-"`
+	Headers          ProviderHeaders                                       `json:"headers,omitzero"`
+	Identity         *ClientIdentity                                       `json:"identity,omitzero"`
+	TimeoutMs        *int64                                                `json:"timeoutMs,omitzero"`
+	MaxRetries       *int                                                  `json:"maxRetries,omitzero"`
+	MaxRetryDelayMs  *int64                                                `json:"maxRetryDelayMs,omitzero"`
 }
 
 // StreamOptions is the shared streaming request.
@@ -318,15 +399,16 @@ type ProviderRequestOptions[TModel any] struct {
 // 60000 at the call site; zero disables the cap.
 type StreamOptions struct {
 	ProviderRequestOptions[Model]
-	OnProviderStreamEvent    func(data any, model *Model) error `json:"-"`
-	Temperature              *float64                           `json:"temperature,omitzero"`
-	SamplingParams           *jsonx.Object                      `json:"samplingParams,omitzero"`
-	MaxTokens                *int                               `json:"maxTokens,omitzero"`
-	Transport                *Transport                         `json:"transport,omitzero"`
-	CacheRetention           *CacheRetention                    `json:"cacheRetention,omitzero"`
-	SessionId                *string                            `json:"sessionId,omitzero"`
-	WebsocketConnectTimeoutMs *int64                            `json:"websocketConnectTimeoutMs,omitzero"`
-	Metadata                 *jsonx.Object                      `json:"metadata,omitzero"`
+	OnProviderStreamEvent     func(data any, model *Model) error `json:"-"`
+	Temperature               *float64                           `json:"temperature,omitzero"`
+	SamplingParams            *jsonx.Object                      `json:"samplingParams,omitzero"`
+	MaxTokens                 *int                               `json:"maxTokens,omitzero"`
+	Transport                 *Transport                         `json:"transport,omitzero"`
+	CacheRetention            *CacheRetention                    `json:"cacheRetention,omitzero"`
+	SessionId                 *string                            `json:"sessionId,omitzero"`
+	DisableContinuation       *bool                              `json:"disableContinuation,omitzero"`
+	WebsocketConnectTimeoutMs *int64                             `json:"websocketConnectTimeoutMs,omitzero"`
+	Metadata                  *jsonx.Object                      `json:"metadata,omitzero"`
 }
 
 // BaseStreamOptions returns the embedded shared options.
@@ -353,7 +435,7 @@ type DeferredCancelOptions = ProviderRequestOptions[Model]
 // ProviderStreams is the value shape of a chat API module.
 // A nil FetchDeferred or CancelDeferred means that method is absent.
 type ProviderStreams struct {
-	Stream         func(ctx context.Context, model *Model, c *TranscriptContext, options *StreamOptions) *AssistantMessageEventStream
+	Stream         func(ctx context.Context, model *Model, c *TranscriptContext, options ProviderStreamOptions) *AssistantMessageEventStream
 	StreamSimple   func(ctx context.Context, model *Model, c *TranscriptContext, options *SimpleStreamOptions) *AssistantMessageEventStream
 	FetchDeferred  func(ctx context.Context, model *Model, handle *DeferredHandle, options *DeferredFetchOptions) *AssistantMessageEventStream
 	CancelDeferred func(ctx context.Context, model *Model, handle *DeferredHandle, options *DeferredCancelOptions) error
@@ -426,12 +508,15 @@ type UnknownSimpleStreamDeferred struct{ Raw *jsonx.Object }
 
 func (*UnknownSimpleStreamDeferred) isSimpleStreamDeferred() {}
 
-func (*UnknownSimpleStreamDeferred) MarshalJSON() ([]byte, error) {
-	panic("unported: UnknownSimpleStreamDeferred.MarshalJSON")
+func (u *UnknownSimpleStreamDeferred) MarshalJSON() ([]byte, error) {
+	if u == nil || u.Raw == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(u.Raw)
 }
 
-func (*UnknownSimpleStreamDeferred) UnmarshalJSON(data []byte) error {
-	panic("unported: UnknownSimpleStreamDeferred.UnmarshalJSON")
+func (u *UnknownSimpleStreamDeferred) UnmarshalJSON(data []byte) error {
+	return typUnmarshalUnknownRaw(data, &u.Raw)
 }
 
 // SimpleStreamDeferredValue is the JSON form of StreamOptions-level deferred.
@@ -443,21 +528,64 @@ type SimpleStreamDeferredValue struct {
 func (v SimpleStreamDeferredValue) IsZero() bool { return v.V == nil }
 
 func (v SimpleStreamDeferredValue) MarshalJSON() ([]byte, error) {
-	panic("unported: SimpleStreamDeferredValue.MarshalJSON")
+	if v.V == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(v.V)
 }
 
 func (v *SimpleStreamDeferredValue) UnmarshalJSON(data []byte) error {
-	panic("unported: SimpleStreamDeferredValue.UnmarshalJSON")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		v.V = nil
+		return nil
+	}
+	dec, err := DecodeSimpleStreamDeferred(parsed)
+	if err != nil {
+		return err
+	}
+	v.V = dec
+	return nil
 }
 
 // UnmarshalSimpleStreamDeferred decodes a deferred flag.
 func UnmarshalSimpleStreamDeferred(data []byte) (SimpleStreamDeferred, error) {
-	panic("unported: UnmarshalSimpleStreamDeferred")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeSimpleStreamDeferred(parsed)
 }
 
 // DecodeSimpleStreamDeferred decodes a deferred flag from a jsonx value.
 func DecodeSimpleStreamDeferred(v any) (SimpleStreamDeferred, error) {
-	panic("unported: DecodeSimpleStreamDeferred")
+	switch x := v.(type) {
+	case bool:
+		return SimpleStreamDeferredBool(x), nil
+	case *jsonx.Object:
+		if rawWin, hasWin := x.Get("window"); hasWin {
+			if s, ok := rawWin.(string); ok {
+				switch DeferredWindow(s) {
+				case DeferredWindow15m, DeferredWindow1h, DeferredWindow24h:
+					var out SimpleStreamDeferredWindow
+					if err := jsonx.Decode(x, &out); err != nil {
+						return nil, err
+					}
+					return &out, nil
+				}
+			}
+			return &UnknownSimpleStreamDeferred{Raw: x}, nil
+		}
+		if x.Len() == 0 {
+			return &SimpleStreamDeferredWindow{}, nil
+		}
+		return &UnknownSimpleStreamDeferred{Raw: x}, nil
+	default:
+		return nil, fmt.Errorf("invalid deferred value: %T", v)
+	}
 }
 
 // SimpleStreamOptions is the uniform request passed to streamSimple.
@@ -484,7 +612,7 @@ type ClassifierFunction func(ctx context.Context, model *ClassifierModel, contex
 type TextSignaturePhase string
 
 const (
-	TextSignaturePhaseCommentary TextSignaturePhase = "commentary"
+	TextSignaturePhaseCommentary  TextSignaturePhase = "commentary"
 	TextSignaturePhaseFinalAnswer TextSignaturePhase = "final_answer"
 )
 
@@ -535,6 +663,7 @@ type ToolCall struct {
 	Arguments        *jsonx.Object `json:"arguments"`
 	ThoughtSignature *string       `json:"thoughtSignature,omitzero"`
 	Namespace        *string       `json:"namespace,omitzero"`
+	ArgumentsError   *string       `json:"argumentsError,omitzero"`
 }
 
 func (*ToolCall) isContent() {}
@@ -544,29 +673,90 @@ type UnknownContent struct{ Raw *jsonx.Object }
 
 func (*UnknownContent) isContent() {}
 
-func (*UnknownContent) MarshalJSON() ([]byte, error) {
-	panic("unported: UnknownContent.MarshalJSON")
+func (u *UnknownContent) MarshalJSON() ([]byte, error) {
+	if u == nil || u.Raw == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(u.Raw)
 }
 
-func (*UnknownContent) UnmarshalJSON(data []byte) error {
-	panic("unported: UnknownContent.UnmarshalJSON")
+func (u *UnknownContent) UnmarshalJSON(data []byte) error {
+	return typUnmarshalUnknownRaw(data, &u.Raw)
 }
 
 // ContentList is a JSON array of content blocks.
 type ContentList []Content
 
 func (l *ContentList) UnmarshalJSON(data []byte) error {
-	panic("unported: ContentList.UnmarshalJSON")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		*l = nil
+		return nil
+	}
+	arr, ok := parsed.([]any)
+	if !ok {
+		return fmt.Errorf("expected content array, got %T", parsed)
+	}
+	out := make(ContentList, len(arr))
+	for i, elem := range arr {
+		c, err := DecodeContent(elem)
+		if err != nil {
+			return err
+		}
+		out[i] = c
+	}
+	*l = out
+	return nil
 }
 
 // UnmarshalContent decodes one content block.
 func UnmarshalContent(data []byte) (Content, error) {
-	panic("unported: UnmarshalContent")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeContent(parsed)
 }
 
 // DecodeContent decodes one content block from a jsonx value.
 func DecodeContent(v any) (Content, error) {
-	panic("unported: DecodeContent")
+	obj, ok := v.(*jsonx.Object)
+	if !ok {
+		return nil, fmt.Errorf("expected content object, got %T", v)
+	}
+	rawType, _ := obj.Get("type")
+	typ, _ := rawType.(string)
+	switch typ {
+	case "text":
+		var out TextContent
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "thinking":
+		var out ThinkingContent
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "image":
+		var out ImageContent
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "toolCall":
+		var out ToolCall
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	default:
+		return &UnknownContent{Raw: obj}, nil
+	}
 }
 
 // ImagesInputContent is a text or image block on an image request.
@@ -577,25 +767,26 @@ type ImagesOutputContent = Content
 
 // UsageCost is the dollar cost breakdown inside Usage.
 type UsageCost struct {
-	Input      float64 `json:"input"`
-	Output     float64 `json:"output"`
-	CacheRead  float64 `json:"cacheRead"`
-	CacheWrite float64 `json:"cacheWrite"`
-	Total      float64 `json:"total"`
+	Input             float64 `json:"input"`
+	Output            float64 `json:"output"`
+	CacheRead         float64 `json:"cacheRead"`
+	CacheWrite        float64 `json:"cacheWrite"`
+	Total             float64 `json:"total"`
+	TotalFromProvider *bool   `json:"totalFromProvider,omitzero"`
 }
 
 // Usage is token accounting. Token counts are integers. Cost is dollars.
 // Reasoning, when set, is a subset of Output. CacheWrite1h is the 1h portion
 // of CacheWrite and is set only when the provider reports the split.
 type Usage struct {
-	Input         int       `json:"input"`
-	Output        int       `json:"output"`
-	CacheRead     int       `json:"cacheRead"`
-	CacheWrite    int       `json:"cacheWrite"`
-	CacheWrite1h  *int      `json:"cacheWrite1h,omitzero"`
-	Reasoning     *int      `json:"reasoning,omitzero"`
-	TotalTokens   int       `json:"totalTokens"`
-	Cost          UsageCost `json:"cost"`
+	Input        int       `json:"input"`
+	Output       int       `json:"output"`
+	CacheRead    int       `json:"cacheRead"`
+	CacheWrite   int       `json:"cacheWrite"`
+	CacheWrite1h *int      `json:"cacheWrite1h,omitzero"`
+	Reasoning    *int      `json:"reasoning,omitzero"`
+	TotalTokens  int       `json:"totalTokens"`
+	Cost         UsageCost `json:"cost"`
 }
 
 // StopReason is why an assistant turn ended.
@@ -633,11 +824,17 @@ type SystemMessageContent struct {
 }
 
 func (c SystemMessageContent) MarshalJSON() ([]byte, error) {
-	panic("unported: SystemMessageContent.MarshalJSON")
+	if c.Text != nil {
+		return jsonx.Marshal(*c.Text)
+	}
+	if c.Blocks != nil {
+		return jsonx.Marshal(c.Blocks)
+	}
+	return []byte("null"), nil
 }
 
 func (c *SystemMessageContent) UnmarshalJSON(data []byte) error {
-	panic("unported: SystemMessageContent.UnmarshalJSON")
+	return typUnmarshalTextOrBlocks(data, &c.Text, &c.Blocks)
 }
 
 // UserMessageContent is a user message body: a string, or text and image blocks.
@@ -648,11 +845,17 @@ type UserMessageContent struct {
 }
 
 func (c UserMessageContent) MarshalJSON() ([]byte, error) {
-	panic("unported: UserMessageContent.MarshalJSON")
+	if c.Text != nil {
+		return jsonx.Marshal(*c.Text)
+	}
+	if c.Blocks != nil {
+		return jsonx.Marshal(c.Blocks)
+	}
+	return []byte("null"), nil
 }
 
 func (c *UserMessageContent) UnmarshalJSON(data []byte) error {
-	panic("unported: UserMessageContent.UnmarshalJSON")
+	return typUnmarshalTextOrBlocks(data, &c.Text, &c.Blocks)
 }
 
 // Message is one transcript message. The discriminator is "role".
@@ -696,23 +899,24 @@ func (*UserMessage) GetRole() string { return "user" }
 // requested. ProviderThinkingLevel is the provider-native effort.
 type AssistantMessage struct {
 	mu                    sync.Mutex
-	Role                  string                        `json:"role"`
-	Content               ContentList                   `json:"content"`
-	Api                   Api                           `json:"api"`
-	Provider              ProviderId                    `json:"provider"`
-	Model                 string                        `json:"model"`
-	ResponseModel         *string                       `json:"responseModel,omitzero"`
-	ResponseId            *string                       `json:"responseId,omitzero"`
-	ProviderThinkingLevel *string                       `json:"providerThinkingLevel,omitzero"`
-	ThinkingLevel         *ModelThinkingLevel           `json:"thinkingLevel,omitzero"`
-	Diagnostics           []AssistantMessageDiagnostic  `json:"diagnostics,omitzero"`
-	Usage                 Usage                         `json:"usage"`
-	StopReason            StopReason                    `json:"stopReason"`
-	Deferred              *DeferredHandle               `json:"deferred,omitzero"`
-	ErrorMessage          *string                       `json:"errorMessage,omitzero"`
-	RawStopReason         *string                       `json:"rawStopReason,omitzero"`
-	EndTurn               *bool                         `json:"endTurn,omitzero"`
-	Timestamp             int64                         `json:"timestamp"`
+	Role                  string                       `json:"role"`
+	Content               ContentList                  `json:"content"`
+	Api                   Api                          `json:"api"`
+	Provider              ProviderId                   `json:"provider"`
+	Model                 string                       `json:"model"`
+	ResponseModel         *string                      `json:"responseModel,omitzero"`
+	ResponseId            *string                      `json:"responseId,omitzero"`
+	ProviderThinkingLevel *string                      `json:"providerThinkingLevel,omitzero"`
+	ThinkingLevel         *ModelThinkingLevel          `json:"thinkingLevel,omitzero"`
+	Diagnostics           []AssistantMessageDiagnostic `json:"diagnostics,omitzero"`
+	Usage                 Usage                        `json:"usage"`
+	StopReason            StopReason                   `json:"stopReason"`
+	Deferred              *DeferredHandle              `json:"deferred,omitzero"`
+	ErrorMessage          *string                      `json:"errorMessage,omitzero"`
+	RawStopReason         *string                      `json:"rawStopReason,omitzero"`
+	EndTurn               *bool                        `json:"endTurn,omitzero"`
+	Timestamp             int64                        `json:"timestamp"`
+	DurationMs            *int64                       `json:"durationMs,omitzero"`
 }
 
 func (*AssistantMessage) isMessage() {}
@@ -751,15 +955,16 @@ type NestedToolCalls struct {
 // NestedCalls is session state and is not sent to the model.
 // Timestamp is epoch milliseconds.
 type ToolResultMessage struct {
-	Role       string            `json:"role"`
-	ToolCallId string            `json:"toolCallId"`
-	ToolName   string            `json:"toolName"`
-	Content    ContentList       `json:"content"`
-	Details    jsonx.Opt[any]    `json:"details,omitzero"`
-	Usage      *Usage            `json:"usage,omitzero"`
+	Role        string           `json:"role"`
+	ToolCallId  string           `json:"toolCallId"`
+	ToolName    string           `json:"toolName"`
+	Content     ContentList      `json:"content"`
+	Details     jsonx.Opt[any]   `json:"details,omitzero"`
+	Usage       *Usage           `json:"usage,omitzero"`
 	NestedCalls *NestedToolCalls `json:"nestedCalls,omitzero"`
-	IsError    bool              `json:"isError"`
-	Timestamp  int64             `json:"timestamp"`
+	IsError     bool             `json:"isError"`
+	Timestamp   int64            `json:"timestamp"`
+	DurationMs  *int64           `json:"durationMs,omitzero"`
 }
 
 func (*ToolResultMessage) isMessage() {}
@@ -771,31 +976,99 @@ type UnknownMessage struct{ Raw *jsonx.Object }
 
 func (*UnknownMessage) isMessage() {}
 
-func (*UnknownMessage) GetRole() string { panic("unported: UnknownMessage.GetRole") }
-
-func (*UnknownMessage) MarshalJSON() ([]byte, error) {
-	panic("unported: UnknownMessage.MarshalJSON")
+func (u *UnknownMessage) GetRole() string {
+	if u == nil || u.Raw == nil {
+		return ""
+	}
+	raw, _ := u.Raw.Get("role")
+	role, _ := raw.(string)
+	return role
 }
 
-func (*UnknownMessage) UnmarshalJSON(data []byte) error {
-	panic("unported: UnknownMessage.UnmarshalJSON")
+func (u *UnknownMessage) MarshalJSON() ([]byte, error) {
+	if u == nil || u.Raw == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(u.Raw)
+}
+
+func (u *UnknownMessage) UnmarshalJSON(data []byte) error {
+	return typUnmarshalUnknownRaw(data, &u.Raw)
 }
 
 // MessageList is a JSON array of messages.
 type MessageList []Message
 
 func (l *MessageList) UnmarshalJSON(data []byte) error {
-	panic("unported: MessageList.UnmarshalJSON")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		*l = nil
+		return nil
+	}
+	arr, ok := parsed.([]any)
+	if !ok {
+		return fmt.Errorf("expected message array, got %T", parsed)
+	}
+	out := make(MessageList, len(arr))
+	for i, elem := range arr {
+		m, err := DecodeMessage(elem)
+		if err != nil {
+			return err
+		}
+		out[i] = m
+	}
+	*l = out
+	return nil
 }
 
 // UnmarshalMessage decodes one message.
 func UnmarshalMessage(data []byte) (Message, error) {
-	panic("unported: UnmarshalMessage")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeMessage(parsed)
 }
 
 // DecodeMessage decodes one message from a jsonx value.
 func DecodeMessage(v any) (Message, error) {
-	panic("unported: DecodeMessage")
+	obj, ok := v.(*jsonx.Object)
+	if !ok {
+		return nil, fmt.Errorf("expected message object, got %T", v)
+	}
+	rawRole, _ := obj.Get("role")
+	role, _ := rawRole.(string)
+	switch role {
+	case "system":
+		var out SystemMessage
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "user":
+		var out UserMessage
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "assistant":
+		var out AssistantMessage
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "toolResult":
+		var out ToolResultMessage
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	default:
+		return &UnknownMessage{Raw: obj}, nil
+	}
 }
 
 // ImagesStopReason is why image generation stopped.
@@ -830,8 +1103,8 @@ type ClassifierQuestion interface{ isClassifierQuestion() }
 
 // ClassifierChoiceQuestion picks one labeled criterion.
 type ClassifierChoiceQuestion struct {
-	Type         string                   `json:"type"`
-	Instructions string                   `json:"instructions"`
+	Type         string                    `json:"type"`
+	Instructions string                    `json:"instructions"`
 	Criteria     *omap.Map[string, string] `json:"criteria"`
 }
 
@@ -866,28 +1139,96 @@ type UnknownClassifierQuestion struct{ Raw *jsonx.Object }
 
 func (*UnknownClassifierQuestion) isClassifierQuestion() {}
 
-func (*UnknownClassifierQuestion) MarshalJSON() ([]byte, error) {
-	panic("unported: UnknownClassifierQuestion.MarshalJSON")
+func (u *UnknownClassifierQuestion) MarshalJSON() ([]byte, error) {
+	if u == nil || u.Raw == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(u.Raw)
 }
 
-func (*UnknownClassifierQuestion) UnmarshalJSON(data []byte) error {
-	panic("unported: UnknownClassifierQuestion.UnmarshalJSON")
+func (u *UnknownClassifierQuestion) UnmarshalJSON(data []byte) error {
+	return typUnmarshalUnknownRaw(data, &u.Raw)
 }
 
 // UnmarshalClassifierQuestion decodes one question.
 func UnmarshalClassifierQuestion(data []byte) (ClassifierQuestion, error) {
-	panic("unported: UnmarshalClassifierQuestion")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeClassifierQuestion(parsed)
 }
 
 // DecodeClassifierQuestion decodes one question from a jsonx value.
 func DecodeClassifierQuestion(v any) (ClassifierQuestion, error) {
-	panic("unported: DecodeClassifierQuestion")
+	obj, ok := v.(*jsonx.Object)
+	if !ok {
+		return nil, fmt.Errorf("expected classifier question object, got %T", v)
+	}
+	rawType, _ := obj.Get("type")
+	typ, _ := rawType.(string)
+	switch typ {
+	case "choice":
+		var out ClassifierChoiceQuestion
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "score":
+		var out ClassifierScoreQuestion
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "bool":
+		var out ClassifierBoolQuestion
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	default:
+		return &UnknownClassifierQuestion{Raw: obj}, nil
+	}
 }
 
 // ClassifierContext is the input of a classification.
 type ClassifierContext struct {
-	State     *jsonx.Object                          `json:"state"`
+	State     *jsonx.Object                         `json:"state"`
+	Images    []*ImageContent                       `json:"images,omitzero"`
 	Questions *omap.Map[string, ClassifierQuestion] `json:"questions"`
+}
+
+func (c *ClassifierContext) UnmarshalJSON(data []byte) error {
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		*c = ClassifierContext{}
+		return nil
+	}
+	type alias ClassifierContext
+	var raw struct {
+		alias
+		Questions *jsonx.Object `json:"questions"`
+	}
+	if err := jsonx.Decode(parsed, &raw); err != nil {
+		return err
+	}
+	*c = ClassifierContext(raw.alias)
+	if raw.Questions != nil {
+		qMap := omap.NewMap[string, ClassifierQuestion]()
+		for _, k := range raw.Questions.Keys() {
+			val, _ := raw.Questions.Get(k)
+			q, err := DecodeClassifierQuestion(val)
+			if err != nil {
+				return err
+			}
+			qMap.Set(k, q)
+		}
+		c.Questions = qMap
+	}
+	return nil
 }
 
 // ClassifierAnswer is one answer. The discriminator is "type".
@@ -895,10 +1236,10 @@ type ClassifierAnswer interface{ isClassifierAnswer() }
 
 // ClassifierChoiceAnswer is a choice plus a distribution.
 type ClassifierChoiceAnswer struct {
-	Type          string                  `json:"type"`
-	Choice        string                  `json:"choice"`
+	Type          string                     `json:"type"`
+	Choice        string                     `json:"choice"`
 	Probabilities *omap.Map[string, float64] `json:"probabilities"`
-	Confidence    float64                 `json:"confidence"`
+	Confidence    float64                    `json:"confidence"`
 }
 
 func (*ClassifierChoiceAnswer) isClassifierAnswer() {}
@@ -925,22 +1266,56 @@ type UnknownClassifierAnswer struct{ Raw *jsonx.Object }
 
 func (*UnknownClassifierAnswer) isClassifierAnswer() {}
 
-func (*UnknownClassifierAnswer) MarshalJSON() ([]byte, error) {
-	panic("unported: UnknownClassifierAnswer.MarshalJSON")
+func (u *UnknownClassifierAnswer) MarshalJSON() ([]byte, error) {
+	if u == nil || u.Raw == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(u.Raw)
 }
 
-func (*UnknownClassifierAnswer) UnmarshalJSON(data []byte) error {
-	panic("unported: UnknownClassifierAnswer.UnmarshalJSON")
+func (u *UnknownClassifierAnswer) UnmarshalJSON(data []byte) error {
+	return typUnmarshalUnknownRaw(data, &u.Raw)
 }
 
 // UnmarshalClassifierAnswer decodes one answer.
 func UnmarshalClassifierAnswer(data []byte) (ClassifierAnswer, error) {
-	panic("unported: UnmarshalClassifierAnswer")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeClassifierAnswer(parsed)
 }
 
 // DecodeClassifierAnswer decodes one answer from a jsonx value.
 func DecodeClassifierAnswer(v any) (ClassifierAnswer, error) {
-	panic("unported: DecodeClassifierAnswer")
+	obj, ok := v.(*jsonx.Object)
+	if !ok {
+		return nil, fmt.Errorf("expected classifier answer object, got %T", v)
+	}
+	rawType, _ := obj.Get("type")
+	typ, _ := rawType.(string)
+	switch typ {
+	case "choice":
+		var out ClassifierChoiceAnswer
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "score":
+		var out ClassifierScoreAnswer
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "bool":
+		var out ClassifierBoolAnswer
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	default:
+		return &UnknownClassifierAnswer{Raw: obj}, nil
+	}
 }
 
 // ClassifierStopReason is why classification stopped.
@@ -954,14 +1329,47 @@ const (
 
 // ClassifierResult is one classification. Timestamp is epoch milliseconds.
 type ClassifierResult struct {
-	Api          ClassifierApi                            `json:"api"`
-	Provider     ProviderId                               `json:"provider"`
-	Model        string                                   `json:"model"`
-	Answers      *omap.Map[string, ClassifierAnswer]      `json:"answers"`
-	Usage        *Usage                                   `json:"usage,omitzero"`
-	StopReason   ClassifierStopReason                     `json:"stopReason"`
-	ErrorMessage *string                                  `json:"errorMessage,omitzero"`
-	Timestamp    int64                                    `json:"timestamp"`
+	Api          ClassifierApi                       `json:"api"`
+	Provider     ProviderId                          `json:"provider"`
+	Model        string                              `json:"model"`
+	Answers      *omap.Map[string, ClassifierAnswer] `json:"answers"`
+	Usage        *Usage                              `json:"usage,omitzero"`
+	StopReason   ClassifierStopReason                `json:"stopReason"`
+	ErrorMessage *string                             `json:"errorMessage,omitzero"`
+	Timestamp    int64                               `json:"timestamp"`
+}
+
+func (r *ClassifierResult) UnmarshalJSON(data []byte) error {
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		*r = ClassifierResult{}
+		return nil
+	}
+	type alias ClassifierResult
+	var raw struct {
+		alias
+		Answers *jsonx.Object `json:"answers"`
+	}
+	if err := jsonx.Decode(parsed, &raw); err != nil {
+		return err
+	}
+	*r = ClassifierResult(raw.alias)
+	if raw.Answers != nil {
+		aMap := omap.NewMap[string, ClassifierAnswer]()
+		for _, k := range raw.Answers.Keys() {
+			val, _ := raw.Answers.Get(k)
+			a, err := DecodeClassifierAnswer(val)
+			if err != nil {
+				return err
+			}
+			aMap.Set(k, a)
+		}
+		r.Answers = aMap
+	}
+	return nil
 }
 
 // GrammarFormat names an OpenAI grammar encoding.
@@ -1011,22 +1419,50 @@ type UnknownConstrainedSamplingConfig struct{ Raw *jsonx.Object }
 
 func (*UnknownConstrainedSamplingConfig) isConstrainedSamplingConfig() {}
 
-func (*UnknownConstrainedSamplingConfig) MarshalJSON() ([]byte, error) {
-	panic("unported: UnknownConstrainedSamplingConfig.MarshalJSON")
+func (u *UnknownConstrainedSamplingConfig) MarshalJSON() ([]byte, error) {
+	if u == nil || u.Raw == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(u.Raw)
 }
 
-func (*UnknownConstrainedSamplingConfig) UnmarshalJSON(data []byte) error {
-	panic("unported: UnknownConstrainedSamplingConfig.UnmarshalJSON")
+func (u *UnknownConstrainedSamplingConfig) UnmarshalJSON(data []byte) error {
+	return typUnmarshalUnknownRaw(data, &u.Raw)
 }
 
 // UnmarshalConstrainedSamplingConfig decodes one constraint object.
 func UnmarshalConstrainedSamplingConfig(data []byte) (ConstrainedSamplingConfig, error) {
-	panic("unported: UnmarshalConstrainedSamplingConfig")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeConstrainedSamplingConfig(parsed)
 }
 
 // DecodeConstrainedSamplingConfig decodes one constraint from a jsonx value.
 func DecodeConstrainedSamplingConfig(v any) (ConstrainedSamplingConfig, error) {
-	panic("unported: DecodeConstrainedSamplingConfig")
+	obj, ok := v.(*jsonx.Object)
+	if !ok {
+		return nil, fmt.Errorf("expected constrained sampling config object, got %T", v)
+	}
+	rawType, _ := obj.Get("type")
+	typ, _ := rawType.(string)
+	switch typ {
+	case "json_schema":
+		var out ConstrainedSamplingJsonSchema
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "grammar":
+		var out ConstrainedSamplingGrammar
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	default:
+		return &UnknownConstrainedSamplingConfig{Raw: obj}, nil
+	}
 }
 
 // ToolConstrainedSampling is false or a ConstrainedSamplingConfig.
@@ -1055,29 +1491,63 @@ type ToolConstrainedSamplingValue struct {
 func (v ToolConstrainedSamplingValue) IsZero() bool { return v.V == nil }
 
 func (v ToolConstrainedSamplingValue) MarshalJSON() ([]byte, error) {
-	panic("unported: ToolConstrainedSamplingValue.MarshalJSON")
+	if v.V == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(v.V)
 }
 
 func (v *ToolConstrainedSamplingValue) UnmarshalJSON(data []byte) error {
-	panic("unported: ToolConstrainedSamplingValue.UnmarshalJSON")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		v.V = nil
+		return nil
+	}
+	dec, err := DecodeToolConstrainedSampling(parsed)
+	if err != nil {
+		return err
+	}
+	v.V = dec
+	return nil
 }
 
 // UnmarshalToolConstrainedSampling decodes a tool sampling constraint.
 func UnmarshalToolConstrainedSampling(data []byte) (ToolConstrainedSampling, error) {
-	panic("unported: UnmarshalToolConstrainedSampling")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeToolConstrainedSampling(parsed)
 }
 
 // DecodeToolConstrainedSampling decodes a tool sampling constraint from a jsonx value.
 func DecodeToolConstrainedSampling(v any) (ToolConstrainedSampling, error) {
-	panic("unported: DecodeToolConstrainedSampling")
+	switch x := v.(type) {
+	case bool:
+		if !x {
+			return ToolConstrainedSamplingFalse{}, nil
+		}
+		return nil, fmt.Errorf("invalid constrainedSampling bool: true")
+	case *jsonx.Object:
+		cfg, err := DecodeConstrainedSamplingConfig(x)
+		if err != nil {
+			return nil, err
+		}
+		return cfg.(ToolConstrainedSampling), nil
+	default:
+		return nil, fmt.Errorf("invalid constrainedSampling value: %T", v)
+	}
 }
 
 // Tool is a tool declaration. Parameters is a TypeBox schema.
 type Tool struct {
-	Name                 string                       `json:"name"`
-	Description          string                       `json:"description"`
-	Parameters           *typebox.Schema              `json:"parameters"`
-	ConstrainedSampling  ToolConstrainedSamplingValue `json:"constrainedSampling,omitzero"`
+	Name                string                       `json:"name"`
+	Description         string                       `json:"description"`
+	Parameters          *typebox.Schema              `json:"parameters"`
+	ConstrainedSampling ToolConstrainedSamplingValue `json:"constrainedSampling,omitzero"`
 }
 
 // ToolReference names a tool without its schema.
@@ -1103,14 +1573,14 @@ type TranscriptContext struct {
 }
 
 // AssistantMessageEvent is one event on an assistant stream.
-// The discriminator is "type". Partial on a live event is the shared
-// response-so-far, not a snapshot.
+// The discriminator is "type". Partial on a live event from
+// AssistantMessageEventStream is a snapshot of the response so far.
 type AssistantMessageEvent interface{ isAssistantMessageEvent() }
 
 // AssistantMessageEventStart opens a stream.
 type AssistantMessageEventStart struct {
-	Type    string             `json:"type"`
-	Partial *AssistantMessage  `json:"partial"`
+	Type    string            `json:"type"`
+	Partial *AssistantMessage `json:"partial"`
 }
 
 func (*AssistantMessageEventStart) isAssistantMessageEvent() {}
@@ -1206,9 +1676,9 @@ func (*AssistantMessageEventToolcallEnd) isAssistantMessageEvent() {}
 // AssistantMessageEventDone ends a successful stream.
 // Reason is stop, length, toolUse, or deferred.
 type AssistantMessageEventDone struct {
-	Type    string             `json:"type"`
-	Reason  StopReason         `json:"reason"`
-	Message *AssistantMessage  `json:"message"`
+	Type    string            `json:"type"`
+	Reason  StopReason        `json:"reason"`
+	Message *AssistantMessage `json:"message"`
 }
 
 func (*AssistantMessageEventDone) isAssistantMessageEvent() {}
@@ -1227,22 +1697,110 @@ type UnknownAssistantMessageEvent struct{ Raw *jsonx.Object }
 
 func (*UnknownAssistantMessageEvent) isAssistantMessageEvent() {}
 
-func (*UnknownAssistantMessageEvent) MarshalJSON() ([]byte, error) {
-	panic("unported: UnknownAssistantMessageEvent.MarshalJSON")
+func (u *UnknownAssistantMessageEvent) MarshalJSON() ([]byte, error) {
+	if u == nil || u.Raw == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(u.Raw)
 }
 
-func (*UnknownAssistantMessageEvent) UnmarshalJSON(data []byte) error {
-	panic("unported: UnknownAssistantMessageEvent.UnmarshalJSON")
+func (u *UnknownAssistantMessageEvent) UnmarshalJSON(data []byte) error {
+	return typUnmarshalUnknownRaw(data, &u.Raw)
 }
 
 // UnmarshalAssistantMessageEvent decodes one stream event.
 func UnmarshalAssistantMessageEvent(data []byte) (AssistantMessageEvent, error) {
-	panic("unported: UnmarshalAssistantMessageEvent")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeAssistantMessageEvent(parsed)
 }
 
 // DecodeAssistantMessageEvent decodes one stream event from a jsonx value.
 func DecodeAssistantMessageEvent(v any) (AssistantMessageEvent, error) {
-	panic("unported: DecodeAssistantMessageEvent")
+	obj, ok := v.(*jsonx.Object)
+	if !ok {
+		return nil, fmt.Errorf("expected assistant message event object, got %T", v)
+	}
+	rawType, _ := obj.Get("type")
+	typ, _ := rawType.(string)
+	switch typ {
+	case "start":
+		var out AssistantMessageEventStart
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "text_start":
+		var out AssistantMessageEventTextStart
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "text_delta":
+		var out AssistantMessageEventTextDelta
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "text_end":
+		var out AssistantMessageEventTextEnd
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "thinking_start":
+		var out AssistantMessageEventThinkingStart
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "thinking_delta":
+		var out AssistantMessageEventThinkingDelta
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "thinking_end":
+		var out AssistantMessageEventThinkingEnd
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "toolcall_start":
+		var out AssistantMessageEventToolcallStart
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "toolcall_delta":
+		var out AssistantMessageEventToolcallDelta
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "toolcall_end":
+		var out AssistantMessageEventToolcallEnd
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "done":
+		var out AssistantMessageEventDone
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case "error":
+		var out AssistantMessageEventError
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	default:
+		return &UnknownAssistantMessageEvent{Raw: obj}, nil
+	}
 }
 
 // MaxTokensField selects the OpenAI-compatible max-token request field.
@@ -1257,17 +1815,17 @@ const (
 type ThinkingFormat string
 
 const (
-	ThinkingFormatOpenai            ThinkingFormat = "openai"
-	ThinkingFormatOpenrouter        ThinkingFormat = "openrouter"
-	ThinkingFormatDeepseek          ThinkingFormat = "deepseek"
-	ThinkingFormatTogether          ThinkingFormat = "together"
-	ThinkingFormatBaseten           ThinkingFormat = "baseten"
-	ThinkingFormatZai               ThinkingFormat = "zai"
-	ThinkingFormatQwen              ThinkingFormat = "qwen"
-	ThinkingFormatChatTemplate      ThinkingFormat = "chat-template"
-	ThinkingFormatQwenChatTemplate  ThinkingFormat = "qwen-chat-template"
-	ThinkingFormatStringThinking    ThinkingFormat = "string-thinking"
-	ThinkingFormatAntLing           ThinkingFormat = "ant-ling"
+	ThinkingFormatOpenai           ThinkingFormat = "openai"
+	ThinkingFormatOpenrouter       ThinkingFormat = "openrouter"
+	ThinkingFormatDeepseek         ThinkingFormat = "deepseek"
+	ThinkingFormatTogether         ThinkingFormat = "together"
+	ThinkingFormatBaseten          ThinkingFormat = "baseten"
+	ThinkingFormatZai              ThinkingFormat = "zai"
+	ThinkingFormatQwen             ThinkingFormat = "qwen"
+	ThinkingFormatChatTemplate     ThinkingFormat = "chat-template"
+	ThinkingFormatQwenChatTemplate ThinkingFormat = "qwen-chat-template"
+	ThinkingFormatStringThinking   ThinkingFormat = "string-thinking"
+	ThinkingFormatAntLing          ThinkingFormat = "ant-ling"
 )
 
 // CacheControlFormat selects prompt-cache markers.
@@ -1275,51 +1833,92 @@ type CacheControlFormat string
 
 const CacheControlFormatAnthropic CacheControlFormat = "anthropic"
 
+// PromptCacheKeyMode controls prompt_cache_key for OpenAI APIs.
+type PromptCacheKeyMode string
+
+const (
+	PromptCacheKeyModeAuto     PromptCacheKeyMode = "auto"
+	PromptCacheKeyModeEnabled  PromptCacheKeyMode = "enabled"
+	PromptCacheKeyModeDisabled PromptCacheKeyMode = "disabled"
+)
+
 // OpenAICompletionsCompat overrides URL-based detection for chat-completions APIs.
 // Bool fields use the documented provider default when nil.
 type OpenAICompletionsCompat struct {
-	SupportsStore                              *bool                          `json:"supportsStore,omitzero"`
-	SupportsDeveloperRole                      *bool                          `json:"supportsDeveloperRole,omitzero"`
-	SupportsReasoningEffort                    *bool                          `json:"supportsReasoningEffort,omitzero"`
-	SupportsUsageInStreaming                   *bool                          `json:"supportsUsageInStreaming,omitzero"`
-	SupportsFinishReason                       *bool                          `json:"supportsFinishReason,omitzero"`
-	MaxTokensField                             *MaxTokensField                `json:"maxTokensField,omitzero"`
-	RequiresToolResultName                     *bool                          `json:"requiresToolResultName,omitzero"`
-	RequiresAssistantAfterToolResult           *bool                          `json:"requiresAssistantAfterToolResult,omitzero"`
-	RequiresThinkingAsText                     *bool                          `json:"requiresThinkingAsText,omitzero"`
-	RequiresReasoningContentOnAssistantMessages *bool                         `json:"requiresReasoningContentOnAssistantMessages,omitzero"`
-	ThinkingFormat                             *ThinkingFormat                `json:"thinkingFormat,omitzero"`
-	ChatTemplateKwargs                         *omap.Map[string, ChatTemplateKwargValue] `json:"chatTemplateKwargs,omitzero"`
-	ChatTemplateArgs                           *omap.Map[string, ChatTemplateKwargValue] `json:"chatTemplateArgs,omitzero"`
-	OpenRouterRouting                          *OpenRouterRouting             `json:"openRouterRouting,omitzero"`
-	VercelGatewayRouting                       *VercelGatewayRouting          `json:"vercelGatewayRouting,omitzero"`
-	ZaiToolStream                              *bool                          `json:"zaiToolStream,omitzero"`
-	ThinkingTokenBudgetField                   *ThinkingTokenBudgetField      `json:"thinkingTokenBudgetField,omitzero"`
-	SupportsThinkingTokenBudget                *bool                          `json:"supportsThinkingTokenBudget,omitzero"`
-	SupportsOpenAIGrammarTools                 *bool                          `json:"supportsOpenAIGrammarTools,omitzero"`
-	SupportsMidConvoSystemMessages             *bool                          `json:"supportsMidConvoSystemMessages,omitzero"`
-	SupportsMidConvoToolAdditions              *bool                          `json:"supportsMidConvoToolAdditions,omitzero"`
-	SupportsStrictMode                         *bool                          `json:"supportsStrictMode,omitzero"`
-	CacheControlFormat                         *CacheControlFormat            `json:"cacheControlFormat,omitzero"`
-	SendSessionAffinityHeaders                 *bool                          `json:"sendSessionAffinityHeaders,omitzero"`
-	SessionAffinityFormat                      *SessionAffinityFormat         `json:"sessionAffinityFormat,omitzero"`
-	SupportsLongCacheRetention                 *bool                          `json:"supportsLongCacheRetention,omitzero"`
-	VllmPriority                               *float64                       `json:"vllmPriority,omitzero"`
+	SupportsStore                               *bool                                     `json:"supportsStore,omitzero"`
+	SupportsDeveloperRole                       *bool                                     `json:"supportsDeveloperRole,omitzero"`
+	SupportsReasoningEffort                     *bool                                     `json:"supportsReasoningEffort,omitzero"`
+	SupportsUsageInStreaming                    *bool                                     `json:"supportsUsageInStreaming,omitzero"`
+	SupportsFinishReason                        *bool                                     `json:"supportsFinishReason,omitzero"`
+	MaxTokensField                              *MaxTokensField                           `json:"maxTokensField,omitzero"`
+	RequiresToolResultName                      *bool                                     `json:"requiresToolResultName,omitzero"`
+	RequiresAssistantAfterToolResult            *bool                                     `json:"requiresAssistantAfterToolResult,omitzero"`
+	RequiresNonNullAssistantContent             *bool                                     `json:"requiresNonNullAssistantContent,omitzero"`
+	RequiresToolsWithToolHistory                *bool                                     `json:"requiresToolsWithToolHistory,omitzero"`
+	RequiresThinkingAsText                      *bool                                     `json:"requiresThinkingAsText,omitzero"`
+	RequiresReasoningContentOnAssistantMessages *bool                                     `json:"requiresReasoningContentOnAssistantMessages,omitzero"`
+	ThinkingFormat                              *ThinkingFormat                           `json:"thinkingFormat,omitzero"`
+	ChatTemplateKwargs                          *omap.Map[string, ChatTemplateKwargValue] `json:"chatTemplateKwargs,omitzero"`
+	ChatTemplateArgs                            *omap.Map[string, ChatTemplateKwargValue] `json:"chatTemplateArgs,omitzero"`
+	OpenRouterRouting                           *OpenRouterRouting                        `json:"openRouterRouting,omitzero"`
+	VercelGatewayRouting                        *VercelGatewayRouting                     `json:"vercelGatewayRouting,omitzero"`
+	ZaiToolStream                               *bool                                     `json:"zaiToolStream,omitzero"`
+	ThinkingTokenBudgetField                    *ThinkingTokenBudgetField                 `json:"thinkingTokenBudgetField,omitzero"`
+	SupportsThinkingTokenBudget                 *bool                                     `json:"supportsThinkingTokenBudget,omitzero"`
+	SupportsOpenAIGrammarTools                  *bool                                     `json:"supportsOpenAIGrammarTools,omitzero"`
+	SupportsMidConvoSystemMessages              *bool                                     `json:"supportsMidConvoSystemMessages,omitzero"`
+	SupportsMidConvoToolAdditions               *bool                                     `json:"supportsMidConvoToolAdditions,omitzero"`
+	SupportsStrictMode                          *bool                                     `json:"supportsStrictMode,omitzero"`
+	CacheControlFormat                          *CacheControlFormat                       `json:"cacheControlFormat,omitzero"`
+	SendSessionAffinityHeaders                  *bool                                     `json:"sendSessionAffinityHeaders,omitzero"`
+	SessionAffinityFormat                       *SessionAffinityFormat                    `json:"sessionAffinityFormat,omitzero"`
+	PromptCacheKeyMode                          *PromptCacheKeyMode                       `json:"promptCacheKeyMode,omitzero"`
+	SupportsLongCacheRetention                  *bool                                     `json:"supportsLongCacheRetention,omitzero"`
+	VllmPriority                                *float64                                  `json:"vllmPriority,omitzero"`
 }
 
 func (*OpenAICompletionsCompat) isModelCompat() {}
+
+func (c *OpenAICompletionsCompat) UnmarshalJSON(data []byte) error {
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		*c = OpenAICompletionsCompat{}
+		return nil
+	}
+	type alias OpenAICompletionsCompat
+	var raw struct {
+		alias
+		ChatTemplateKwargs *jsonx.Object `json:"chatTemplateKwargs,omitzero"`
+		ChatTemplateArgs   *jsonx.Object `json:"chatTemplateArgs,omitzero"`
+	}
+	if err := jsonx.Decode(parsed, &raw); err != nil {
+		return err
+	}
+	*c = OpenAICompletionsCompat(raw.alias)
+	c.ChatTemplateKwargs, err = typDecodeChatTemplateKwargMap(raw.ChatTemplateKwargs)
+	if err != nil {
+		return err
+	}
+	c.ChatTemplateArgs, err = typDecodeChatTemplateKwargMap(raw.ChatTemplateArgs)
+	return err
+}
 
 // OpenAIResponsesCompat is compatibility settings for OpenAI Responses APIs.
 type OpenAIResponsesCompat struct {
 	SupportsDeveloperRole           *bool                  `json:"supportsDeveloperRole,omitzero"`
 	SupportsMidConvoSystemMessages  *bool                  `json:"supportsMidConvoSystemMessages,omitzero"`
 	SessionAffinityFormat           *SessionAffinityFormat `json:"sessionAffinityFormat,omitzero"`
+	PromptCacheKeyMode              *PromptCacheKeyMode    `json:"promptCacheKeyMode,omitzero"`
 	SupportsLongCacheRetention      *bool                  `json:"supportsLongCacheRetention,omitzero"`
 	SupportsStrictMode              *bool                  `json:"supportsStrictMode,omitzero"`
 	SupportsOpenAIGrammarTools      *bool                  `json:"supportsOpenAIGrammarTools,omitzero"`
 	SupportsAdditionalTools         *bool                  `json:"supportsAdditionalTools,omitzero"`
 	SupportsToolSearch              *bool                  `json:"supportsToolSearch,omitzero"`
 	SupportsExplicitPromptCacheMode *bool                  `json:"supportsExplicitPromptCacheMode,omitzero"`
+	SupportsMidConvoEffort          *bool                  `json:"supportsMidConvoEffort,omitzero"`
 	SupportsMaxOutputTokens         *bool                  `json:"supportsMaxOutputTokens,omitzero"`
 }
 
@@ -1345,6 +1944,7 @@ type AnthropicMessagesCompat struct {
 	SupportsMidConvoEffort          *bool                           `json:"supportsMidConvoEffort,omitzero"`
 	SupportsMidConvoSystemMessages  *bool                           `json:"supportsMidConvoSystemMessages,omitzero"`
 	SupportsMidConvoToolChanges     *bool                           `json:"supportsMidConvoToolChanges,omitzero"`
+	SupportsMessageThreads          *bool                           `json:"supportsMessageThreads,omitzero"`
 	AllowedFallbackModels           []AnthropicAllowedFallbackModel `json:"allowedFallbackModels,omitzero"`
 }
 
@@ -1364,7 +1964,103 @@ type MistralConversationsCompat struct {
 
 func (*MistralConversationsCompat) isModelCompat() {}
 
-// ModelCompat is the untagged compat object on a chat model.
+// SystemOneImageInput controls how System One classifier APIs receive images.
+type SystemOneImageInput string
+
+const (
+	SystemOneImageInputAssets         SystemOneImageInput = "assets"
+	SystemOneImageInputImages         SystemOneImageInput = "images"
+	SystemOneImageInputStateImageUrls SystemOneImageInput = "state-image-urls"
+)
+
+// SystemOneCompat is compatibility settings for System One classifier APIs.
+type SystemOneCompat struct {
+	ImageInput           *SystemOneImageInput `json:"imageInput,omitzero"`
+	SendImageOptInHeader *bool                `json:"sendImageOptInHeader,omitzero"`
+}
+
+func (*SystemOneCompat) isModelCompat() {}
+
+// ProviderCompat holds API-agnostic provider/model compatibility overrides used in models.json.
+type ProviderCompat struct {
+	SupportsStore                               *bool                                     `json:"supportsStore,omitzero"`
+	SupportsDeveloperRole                       *bool                                     `json:"supportsDeveloperRole,omitzero"`
+	SupportsReasoningEffort                     *bool                                     `json:"supportsReasoningEffort,omitzero"`
+	SupportsUsageInStreaming                    *bool                                     `json:"supportsUsageInStreaming,omitzero"`
+	SupportsFinishReason                        *bool                                     `json:"supportsFinishReason,omitzero"`
+	MaxTokensField                              *MaxTokensField                           `json:"maxTokensField,omitzero"`
+	RequiresToolResultName                      *bool                                     `json:"requiresToolResultName,omitzero"`
+	RequiresAssistantAfterToolResult            *bool                                     `json:"requiresAssistantAfterToolResult,omitzero"`
+	RequiresNonNullAssistantContent             *bool                                     `json:"requiresNonNullAssistantContent,omitzero"`
+	RequiresToolsWithToolHistory                *bool                                     `json:"requiresToolsWithToolHistory,omitzero"`
+	RequiresThinkingAsText                      *bool                                     `json:"requiresThinkingAsText,omitzero"`
+	RequiresReasoningContentOnAssistantMessages *bool                                     `json:"requiresReasoningContentOnAssistantMessages,omitzero"`
+	ThinkingFormat                              *ThinkingFormat                           `json:"thinkingFormat,omitzero"`
+	ChatTemplateKwargs                          *omap.Map[string, ChatTemplateKwargValue] `json:"chatTemplateKwargs,omitzero"`
+	ChatTemplateArgs                            *omap.Map[string, ChatTemplateKwargValue] `json:"chatTemplateArgs,omitzero"`
+	OpenRouterRouting                           *OpenRouterRouting                        `json:"openRouterRouting,omitzero"`
+	VercelGatewayRouting                        *VercelGatewayRouting                     `json:"vercelGatewayRouting,omitzero"`
+	ZaiToolStream                               *bool                                     `json:"zaiToolStream,omitzero"`
+	ThinkingTokenBudgetField                    *ThinkingTokenBudgetField                 `json:"thinkingTokenBudgetField,omitzero"`
+	SupportsThinkingTokenBudget                 *bool                                     `json:"supportsThinkingTokenBudget,omitzero"`
+	SupportsOpenAIGrammarTools                  *bool                                     `json:"supportsOpenAIGrammarTools,omitzero"`
+	SupportsMidConvoSystemMessages              *bool                                     `json:"supportsMidConvoSystemMessages,omitzero"`
+	SupportsMidConvoToolAdditions               *bool                                     `json:"supportsMidConvoToolAdditions,omitzero"`
+	SupportsStrictMode                          *bool                                     `json:"supportsStrictMode,omitzero"`
+	CacheControlFormat                          *CacheControlFormat                       `json:"cacheControlFormat,omitzero"`
+	SendSessionAffinityHeaders                  *bool                                     `json:"sendSessionAffinityHeaders,omitzero"`
+	SessionAffinityFormat                       *SessionAffinityFormat                    `json:"sessionAffinityFormat,omitzero"`
+	PromptCacheKeyMode                          *PromptCacheKeyMode                       `json:"promptCacheKeyMode,omitzero"`
+	SupportsLongCacheRetention                  *bool                                     `json:"supportsLongCacheRetention,omitzero"`
+	VllmPriority                                *float64                                  `json:"vllmPriority,omitzero"`
+	SupportsAdditionalTools                     *bool                                     `json:"supportsAdditionalTools,omitzero"`
+	SupportsToolSearch                          *bool                                     `json:"supportsToolSearch,omitzero"`
+	SupportsExplicitPromptCacheMode             *bool                                     `json:"supportsExplicitPromptCacheMode,omitzero"`
+	SupportsMidConvoEffort                      *bool                                     `json:"supportsMidConvoEffort,omitzero"`
+	SupportsMaxOutputTokens                     *bool                                     `json:"supportsMaxOutputTokens,omitzero"`
+	SupportsEagerToolInputStreaming             *bool                                     `json:"supportsEagerToolInputStreaming,omitzero"`
+	SupportsCacheControlOnTools                 *bool                                     `json:"supportsCacheControlOnTools,omitzero"`
+	SupportsTemperature                         *bool                                     `json:"supportsTemperature,omitzero"`
+	ForceAdaptiveThinking                       *bool                                     `json:"forceAdaptiveThinking,omitzero"`
+	AllowEmptySignature                         *bool                                     `json:"allowEmptySignature,omitzero"`
+	SupportsStrictTools                         *bool                                     `json:"supportsStrictTools,omitzero"`
+	SupportsMidConvoToolChanges                 *bool                                     `json:"supportsMidConvoToolChanges,omitzero"`
+	SupportsMessageThreads                      *bool                                     `json:"supportsMessageThreads,omitzero"`
+	AllowedFallbackModels                       []AnthropicAllowedFallbackModel           `json:"allowedFallbackModels,omitzero"`
+	ImageInput                                  *SystemOneImageInput                      `json:"imageInput,omitzero"`
+	SendImageOptInHeader                        *bool                                     `json:"sendImageOptInHeader,omitzero"`
+}
+
+func (*ProviderCompat) isModelCompat() {}
+
+func (c *ProviderCompat) UnmarshalJSON(data []byte) error {
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		*c = ProviderCompat{}
+		return nil
+	}
+	type alias ProviderCompat
+	var raw struct {
+		alias
+		ChatTemplateKwargs *jsonx.Object `json:"chatTemplateKwargs,omitzero"`
+		ChatTemplateArgs   *jsonx.Object `json:"chatTemplateArgs,omitzero"`
+	}
+	if err := jsonx.Decode(parsed, &raw); err != nil {
+		return err
+	}
+	*c = ProviderCompat(raw.alias)
+	c.ChatTemplateKwargs, err = typDecodeChatTemplateKwargMap(raw.ChatTemplateKwargs)
+	if err != nil {
+		return err
+	}
+	c.ChatTemplateArgs, err = typDecodeChatTemplateKwargMap(raw.ChatTemplateArgs)
+	return err
+}
+
+// ModelCompat is the untagged compat object on a chat or classifier model.
 // The concrete type depends on the model's API.
 type ModelCompat interface{ isModelCompat() }
 
@@ -1373,12 +2069,15 @@ type UnknownModelCompat struct{ Raw *jsonx.Object }
 
 func (*UnknownModelCompat) isModelCompat() {}
 
-func (*UnknownModelCompat) MarshalJSON() ([]byte, error) {
-	panic("unported: UnknownModelCompat.MarshalJSON")
+func (u *UnknownModelCompat) MarshalJSON() ([]byte, error) {
+	if u == nil || u.Raw == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(u.Raw)
 }
 
-func (*UnknownModelCompat) UnmarshalJSON(data []byte) error {
-	panic("unported: UnknownModelCompat.UnmarshalJSON")
+func (u *UnknownModelCompat) UnmarshalJSON(data []byte) error {
+	return typUnmarshalUnknownRaw(data, &u.Raw)
 }
 
 // ModelCompatValue is the JSON form of Model.compat. The zero value is omitted.
@@ -1389,21 +2088,94 @@ type ModelCompatValue struct {
 func (v ModelCompatValue) IsZero() bool { return v.V == nil }
 
 func (v ModelCompatValue) MarshalJSON() ([]byte, error) {
-	panic("unported: ModelCompatValue.MarshalJSON")
+	if v.V == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(v.V)
 }
 
 func (v *ModelCompatValue) UnmarshalJSON(data []byte) error {
-	panic("unported: ModelCompatValue.UnmarshalJSON")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		v.V = nil
+		return nil
+	}
+	dec, err := DecodeModelCompat(parsed)
+	if err != nil {
+		return err
+	}
+	v.V = dec
+	return nil
 }
 
-// UnmarshalModelCompat decodes a model compat object.
+// UnmarshalModelCompat decodes a model compat object without API context.
 func UnmarshalModelCompat(data []byte) (ModelCompat, error) {
-	panic("unported: UnmarshalModelCompat")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeModelCompat(parsed)
 }
 
-// DecodeModelCompat decodes a model compat object from a jsonx value.
+// DecodeModelCompat decodes a model compat object from a jsonx value without API context.
 func DecodeModelCompat(v any) (ModelCompat, error) {
-	panic("unported: DecodeModelCompat")
+	obj, ok := v.(*jsonx.Object)
+	if !ok {
+		return nil, fmt.Errorf("expected model compat object, got %T", v)
+	}
+	return &UnknownModelCompat{Raw: obj}, nil
+}
+
+// DecodeModelCompatForApi decodes a model compat object from a jsonx value for the given API id.
+func DecodeModelCompatForApi(api string, v any) (ModelCompat, error) {
+	obj, ok := v.(*jsonx.Object)
+	if !ok {
+		return nil, fmt.Errorf("expected model compat object, got %T", v)
+	}
+	switch Api(api) {
+	case KnownApiOpenaiCompletions:
+		var out OpenAICompletionsCompat
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case KnownApiOpenaiResponses, KnownApiAzureOpenaiResponses, KnownApiOpenaiCodexResponses:
+		var out OpenAIResponsesCompat
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case KnownApiAnthropicMessages:
+		var out AnthropicMessagesCompat
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case KnownApiBedrockConverseStream:
+		var out BedrockCompat
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case KnownApiMistralConversations:
+		var out MistralConversationsCompat
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	}
+	switch ClassifierApi(api) {
+	case KnownClassifierApiTypesafeSystemOne, KnownClassifierApiCloudflareWorkersAiSystemOne:
+		var out SystemOneCompat
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	}
+	return &UnknownModelCompat{Raw: obj}, nil
 }
 
 // OpenRouterDataCollection is the OpenRouter data-collection routing flag.
@@ -1436,12 +2208,15 @@ type UnknownOpenRouterRoutingSort struct{ Raw *jsonx.Object }
 
 func (*UnknownOpenRouterRoutingSort) isOpenRouterRoutingSort() {}
 
-func (*UnknownOpenRouterRoutingSort) MarshalJSON() ([]byte, error) {
-	panic("unported: UnknownOpenRouterRoutingSort.MarshalJSON")
+func (u *UnknownOpenRouterRoutingSort) MarshalJSON() ([]byte, error) {
+	if u == nil || u.Raw == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(u.Raw)
 }
 
-func (*UnknownOpenRouterRoutingSort) UnmarshalJSON(data []byte) error {
-	panic("unported: UnknownOpenRouterRoutingSort.UnmarshalJSON")
+func (u *UnknownOpenRouterRoutingSort) UnmarshalJSON(data []byte) error {
+	return typUnmarshalUnknownRaw(data, &u.Raw)
 }
 
 // OpenRouterRoutingSortValue is the JSON form of OpenRouterRouting.sort.
@@ -1452,21 +2227,57 @@ type OpenRouterRoutingSortValue struct {
 func (v OpenRouterRoutingSortValue) IsZero() bool { return v.V == nil }
 
 func (v OpenRouterRoutingSortValue) MarshalJSON() ([]byte, error) {
-	panic("unported: OpenRouterRoutingSortValue.MarshalJSON")
+	if v.V == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(v.V)
 }
 
 func (v *OpenRouterRoutingSortValue) UnmarshalJSON(data []byte) error {
-	panic("unported: OpenRouterRoutingSortValue.UnmarshalJSON")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		v.V = nil
+		return nil
+	}
+	dec, err := DecodeOpenRouterRoutingSort(parsed)
+	if err != nil {
+		return err
+	}
+	v.V = dec
+	return nil
 }
 
 // UnmarshalOpenRouterRoutingSort decodes a sort value.
 func UnmarshalOpenRouterRoutingSort(data []byte) (OpenRouterRoutingSort, error) {
-	panic("unported: UnmarshalOpenRouterRoutingSort")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeOpenRouterRoutingSort(parsed)
 }
 
 // DecodeOpenRouterRoutingSort decodes a sort value from a jsonx value.
 func DecodeOpenRouterRoutingSort(v any) (OpenRouterRoutingSort, error) {
-	panic("unported: DecodeOpenRouterRoutingSort")
+	switch x := v.(type) {
+	case string:
+		return OpenRouterRoutingSortString(x), nil
+	case *jsonx.Object:
+		_, hasBy := x.Get("by")
+		_, hasPart := x.Get("partition")
+		if hasBy || hasPart || x.Len() == 0 {
+			var out OpenRouterRoutingSortObject
+			if err := jsonx.Decode(x, &out); err != nil {
+				return nil, err
+			}
+			return &out, nil
+		}
+		return &UnknownOpenRouterRoutingSort{Raw: x}, nil
+	default:
+		return nil, fmt.Errorf("invalid OpenRouter routing sort: %T", v)
+	}
 }
 
 // OpenRouterPrice is a number or a string price.
@@ -1487,12 +2298,15 @@ type UnknownOpenRouterPrice struct{ Raw *jsonx.Object }
 
 func (*UnknownOpenRouterPrice) isOpenRouterPrice() {}
 
-func (*UnknownOpenRouterPrice) MarshalJSON() ([]byte, error) {
-	panic("unported: UnknownOpenRouterPrice.MarshalJSON")
+func (u *UnknownOpenRouterPrice) MarshalJSON() ([]byte, error) {
+	if u == nil || u.Raw == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(u.Raw)
 }
 
-func (*UnknownOpenRouterPrice) UnmarshalJSON(data []byte) error {
-	panic("unported: UnknownOpenRouterPrice.UnmarshalJSON")
+func (u *UnknownOpenRouterPrice) UnmarshalJSON(data []byte) error {
+	return typUnmarshalUnknownRaw(data, &u.Raw)
 }
 
 // OpenRouterPriceValue is one optional max_price field.
@@ -1503,21 +2317,54 @@ type OpenRouterPriceValue struct {
 func (v OpenRouterPriceValue) IsZero() bool { return v.V == nil }
 
 func (v OpenRouterPriceValue) MarshalJSON() ([]byte, error) {
-	panic("unported: OpenRouterPriceValue.MarshalJSON")
+	if v.V == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(v.V)
 }
 
 func (v *OpenRouterPriceValue) UnmarshalJSON(data []byte) error {
-	panic("unported: OpenRouterPriceValue.UnmarshalJSON")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		v.V = nil
+		return nil
+	}
+	dec, err := DecodeOpenRouterPrice(parsed)
+	if err != nil {
+		return err
+	}
+	v.V = dec
+	return nil
 }
 
 // UnmarshalOpenRouterPrice decodes a price.
 func UnmarshalOpenRouterPrice(data []byte) (OpenRouterPrice, error) {
-	panic("unported: UnmarshalOpenRouterPrice")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeOpenRouterPrice(parsed)
 }
 
 // DecodeOpenRouterPrice decodes a price from a jsonx value.
 func DecodeOpenRouterPrice(v any) (OpenRouterPrice, error) {
-	panic("unported: DecodeOpenRouterPrice")
+	switch x := v.(type) {
+	case float64:
+		return OpenRouterPriceNumber(x), nil
+	case int:
+		return OpenRouterPriceNumber(float64(x)), nil
+	case int64:
+		return OpenRouterPriceNumber(float64(x)), nil
+	case string:
+		return OpenRouterPriceString(x), nil
+	case *jsonx.Object:
+		return &UnknownOpenRouterPrice{Raw: x}, nil
+	default:
+		return nil, fmt.Errorf("invalid OpenRouter price: %T", v)
+	}
 }
 
 // OpenRouterMaxPrice is the maximum price per million tokens, in USD.
@@ -1553,12 +2400,15 @@ type UnknownOpenRouterThroughput struct{ Raw *jsonx.Object }
 
 func (*UnknownOpenRouterThroughput) isOpenRouterThroughput() {}
 
-func (*UnknownOpenRouterThroughput) MarshalJSON() ([]byte, error) {
-	panic("unported: UnknownOpenRouterThroughput.MarshalJSON")
+func (u *UnknownOpenRouterThroughput) MarshalJSON() ([]byte, error) {
+	if u == nil || u.Raw == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(u.Raw)
 }
 
-func (*UnknownOpenRouterThroughput) UnmarshalJSON(data []byte) error {
-	panic("unported: UnknownOpenRouterThroughput.UnmarshalJSON")
+func (u *UnknownOpenRouterThroughput) UnmarshalJSON(data []byte) error {
+	return typUnmarshalUnknownRaw(data, &u.Raw)
 }
 
 // OpenRouterThroughputValue is the JSON form of a throughput or latency preference.
@@ -1569,39 +2419,81 @@ type OpenRouterThroughputValue struct {
 func (v OpenRouterThroughputValue) IsZero() bool { return v.V == nil }
 
 func (v OpenRouterThroughputValue) MarshalJSON() ([]byte, error) {
-	panic("unported: OpenRouterThroughputValue.MarshalJSON")
+	if v.V == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(v.V)
 }
 
 func (v *OpenRouterThroughputValue) UnmarshalJSON(data []byte) error {
-	panic("unported: OpenRouterThroughputValue.UnmarshalJSON")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		v.V = nil
+		return nil
+	}
+	dec, err := DecodeOpenRouterThroughput(parsed)
+	if err != nil {
+		return err
+	}
+	v.V = dec
+	return nil
 }
 
 // UnmarshalOpenRouterThroughput decodes a throughput or latency preference.
 func UnmarshalOpenRouterThroughput(data []byte) (OpenRouterThroughput, error) {
-	panic("unported: UnmarshalOpenRouterThroughput")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeOpenRouterThroughput(parsed)
 }
 
 // DecodeOpenRouterThroughput decodes a preference from a jsonx value.
 func DecodeOpenRouterThroughput(v any) (OpenRouterThroughput, error) {
-	panic("unported: DecodeOpenRouterThroughput")
+	switch x := v.(type) {
+	case float64:
+		return OpenRouterThroughputNumber(x), nil
+	case int:
+		return OpenRouterThroughputNumber(float64(x)), nil
+	case int64:
+		return OpenRouterThroughputNumber(float64(x)), nil
+	case *jsonx.Object:
+		_, hasP50 := x.Get("p50")
+		_, hasP75 := x.Get("p75")
+		_, hasP90 := x.Get("p90")
+		_, hasP99 := x.Get("p99")
+		if hasP50 || hasP75 || hasP90 || hasP99 || x.Len() == 0 {
+			var out OpenRouterPercentiles
+			if err := jsonx.Decode(x, &out); err != nil {
+				return nil, err
+			}
+			return &out, nil
+		}
+		return &UnknownOpenRouterThroughput{Raw: x}, nil
+	default:
+		return nil, fmt.Errorf("invalid OpenRouter throughput: %T", v)
+	}
 }
 
 // OpenRouterRouting is OpenRouter provider routing, sent as the provider field.
 // Field names keep the TS snake_case with only the first letter uppercased.
 type OpenRouterRouting struct {
-	Allow_fallbacks           *bool                         `json:"allow_fallbacks,omitzero"`
-	Require_parameters        *bool                         `json:"require_parameters,omitzero"`
-	Data_collection           *OpenRouterDataCollection     `json:"data_collection,omitzero"`
-	Zdr                       *bool                         `json:"zdr,omitzero"`
-	Enforce_distillable_text  *bool                         `json:"enforce_distillable_text,omitzero"`
-	Order                     []string                      `json:"order,omitzero"`
-	Only                      []string                      `json:"only,omitzero"`
-	Ignore                    []string                      `json:"ignore,omitzero"`
-	Quantizations             []string                      `json:"quantizations,omitzero"`
-	Sort                      OpenRouterRoutingSortValue    `json:"sort,omitzero"`
-	Max_price                 *OpenRouterMaxPrice           `json:"max_price,omitzero"`
-	Preferred_min_throughput  OpenRouterThroughputValue     `json:"preferred_min_throughput,omitzero"`
-	Preferred_max_latency     OpenRouterThroughputValue     `json:"preferred_max_latency,omitzero"`
+	Allow_fallbacks          *bool                      `json:"allow_fallbacks,omitzero"`
+	Require_parameters       *bool                      `json:"require_parameters,omitzero"`
+	Data_collection          *OpenRouterDataCollection  `json:"data_collection,omitzero"`
+	Zdr                      *bool                      `json:"zdr,omitzero"`
+	Enforce_distillable_text *bool                      `json:"enforce_distillable_text,omitzero"`
+	Order                    []string                   `json:"order,omitzero"`
+	Only                     []string                   `json:"only,omitzero"`
+	Ignore                   []string                   `json:"ignore,omitzero"`
+	Quantizations            []string                   `json:"quantizations,omitzero"`
+	Sort                     OpenRouterRoutingSortValue `json:"sort,omitzero"`
+	Max_price                *OpenRouterMaxPrice        `json:"max_price,omitzero"`
+	Preferred_min_throughput OpenRouterThroughputValue  `json:"preferred_min_throughput,omitzero"`
+	Preferred_max_latency    OpenRouterThroughputValue  `json:"preferred_max_latency,omitzero"`
 }
 
 // VercelGatewayRouting is Vercel AI Gateway provider routing.
@@ -1688,17 +2580,50 @@ const (
 // A missing Type means chat. ContextWindow and MaxTokens are token counts.
 type Model struct {
 	BaseModel
-	Type             *ModelType        `json:"type,omitzero"`
-	Reasoning        bool              `json:"reasoning"`
-	ThinkingLevelMap *ThinkingLevelMap `json:"thinkingLevelMap,omitzero"`
-	PromptCache      *ModelPromptCache `json:"promptCache,omitzero"`
-	ContextWindow    int               `json:"contextWindow"`
-	MaxTokens        int               `json:"maxTokens"`
-	SamplingParams   *jsonx.Object     `json:"samplingParams,omitzero"`
-	Compat           ModelCompatValue  `json:"compat,omitzero"`
+	Type                          *ModelType                     `json:"type,omitzero"`
+	Reasoning                     bool                           `json:"reasoning"`
+	ThinkingLevelMap              *ThinkingLevelMap              `json:"thinkingLevelMap,omitzero"`
+	PromptCache                   *ModelPromptCache              `json:"promptCache,omitzero"`
+	ContextWindow                 int                            `json:"contextWindow"`
+	MaxTokens                     int                            `json:"maxTokens"`
+	SamplingParams                *jsonx.Object                  `json:"samplingParams,omitzero"`
+	SamplingParamsByThinkingLevel *SamplingParamsByThinkingLevel `json:"samplingParamsByThinkingLevel,omitzero"`
+	Compat                        ModelCompatValue               `json:"compat,omitzero"`
 }
 
 func (*Model) isAnyModel() {}
+
+func (m *Model) UnmarshalJSON(data []byte) error {
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		*m = Model{}
+		return nil
+	}
+	return typDecodeModel(parsed, m)
+}
+
+func typDecodeModel(v any, out *Model) error {
+	type alias Model
+	var raw struct {
+		alias
+		Compat any `json:"compat,omitzero"`
+	}
+	if err := jsonx.Decode(v, &raw); err != nil {
+		return err
+	}
+	*out = Model(raw.alias)
+	if raw.Compat != nil {
+		c, err := DecodeModelCompatForApi(out.Api, raw.Compat)
+		if err != nil {
+			return err
+		}
+		out.Compat = ModelCompatValue{V: c}
+	}
+	return nil
+}
 
 // ImageModel is an image-generation catalog entry. Type is "image".
 // Output always includes image; text means the model can also return text.
@@ -1714,11 +2639,44 @@ func (*ImageModel) isAnyModel() {}
 // ContextWindow is a token count.
 type ClassifierModel struct {
 	BaseModel
-	Type          ModelType `json:"type"`
-	ContextWindow int       `json:"contextWindow"`
+	Type          ModelType        `json:"type"`
+	ContextWindow int              `json:"contextWindow"`
+	Compat        ModelCompatValue `json:"compat,omitzero"`
 }
 
 func (*ClassifierModel) isAnyModel() {}
+
+func (m *ClassifierModel) UnmarshalJSON(data []byte) error {
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		*m = ClassifierModel{}
+		return nil
+	}
+	return typDecodeClassifierModel(parsed, m)
+}
+
+func typDecodeClassifierModel(v any, out *ClassifierModel) error {
+	type alias ClassifierModel
+	var raw struct {
+		alias
+		Compat any `json:"compat,omitzero"`
+	}
+	if err := jsonx.Decode(v, &raw); err != nil {
+		return err
+	}
+	*out = ClassifierModel(raw.alias)
+	if raw.Compat != nil {
+		c, err := DecodeModelCompatForApi(out.Api, raw.Compat)
+		if err != nil {
+			return err
+		}
+		out.Compat = ModelCompatValue{V: c}
+	}
+	return nil
+}
 
 // AnyModel is any catalog entry. Narrow with the model-operations helpers.
 // ModelTypeMap is a TypeScript type-level map and has no Go form.
@@ -1729,29 +2687,149 @@ type UnknownAnyModel struct{ Raw *jsonx.Object }
 
 func (*UnknownAnyModel) isAnyModel() {}
 
-func (*UnknownAnyModel) MarshalJSON() ([]byte, error) {
-	panic("unported: UnknownAnyModel.MarshalJSON")
+func (u *UnknownAnyModel) MarshalJSON() ([]byte, error) {
+	if u == nil || u.Raw == nil {
+		return []byte("null"), nil
+	}
+	return jsonx.Marshal(u.Raw)
 }
 
-func (*UnknownAnyModel) UnmarshalJSON(data []byte) error {
-	panic("unported: UnknownAnyModel.UnmarshalJSON")
+func (u *UnknownAnyModel) UnmarshalJSON(data []byte) error {
+	return typUnmarshalUnknownRaw(data, &u.Raw)
 }
 
 // AnyModelList is a JSON array of catalog entries.
 type AnyModelList []AnyModel
 
 func (l *AnyModelList) UnmarshalJSON(data []byte) error {
-	panic("unported: AnyModelList.UnmarshalJSON")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		*l = nil
+		return nil
+	}
+	arr, ok := parsed.([]any)
+	if !ok {
+		return fmt.Errorf("expected model array, got %T", parsed)
+	}
+	out := make(AnyModelList, len(arr))
+	for i, elem := range arr {
+		m, err := DecodeAnyModel(elem)
+		if err != nil {
+			return err
+		}
+		out[i] = m
+	}
+	*l = out
+	return nil
 }
 
 // UnmarshalAnyModel decodes one catalog entry.
 func UnmarshalAnyModel(data []byte) (AnyModel, error) {
-	panic("unported: UnmarshalAnyModel")
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeAnyModel(parsed)
 }
 
 // DecodeAnyModel decodes one catalog entry from a jsonx value.
 func DecodeAnyModel(v any) (AnyModel, error) {
-	panic("unported: DecodeAnyModel")
+	obj, ok := v.(*jsonx.Object)
+	if !ok {
+		return nil, fmt.Errorf("expected model object, got %T", v)
+	}
+	rawType, _ := obj.Get("type")
+	typ, _ := rawType.(string)
+	switch typ {
+	case "", string(ModelTypeChat):
+		var out Model
+		if err := typDecodeModel(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case string(ModelTypeImage):
+		var out ImageModel
+		if err := jsonx.Decode(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	case string(ModelTypeClassifier):
+		var out ClassifierModel
+		if err := typDecodeClassifierModel(obj, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	default:
+		return &UnknownAnyModel{Raw: obj}, nil
+	}
+}
+
+func typUnmarshalUnknownRaw(data []byte, dst **jsonx.Object) error {
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		*dst = nil
+		return nil
+	}
+	obj, ok := parsed.(*jsonx.Object)
+	if !ok {
+		return fmt.Errorf("expected JSON object, got %T", parsed)
+	}
+	*dst = obj
+	return nil
+}
+
+func typUnmarshalTextOrBlocks(data []byte, textDst **string, blocksDst *ContentList) error {
+	parsed, err := jsonx.Parse(data)
+	if err != nil {
+		return err
+	}
+	switch x := parsed.(type) {
+	case nil:
+		*textDst = nil
+		*blocksDst = nil
+		return nil
+	case string:
+		s := x
+		*textDst = &s
+		*blocksDst = nil
+		return nil
+	case []any:
+		blocks := make(ContentList, len(x))
+		for i, elem := range x {
+			c, err := DecodeContent(elem)
+			if err != nil {
+				return err
+			}
+			blocks[i] = c
+		}
+		*textDst = nil
+		*blocksDst = blocks
+		return nil
+	default:
+		return fmt.Errorf("expected string or content array, got %T", parsed)
+	}
+}
+
+func typDecodeChatTemplateKwargMap(obj *jsonx.Object) (*omap.Map[string, ChatTemplateKwargValue], error) {
+	if obj == nil {
+		return nil, nil
+	}
+	out := omap.NewMap[string, ChatTemplateKwargValue]()
+	for _, k := range obj.Keys() {
+		rawVal, _ := obj.Get(k)
+		decoded, err := DecodeChatTemplateKwargValue(rawVal)
+		if err != nil {
+			return nil, err
+		}
+		out.Set(k, decoded)
+	}
+	return out, nil
 }
 
 var (

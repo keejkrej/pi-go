@@ -24,21 +24,43 @@ type KillRingPushOptions struct {
 // Push adds text to the ring. Empty text is ignored.
 // opts is the required TS options object; nil is not a valid call.
 func (k *KillRing) Push(text string, opts *KillRingPushOptions) {
-	panic("unported: KillRing.Push")
+	if text == "" {
+		return
+	}
+	accumulate := opts != nil && opts.Accumulate != nil && *opts.Accumulate
+	if accumulate && len(k.ring) > 0 {
+		last := k.ring[len(k.ring)-1]
+		k.ring = k.ring[:len(k.ring)-1]
+		if opts.Prepend {
+			k.ring = append(k.ring, text+last)
+		} else {
+			k.ring = append(k.ring, last+text)
+		}
+	} else {
+		k.ring = append(k.ring, text)
+	}
 }
 
 // Peek returns the most recent entry without changing the ring.
 // Nil means the ring is empty.
 func (k *KillRing) Peek() *string {
-	panic("unported: KillRing.Peek")
+	if len(k.ring) == 0 {
+		return nil
+	}
+	v := k.ring[len(k.ring)-1]
+	return &v
 }
 
 // Rotate moves the most recent entry to the front for yank-pop.
 func (k *KillRing) Rotate() {
-	panic("unported: KillRing.Rotate")
+	if len(k.ring) > 1 {
+		last := k.ring[len(k.ring)-1]
+		copy(k.ring[1:], k.ring[:len(k.ring)-1])
+		k.ring[0] = last
+	}
 }
 
 // Length returns the number of entries.
 func (k *KillRing) Length() int {
-	panic("unported: KillRing.Length")
+	return len(k.ring)
 }

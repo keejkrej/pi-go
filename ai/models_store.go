@@ -1,10 +1,12 @@
-// Ported from packages/ai/src/models-store.ts (pi v1.0.0).
+// Ported from packages/ai/src/models_store.ts (pi v1.5.2).
 
 package ai
 
 import (
 	"context"
 	"sync"
+
+	"github.com/keejkrej/pi-go/internal/jsonx"
 )
 
 // ModelsStoreEntry is one provider's persisted catalog.
@@ -43,16 +45,59 @@ func NewInMemoryModelsStore() *InMemoryModelsStore {
 	return &InMemoryModelsStore{entries: map[string]*ModelsStoreEntry{}}
 }
 
-func (s *InMemoryModelsStore) Read(ctx context.Context, providerId string, options *ModelsStoreOperationOptions) (*ModelsStoreEntry, error) {
-	panic("unported: InMemoryModelsStore.Read")
+func msCloneEntry(entry *ModelsStoreEntry) (*ModelsStoreEntry, error) {
+	if entry == nil {
+		return nil, nil
+	}
+	raw, err := jsonx.Marshal(entry)
+	if err != nil {
+		return nil, err
+	}
+	var cloned ModelsStoreEntry
+	if err := jsonx.Unmarshal(raw, &cloned); err != nil {
+		return nil, err
+	}
+	if cloned.Models == nil {
+		cloned.Models = AnyModelList{}
+	}
+	return &cloned, nil
 }
 
-func (s *InMemoryModelsStore) Write(ctx context.Context, providerId string, entry *ModelsStoreEntry, options *ModelsStoreOperationOptions) error {
-	panic("unported: InMemoryModelsStore.Write")
+func (s *InMemoryModelsStore) Read(ctx context.Context, providerId string, _ *ModelsStoreOperationOptions) (*ModelsStoreEntry, error) {
+	if ctx != nil && ctx.Err() != nil {
+		return nil, uaAbortReason(ctx)
+	}
+	s.mu.Lock()
+	entry := s.entries[providerId]
+	s.mu.Unlock()
+	return msCloneEntry(entry)
 }
 
-func (s *InMemoryModelsStore) Delete(ctx context.Context, providerId string, options *ModelsStoreOperationOptions) error {
-	panic("unported: InMemoryModelsStore.Delete")
+func (s *InMemoryModelsStore) Write(ctx context.Context, providerId string, entry *ModelsStoreEntry, _ *ModelsStoreOperationOptions) error {
+	if ctx != nil && ctx.Err() != nil {
+		return uaAbortReason(ctx)
+	}
+	cloned, err := msCloneEntry(entry)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	if s.entries == nil {
+		s.entries = map[string]*ModelsStoreEntry{}
+	}
+	s.entries[providerId] = cloned
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *InMemoryModelsStore) Delete(ctx context.Context, providerId string, _ *ModelsStoreOperationOptions) error {
+	if ctx != nil && ctx.Err() != nil {
+		return uaAbortReason(ctx)
+	}
+	s.mu.Lock()
+	delete(s.entries, providerId)
+	s.mu.Unlock()
+	return nil
 }
 
 var _ ModelsStore = (*InMemoryModelsStore)(nil)
