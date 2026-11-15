@@ -3,8 +3,12 @@
 package codingagent
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +20,7 @@ import (
 	"github.com/keejkrej/pi-go/codingagent/cli"
 	"github.com/keejkrej/pi-go/codingagent/core"
 	"github.com/keejkrej/pi-go/codingagent/modes/interactive/theme"
+	"github.com/keejkrej/pi-go/internal/jsonx"
 	"github.com/keejkrej/pi-go/tui"
 )
 
@@ -160,7 +165,35 @@ func TestHandleConfigCommandHelpValidationLocalTrustAndTui(t *testing.T) {
 	}
 }
 
-func TestHandlePackageCommandBareboneUnsupportedAndUpdateModels(t *testing.T) {
+func tpmcBuildTgz(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+	for name, content := range files {
+		hdr := &tar.Header{
+			Name:     name,
+			Typeflag: tar.TypeReg,
+			Mode:     0o644,
+			Size:     int64(len(content)),
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func TestHandlePackageCommandLifecycleAndUpdateModels(t *testing.T) {
 	if handled, code := HandlePackageCommand(context.Background(), []string{"--version"}); handled || code != 0 {
 		t.Fatalf("non-package cmd = (%v, %d), want (false, 0)", handled, code)
 	}
@@ -184,25 +217,7 @@ func TestHandlePackageCommandBareboneUnsupportedAndUpdateModels(t *testing.T) {
 		t.Fatalf("install missing source = (%v, %d) err=%q", handled, code, stderr.String())
 	}
 
-	// External npm/git commands return clear unsupported error & exit 1.
-	for _, argv := range [][]string{
-		{"install", "npm:foo"},
-		{"remove", "npm:foo"},
-		{"uninstall", "npm:foo"},
-		{"list"},
-		{"update"},
-	} {
-		stderr.Reset()
-		handled, code = HandlePackageCommand(context.Background(), argv, &PackageCommandOptions{
-			Stdout: &stdout,
-			Stderr: &stderr,
-		})
-		if !handled || code != 1 || !strings.Contains(stderr.String(), "barebone") {
-			t.Fatalf("%v = (%v, %d) err=%q, want barebone unsupported", argv, handled, code, stderr.String())
-		}
-	}
-
-	// Conflicting update flags fail cleanly.
+	// Unknown option and conflicting update flags fail cleanly.
 	stderr.Reset()
 	handled, code = HandlePackageCommand(context.Background(), []string{"update", "--models", "--all"}, &PackageCommandOptions{
 		Stdout: &stdout,
@@ -210,6 +225,180 @@ func TestHandlePackageCommandBareboneUnsupportedAndUpdateModels(t *testing.T) {
 	})
 	if !handled || code != 1 || !strings.Contains(stderr.String(), "cannot be combined") {
 		t.Fatalf("update conflict = (%v, %d) err=%q", handled, code, stderr.String())
+	}
+
+	// Offline mock npm server for end-to-end CLI install / list / update / remove / uninstall.
+	var verMu sync.Mutex
+	latestVer := "1.0.0"
+	tarV1 := tpmcBuildTgz(t, map[string]string{
+		"package/package.json":       `{"name":"cli-demo","version":"1.0.0"}`,
+		"package/extensions/main.ts": "export default function() {}",
+	})
+	tarV2 := tpmcBuildTgz(t, map[string]string{
+		"package/package.json":       `{"name":"cli-demo","version":"1.2.0"}`,
+		"package/extensions/main.ts": "export default function() {} // v2",
+	})
+	scopedTar := tpmcBuildTgz(t, map[string]string{
+		"package/package.json":    `{"name":"@cli/local-pkg","version":"1.0.0"}`,
+		"package/prompts/help.md": "# help",
+	})
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/cli-demo":
+			verMu.Lock()
+			v := latestVer
+			verMu.Unlock()
+			versions := map[string]any{
+				"1.0.0": map[string]any{
+					"name":    "cli-demo",
+					"version": "1.0.0",
+					"dist":    map[string]any{"tarball": srv.URL + "/tgz/cli-demo-1.0.0.tgz"},
+				},
+			}
+			if v == "1.2.0" {
+				versions["1.2.0"] = map[string]any{
+					"name":    "cli-demo",
+					"version": "1.2.0",
+					"dist":    map[string]any{"tarball": srv.URL + "/tgz/cli-demo-1.2.0.tgz"},
+				}
+			}
+			if payload, err := jsonx.Marshal(map[string]any{
+				"name":      "cli-demo",
+				"dist-tags": map[string]any{"latest": v},
+				"versions":  versions,
+			}); err == nil {
+				_, _ = w.Write(payload)
+			}
+		case "/@cli/local-pkg":
+			if payload, err := jsonx.Marshal(map[string]any{
+				"name":      "@cli/local-pkg",
+				"dist-tags": map[string]any{"latest": "1.0.0"},
+				"versions": map[string]any{
+					"1.0.0": map[string]any{
+						"name":    "@cli/local-pkg",
+						"version": "1.0.0",
+						"dist":    map[string]any{"tarball": srv.URL + "/tgz/scoped-1.0.0.tgz"},
+					},
+				},
+			}); err == nil {
+				_, _ = w.Write(payload)
+			}
+		case "/tgz/cli-demo-1.0.0.tgz":
+			_, _ = w.Write(tarV1)
+		case "/tgz/cli-demo-1.2.0.tgz":
+			_, _ = w.Write(tarV2)
+		case "/tgz/scoped-1.0.0.tgz":
+			_, _ = w.Write(scopedTar)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	t.Setenv("NPM_CONFIG_REGISTRY", srv.URL)
+
+	cwd := t.TempDir()
+	agentDir := filepath.Join(t.TempDir(), "agent")
+	cliOpts := func() *PackageCommandOptions {
+		falseBool := false
+		return &PackageCommandOptions{
+			Cwd:        cwd,
+			AgentDir:   agentDir,
+			Stdout:     &stdout,
+			Stderr:     &stderr,
+			AllowUi:    &falseBool,
+			HTTPClient: srv.Client(),
+		}
+	}
+
+	// Empty list initially.
+	stdout.Reset()
+	stderr.Reset()
+	handled, code = HandlePackageCommand(context.Background(), []string{"list"}, cliOpts())
+	if !handled || code != 0 || !strings.Contains(stdout.String(), "No packages installed.") {
+		t.Fatalf("empty list = (%v, %d) out=%q err=%q", handled, code, stdout.String(), stderr.String())
+	}
+
+	// Global install succeeds.
+	stdout.Reset()
+	stderr.Reset()
+	handled, code = HandlePackageCommand(context.Background(), []string{"install", "npm:cli-demo"}, cliOpts())
+	if !handled || code != 0 || !strings.Contains(stdout.String(), "Installed npm:cli-demo") {
+		t.Fatalf("install global = (%v, %d) out=%q err=%q", handled, code, stdout.String(), stderr.String())
+	}
+
+	// Project local install rejected with --no-approve, allowed with --approve.
+	stderr.Reset()
+	handled, code = HandlePackageCommand(context.Background(), []string{"install", "npm:@cli/local-pkg", "-l", "--no-approve"}, cliOpts())
+	if !handled || code != 1 || !strings.Contains(stderr.String(), "Project is not trusted") {
+		t.Fatalf("install -l --no-approve = (%v, %d) err=%q", handled, code, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	handled, code = HandlePackageCommand(context.Background(), []string{"install", "npm:@cli/local-pkg", "-l", "--approve"}, cliOpts())
+	if !handled || code != 0 || !strings.Contains(stdout.String(), "Installed npm:@cli/local-pkg") {
+		t.Fatalf("install -l --approve = (%v, %d) out=%q err=%q", handled, code, stdout.String(), stderr.String())
+	}
+
+	// List shows both User and Project packages when approved.
+	stdout.Reset()
+	stderr.Reset()
+	handled, code = HandlePackageCommand(context.Background(), []string{"list", "--approve"}, cliOpts())
+	outStr := stdout.String()
+	if !handled || code != 0 || !strings.Contains(outStr, "User packages:") || !strings.Contains(outStr, "npm:cli-demo") || !strings.Contains(outStr, "Project packages:") || !strings.Contains(outStr, "npm:@cli/local-pkg") {
+		t.Fatalf("list = (%v, %d) out=%q err=%q", handled, code, outStr, stderr.String())
+	}
+
+	// Publish v1.2.0 and update --extensions.
+	verMu.Lock()
+	latestVer = "1.2.0"
+	verMu.Unlock()
+	stdout.Reset()
+	stderr.Reset()
+	handled, code = HandlePackageCommand(context.Background(), []string{"update", "--extensions"}, cliOpts())
+	if !handled || code != 0 || !strings.Contains(stdout.String(), "Updated 1 package:") || !strings.Contains(stdout.String(), "npm:cli-demo 1.0.0 -> 1.2.0") {
+		t.Fatalf("update --extensions = (%v, %d) out=%q err=%q", handled, code, stdout.String(), stderr.String())
+	}
+
+	// Re-running update --extension npm:cli-demo prints up-to-date message.
+	stdout.Reset()
+	stderr.Reset()
+	handled, code = HandlePackageCommand(context.Background(), []string{"update", "--extension", "npm:cli-demo"}, cliOpts())
+	if !handled || code != 0 || !strings.Contains(stdout.String(), "npm:cli-demo is already up to date") {
+		t.Fatalf("update --extension already up to date = (%v, %d) out=%q err=%q", handled, code, stdout.String(), stderr.String())
+	}
+
+	// Remove missing package exits 1 with clean message; uninstall existing succeeds.
+	stderr.Reset()
+	handled, code = HandlePackageCommand(context.Background(), []string{"remove", "npm:missing"}, cliOpts())
+	if !handled || code != 1 || !strings.Contains(stderr.String(), "No matching package found for npm:missing") {
+		t.Fatalf("remove missing = (%v, %d) err=%q", handled, code, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	handled, code = HandlePackageCommand(context.Background(), []string{"uninstall", "npm:cli-demo"}, cliOpts())
+	if !handled || code != 0 || !strings.Contains(stdout.String(), "Removed npm:cli-demo") {
+		t.Fatalf("uninstall = (%v, %d) out=%q err=%q", handled, code, stdout.String(), stderr.String())
+	}
+
+	// Offline `update --extensions` reports skipped cleanly.
+	t.Setenv("PI_OFFLINE", "1")
+	stdout.Reset()
+	stderr.Reset()
+	handled, code = HandlePackageCommand(context.Background(), []string{"update", "--extensions"}, cliOpts())
+	if !handled || code != 0 || !strings.Contains(stdout.String(), "Skipped package updates (offline mode)") {
+		t.Fatalf("offline update --extensions = (%v, %d) out=%q err=%q", handled, code, stdout.String(), stderr.String())
+	}
+
+	// Bare `update` prints Extensions skipped note and fails self-update cleanly while offline.
+	stdout.Reset()
+	stderr.Reset()
+	handled, code = HandlePackageCommand(context.Background(), []string{"update"}, cliOpts())
+	if !handled || code != 1 || !strings.Contains(stdout.String(), "Extensions are skipped") || !strings.Contains(stderr.String(), "Could not determine latest") {
+		t.Fatalf("bare offline update = (%v, %d) out=%q err=%q", handled, code, stdout.String(), stderr.String())
 	}
 
 	// `update --models` runs ModelRuntime.Refresh cleanly with empty models/auth.
@@ -237,9 +426,9 @@ func TestHandlePackageCommandBareboneUnsupportedAndUpdateModels(t *testing.T) {
 	}
 	stdout.Reset()
 	stderr.Reset()
-	agentDir := t.TempDir()
-	authPath := filepath.Join(agentDir, "auth.json")
-	modelsPath := filepath.Join(agentDir, "models.json")
+	modelAgentDir := t.TempDir()
+	authPath := filepath.Join(modelAgentDir, "auth.json")
+	modelsPath := filepath.Join(modelAgentDir, "models.json")
 	rt, err := core.CreateModelRuntime(context.Background(), &core.CreateModelRuntimeOptions{
 		Credentials: ai.NewInMemoryCredentialStore(),
 		AuthPath:    &authPath,
@@ -250,7 +439,7 @@ func TestHandlePackageCommandBareboneUnsupportedAndUpdateModels(t *testing.T) {
 	}
 	defer rt.Close()
 	handled, code = HandlePackageCommand(context.Background(), []string{"update", "--models"}, &PackageCommandOptions{
-		AgentDir:     agentDir,
+		AgentDir:     modelAgentDir,
 		Stdout:       &stdout,
 		Stderr:       &stderr,
 		ModelRuntime: rt,
