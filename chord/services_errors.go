@@ -30,7 +30,21 @@ var RemoteServiceErrorCodes = []RemoteServiceErrorCode{
 
 // IsRemoteServiceErrorCode reports whether value is a RemoteServiceErrorCode.
 func IsRemoteServiceErrorCode(value any) bool {
-	panic("unported: IsRemoteServiceErrorCode")
+	var candidate RemoteServiceErrorCode
+	switch v := value.(type) {
+	case RemoteServiceErrorCode:
+		candidate = v
+	case string:
+		candidate = RemoteServiceErrorCode(v)
+	default:
+		return false
+	}
+	for _, code := range RemoteServiceErrorCodes {
+		if candidate == code {
+			return true
+		}
+	}
+	return false
 }
 
 // RemoteServiceError is a remote service failure with a stable code.
@@ -42,7 +56,10 @@ type RemoteServiceError struct {
 
 // NewRemoteServiceError returns an error with the given code and message.
 func NewRemoteServiceError(code RemoteServiceErrorCode, message string) *RemoteServiceError {
-	panic("unported: NewRemoteServiceError")
+	return &RemoteServiceError{
+		Code:    code,
+		Message: message,
+	}
 }
 
 func (e *RemoteServiceError) Error() string { return e.Message }
