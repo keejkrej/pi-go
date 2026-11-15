@@ -106,6 +106,18 @@ func (r *AgentSessionRuntime) Cwd() string {
 	return cwd
 }
 
+// CurrentSession returns the active *AgentSession under r.mu so concurrent UI readers
+// do not race with replaceSession during NewSession, SwitchSession, Fork, or ImportFromJsonl.
+func (r *AgentSessionRuntime) CurrentSession() *AgentSession {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	sess := r.Session
+	r.mu.Unlock()
+	return sess
+}
+
 // CreateAgentSessionRuntime initializes the first session using createRuntime.
 func CreateAgentSessionRuntime(
 	ctx context.Context,

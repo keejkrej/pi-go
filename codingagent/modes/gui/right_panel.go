@@ -20,9 +20,9 @@ import (
 )
 
 const (
-	wakuRightPanelDefaultWidth float32 = 380
+	wakuRightPanelDefaultWidth float32 = 460
 	wakuRightPanelMinWidth     float32 = 280
-	wakuRightPanelMaxWidth     float32 = 620
+	wakuRightPanelMaxWidth     float32 = 1000
 )
 
 type wakuChangedFile struct {
@@ -486,7 +486,7 @@ func (m *GuiMode) renderWakuRightPanel(c *ui.Context, th *gui.GuiTheme) {
 		c,
 		"waku-right-split",
 		th,
-		th.Border,
+		th.BorderStrong,
 		width,
 		wakuRightPanelMinWidth,
 		wakuRightPanelMaxWidth,
@@ -504,7 +504,7 @@ func (m *GuiMode) renderWakuRightPanel(c *ui.Context, th *gui.GuiTheme) {
 		Width(width).
 		Shrink(0).
 		FillHeight().
-		Background(th.SidebarBg)
+		Background(th.Background)
 
 	panel.Children(func() {
 		// Top 48px tab & action header
@@ -550,7 +550,7 @@ func (m *GuiMode) renderWakuRightPanel(c *ui.Context, th *gui.GuiTheme) {
 							refreshClicked = true
 						}
 					}
-					if wakuIconButton(c, th, gui.IconClose, "Close Right Panel", false, th.TextSecondary) {
+					if wakuIconButton(c, th, gui.IconPanelRight, "Toggle Right Panel", false, th.TextSecondary) {
 						closeClicked = true
 					}
 				})

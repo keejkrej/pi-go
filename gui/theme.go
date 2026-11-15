@@ -294,7 +294,7 @@ func LightGuiTheme() *GuiTheme {
 	sidebarBg := ui.Hex("#F3F3F3")
 	raised := ui.Hex("#ECECEC")
 	composerBg := ui.Hex("#FFFFFF")
-	inset := ui.Hex("#EFEFEF")
+	inset := ui.Hex("#E6E6E6")
 	codeBlockBg := ui.Hex("#FFFFFF")
 
 	text := ui.Hex("#242424")

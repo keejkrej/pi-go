@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/keejkrej/pi-go/codingagent/utils"
 	"github.com/keejkrej/pi-go/gui"
 )
 
@@ -17,7 +16,7 @@ type wakuModFileStat struct {
 	dels int
 }
 
-// renderWakuTranscript renders the centered 760px Waku transcript stream inside the
+// renderWakuTranscript renders the centered 720px Waku transcript stream inside the
 // ScrollView, including empty state, collapsible "Worked for ..." turn clusters,
 // changed-files review cards, live working pulse, and notices.
 func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
@@ -53,15 +52,13 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 
 	var toggleTurnKey string
 	var openReviewFile string
-	var launchStarterPrompt string
-	var openSessionPicker bool
 
 	wrap := ui.Column(c).FillWidth().AlignItems(ui.Center)
 	wrap.Children(func() {
 		col := ui.Column(c).
 			FillWidth().
-			MaxWidth(760).
-			Padding(16, 24, 14, 24).
+			MaxWidth(wakuContentMaxWidth).
+			Padding(22, 20, 22, 20).
 			Gap(14)
 
 		col.Children(func() {
@@ -84,13 +81,7 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 
 			// Show Waku Empty State when conversation has no turns yet and nothing is running.
 			if len(convEntries) == 0 && !isBusy {
-				prompt, resume := renderWakuEmptyState(c, th, cwd)
-				if prompt != "" {
-					launchStarterPrompt = prompt
-				}
-				if resume {
-					openSessionPicker = true
-				}
+				renderWakuEmptyState(c, th, cwd)
 			}
 
 			// Partition conversation entries into user/standalone cards and assistant+tool turn clusters.
@@ -205,7 +196,7 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 							Cursor(ui.CursorPointer).
 							Label(headerLbl)
 						hdrBtn.Children(func() {
-							ui.Box(c).Width(18).Height(1).Background(th.Border)
+							ui.Box(c).Grow(1).Height(1).Background(th.Border)
 							chevSvg := gui.IconChevronDown
 							if isCollapsed {
 								chevSvg = gui.IconChevronRight
@@ -353,99 +344,31 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 	if openReviewFile != "" {
 		m.openRightPanelFileDiff(openReviewFile)
 	}
-	if openSessionPicker {
-		m.ShowSessionSelector()
-	}
-	if launchStarterPrompt != "" {
-		go m.dispatchTextOrPrompt(m.currentCtx(), launchStarterPrompt, nil, false)
-	}
 }
 
-func renderWakuEmptyState(c *ui.Context, th *gui.GuiTheme, cwd string) (selectedPrompt string, openResume bool) {
+func renderWakuEmptyState(c *ui.Context, th *gui.GuiTheme, cwd string) {
 	projName := filepath.Base(cwd)
-	if projName == "" || projName == "." || projName == "/" {
-		projName = "pi"
-	}
-	shortCwd := ""
-	if cwd != "" {
-		shortCwd = utils.ShortenHomePath(cwd)
+	heading := "What should we build?"
+	if projName != "" && projName != "." && projName != "/" {
+		heading = "What should we build in " + projName + "?"
 	}
 
-	box := ui.Column(c).
+	ui.Column(c).
 		Key("waku-empty-state").
 		FillWidth().
-		Padding(44, 16, 24, 16).
+		Padding(80, 20, 40, 20).
 		AlignItems(ui.Center).
-		Gap(14)
-
-	box.Children(func() {
-		ui.Box(c).
-			Size(48, 48).
-			Radius(13).
-			Background(th.Raised).
-			Border(1, th.BorderStrong).
-			AlignItems(ui.Center).
-			Justify(ui.Center).
-			Children(func() {
-				gui.IconView(c, gui.IconPiLogo, 24, th.Accent)
-			})
-
-		ui.Column(c).AlignItems(ui.Center).Gap(4).Children(func() {
-			ui.Text(c, projName).TextColor(th.Text).FontSize(20).FontWeight(600)
-			if shortCwd != "" {
-				ui.Text(c, shortCwd).TextColor(th.TextTertiary).Font("monospace").FontSize(11)
-			}
-			ui.Text(c, "Ask anything, @ to mention files, / for commands").TextColor(th.TextSecondary).FontSize(13)
-		})
-
-		ui.Row(c).Wrap().Justify(ui.Center).Gap(8).Margin(4, 0, 0, 0).Children(func() {
-			starters := []struct {
-				label  string
-				prompt string
-				resume bool
-			}{
-				{label: "Review changes", prompt: "Inspect the current working tree changes and summarize any issues or improvements."},
-				{label: "Explain codebase", prompt: "Summarize the project structure and key entry points in this workspace."},
-				{label: "Resume session", resume: true},
-			}
-			for i, st := range starters {
-				item := st
-				chip := ui.ButtonBase(c).
-					Key(fmt.Sprintf("empty-starter-%d", i)).
-					Height(30).
-					Padding(0, 12, 0, 12).
-					Radius(999).
-					Background(th.Raised).
-					Border(1, th.Border).
-					AlignItems(ui.Center).
-					Gap(6).
-					Cursor(ui.CursorPointer).
-					Label(item.label)
-				if chip.Hovered() {
-					chip.Background(th.Overlay).Border(1, th.BorderStrong)
-				}
-				chip.Children(func() {
-					svg := gui.IconSparkle
-					if item.resume {
-						svg = gui.IconSearch
-					} else if i == 0 {
-						svg = gui.IconChanges
-					}
-					gui.IconView(c, svg, 13, th.TextSecondary)
-					ui.Text(c, item.label).TextColor(th.TextSecondary).FontSize(12).SingleLine()
+		Justify(ui.Center).
+		Children(func() {
+			ui.Row(c).
+				AlignItems(ui.Center).
+				Justify(ui.Center).
+				Gap(10).
+				Children(func() {
+					gui.IconView(c, gui.IconSparkle, 20, th.Accent)
+					ui.Text(c, heading).TextColor(th.Text).FontSize(20).FontWeight(500).SingleLine()
 				})
-				if chip.Clicked() {
-					if item.resume {
-						openResume = true
-					} else {
-						selectedPrompt = item.prompt
-					}
-				}
-			}
 		})
-	})
-
-	return selectedPrompt, openResume
 }
 
 func renderWakuChangedFilesCard(c *ui.Context, th *gui.GuiTheme, turnKey string, files []wakuModFileStat) string {

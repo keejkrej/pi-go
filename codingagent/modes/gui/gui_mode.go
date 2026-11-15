@@ -338,7 +338,7 @@ func NewGuiMode(runtime *core.AgentSessionRuntime, opts *GuiModeOptions) *GuiMod
 	}
 
 	m.editor = gui.NewEditor(gui.EditorOptions{
-		Placeholder: "Do anything... (/ commands, @ files, ! bash)",
+		Placeholder: "Do anything…",
 		MinLines:    2,
 		MaxLines:    8,
 		Theme:       guiTheme,
@@ -421,7 +421,7 @@ func (m *GuiMode) Session() *core.AgentSession {
 	if m == nil || m.runtime == nil {
 		return nil
 	}
-	return m.runtime.Session
+	return m.runtime.CurrentSession()
 }
 
 // FlushPending executes any queued UI callbacks immediately. Primarily useful in synchronous tests.
@@ -668,7 +668,6 @@ func (m *GuiMode) View(c *ui.Context) ui.Element {
 		m.handleAppShortcuts(c)
 	}
 
-	sess := m.Session()
 	if sessionTitle == "" {
 		sessionTitle = m.firstTranscriptUserTitle(56)
 	}
@@ -679,18 +678,14 @@ func (m *GuiMode) View(c *ui.Context) ui.Element {
 		sessionTitle = "New task"
 	}
 
-	cwdSubtitle := gmRuntimeCwd(m.runtime)
-	if sess != nil && sess.Cwd() != "" {
-		cwdSubtitle = sess.Cwd()
-	}
-
 	m.sidebar.mu.Lock()
 	sidebarOpen := m.sidebar.open
+	sidebarWidth := m.sidebar.width
 	canBack := len(m.sidebar.navBack) > 0
 	canFwd := len(m.sidebar.navFwd) > 0
 	m.sidebar.mu.Unlock()
 
-	rightOpen, _, _, changedCount := m.rightPanel.snapshotMeta()
+	rightOpen, _, _, _ := m.rightPanel.snapshotMeta()
 
 	root := ui.Row(c).
 		Key("waku-shell-root").
@@ -711,9 +706,9 @@ func (m *GuiMode) View(c *ui.Context) ui.Element {
 		center.Children(func() {
 			renderWakuCenterHeader(
 				c, m, th,
-				sidebarOpen, rightOpen, changedCount,
+				sidebarOpen, sidebarWidth, rightOpen,
 				canBack, canFwd,
-				sessionTitle, cwdSubtitle,
+				sessionTitle,
 			)
 
 			// Virtualized scrollable transcript stream
@@ -1273,6 +1268,8 @@ func (m *GuiMode) rebuildTranscript() {
 								WithUserMessageId(e.Id),
 								WithUserTheme(th),
 								WithUserOnLink(gmOpenLink),
+								WithUserOnCopy(func(s string) { _ = gmWriteClipboardText(m.host, s) }),
+								WithUserWakuStyle(true),
 							)
 							entryIdx[uid] = len(entries)
 							entries = append(entries, gmTranscriptEntry{id: uid, kind: "user", card: uc})
@@ -1285,6 +1282,8 @@ func (m *GuiMode) rebuildTranscript() {
 							WithUserMessageId(e.Id),
 							WithUserTheme(th),
 							WithUserOnLink(gmOpenLink),
+							WithUserOnCopy(func(s string) { _ = gmWriteClipboardText(m.host, s) }),
+							WithUserWakuStyle(true),
 						)
 						entryIdx[uid] = len(entries)
 						entries = append(entries, gmTranscriptEntry{id: uid, kind: "user", card: uc})
@@ -1300,6 +1299,9 @@ func (m *GuiMode) rebuildTranscript() {
 						WithAssistantShowUsage(true),
 						WithAssistantTheme(th),
 						WithAssistantOnLink(gmOpenLink),
+						WithAssistantOnCopyMessage(func(s string) { _ = gmWriteClipboardText(m.host, s) }),
+						WithAssistantOnCopyCode(func(_, code string) { _ = gmWriteClipboardText(m.host, code) }),
+						WithAssistantWakuStyle(true),
 					)
 					entryIdx[aid] = len(entries)
 					entries = append(entries, gmTranscriptEntry{id: aid, kind: "assistant", card: ac})
@@ -2216,8 +2218,8 @@ func gmLoadKeybindings() *gui.KeybindingsManager {
 }
 
 func gmRuntimeSettings(rt *core.AgentSessionRuntime) *core.SettingsManager {
-	if rt != nil && rt.Session != nil {
-		return rt.Session.SettingsManager
+	if sess := rt.CurrentSession(); sess != nil {
+		return sess.SettingsManager
 	}
 	return nil
 }
@@ -2231,8 +2233,8 @@ func gmRuntimeCwd(rt *core.AgentSessionRuntime) string {
 
 func gmInitialTitle(rt *core.AgentSessionRuntime, explicit string) string {
 	sessName := ""
-	if rt != nil && rt.Session != nil {
-		if name := rt.Session.SessionName(); name != nil {
+	if sess := rt.CurrentSession(); sess != nil {
+		if name := sess.SessionName(); name != nil {
 			sessName = strings.TrimSpace(*name)
 		}
 	}

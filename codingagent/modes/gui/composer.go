@@ -62,8 +62,8 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 	outer.Children(func() {
 		col := ui.Column(c).
 			FillWidth().
-			MaxWidth(760).
-			Padding(2, 24, 10, 24).
+			MaxWidth(wakuContentMaxWidth).
+			Padding(2, 20, 8, 20).
 			Gap(0)
 
 		col.Children(func() {
@@ -134,7 +134,7 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 			}
 
 			// Floating 13px Waku Composer Card
-			borderCol := th.BorderStrong
+			borderCol := th.Border
 			if m.editor != nil && m.editor.BashMode() {
 				borderCol = th.Warning.Alpha(0.75)
 			}
@@ -147,9 +147,9 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 				Padding(10, 12, 8, 12).
 				Gap(6)
 			if hasQueue {
-				card.Radius(0, 0, 13, 13)
+				card.Radius(0, 0, wakuComposerRadius, wakuComposerRadius)
 			} else {
-				card.Radius(13)
+				card.Radius(wakuComposerRadius)
 			}
 
 			card.Children(func() {
@@ -258,21 +258,15 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 								if hasDraft {
 									qBtn := ui.ButtonBase(c).
 										Key("composer-queue-btn").
-										Height(26).
-										Padding(0, 9, 0, 9).
+										Size(26, 26).
 										Radius(999).
-										Background(th.Raised).
-										Border(1, th.BorderStrong).
+										Background(th.Inverse).
 										AlignItems(ui.Center).
-										Gap(4).
+										Justify(ui.Center).
 										Cursor(ui.CursorPointer).
 										Label("Queue Follow-up")
-									if qBtn.Hovered() {
-										qBtn.Background(th.Overlay)
-									}
 									qBtn.Children(func() {
-										gui.IconView(c, gui.IconQueue, 12, th.TextSecondary)
-										ui.Text(c, "Queue").TextColor(th.TextSecondary).FontSize(11).SingleLine()
+										gui.IconView(c, gui.IconArrowUp, 13, th.OnInverse)
 									})
 									if qBtn.Clicked() {
 										followUpClicked = true
@@ -283,13 +277,13 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 									Key("composer-stop-btn").
 									Size(26, 26).
 									Radius(999).
-									Background(th.Inverse).
+									Background(th.OverlayStrong).
 									AlignItems(ui.Center).
 									Justify(ui.Center).
 									Cursor(ui.CursorPointer).
 									Label("Stop")
 								stopBtn.Children(func() {
-									gui.IconView(c, gui.IconStop, 10, th.OnInverse)
+									gui.IconView(c, gui.IconStop, 10, th.Text)
 								})
 								if stopBtn.Clicked() {
 									stopClicked = true
@@ -325,8 +319,8 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 			ui.Row(c).
 				Key("waku-workspace-footer").
 				FillWidth().
-				Height(28).
-				Padding(4, 4, 0, 4).
+				Height(wakuWorkspaceFooterHeight).
+				Padding(4, 10, 8, 10).
 				AlignItems(ui.Center).
 				Justify(ui.SpaceBetween).
 				Gap(8).

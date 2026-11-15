@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,19 +19,41 @@ import (
 )
 
 const (
-	wakuSidebarDefaultWidth float32 = 264
-	wakuSidebarMinWidth     float32 = 200
-	wakuSidebarMaxWidth     float32 = 420
+	wakuSidebarDefaultWidth      float32 = 252
+	wakuSidebarMinWidth          float32 = 180
+	wakuSidebarMaxWidth          float32 = 420
+	wakuSidebarActionRowHeight   float32 = 32
+	wakuSidebarSearchBottomGap   float32 = 10
+	wakuSidebarGroupHeaderHeight float32 = 28
+	wakuSidebarGroupChildPadding float32 = 28
+	wakuSidebarSessionCardHeight float32 = 51
+	wakuSidebarFooterHeight      float32 = 40
 )
 
 type wakuLayoutPrefs struct {
 	SidebarOpen     bool     `json:"sidebarOpen"`
 	SidebarWidth    float32  `json:"sidebarWidth"`
 	SidebarGroupBy  string   `json:"sidebarGroupBy,omitzero"`
+	SidebarOrderBy  string   `json:"sidebarOrderBy,omitzero"`
 	RightPanelOpen  bool     `json:"rightPanelOpen"`
 	RightPanelWidth float32  `json:"rightPanelWidth"`
 	RightPanelTab   string   `json:"rightPanelTab,omitzero"`
 	PinnedSessions  []string `json:"pinnedSessions,omitzero"`
+}
+
+func wakuNormalizeGroupBy(v string) string {
+	if v == "project" {
+		return "project"
+	}
+	// Accept legacy "date" and empty values as "updated".
+	return "updated"
+}
+
+func wakuNormalizeOrderBy(v string) string {
+	if v == "oldest" {
+		return "oldest"
+	}
+	return "newest"
 }
 
 func wakuLayoutPrefsPath() string {
@@ -42,29 +65,34 @@ func wakuLayoutPrefsPath() string {
 }
 
 type wakuSidebarState struct {
-	mu       sync.Mutex
-	open     bool
-	width    float32
-	groupBy  string // "date" or "project"
-	sessions []core.SessionInfo
-	loading  bool
-	pinned   map[string]bool
-	navBack  []string
-	navFwd   []string
-	split    wakuSplitDragTracker
-	loadSeq  atomic.Uint64
-	persist  bool
-	initDone bool
+	mu          sync.Mutex
+	open        bool
+	width       float32
+	groupBy     string // "updated" or "project"
+	orderBy     string // "newest" or "oldest"
+	collapsed   map[string]bool
+	optionsOpen bool
+	sessions    []core.SessionInfo
+	loading     bool
+	pinned      map[string]bool
+	navBack     []string
+	navFwd      []string
+	split       wakuSplitDragTracker
+	loadSeq     atomic.Uint64
+	persist     bool
+	initDone    bool
 }
 
 func newWakuSidebarState(skipPersist bool) *wakuSidebarState {
 	st := &wakuSidebarState{
-		open:     true,
-		width:    wakuSidebarDefaultWidth,
-		groupBy:  "date",
-		pinned:   make(map[string]bool),
-		persist:  !skipPersist,
-		initDone: true,
+		open:      true,
+		width:     wakuSidebarDefaultWidth,
+		groupBy:   "updated",
+		orderBy:   "newest",
+		collapsed: make(map[string]bool),
+		pinned:    make(map[string]bool),
+		persist:   !skipPersist,
+		initDone:  true,
 	}
 	if !skipPersist {
 		st.loadPrefsLocked()
@@ -85,9 +113,8 @@ func (s *wakuSidebarState) loadPrefsLocked() {
 	if prefs.SidebarWidth >= wakuSidebarMinWidth && prefs.SidebarWidth <= wakuSidebarMaxWidth {
 		s.width = prefs.SidebarWidth
 	}
-	if prefs.SidebarGroupBy == "project" || prefs.SidebarGroupBy == "date" {
-		s.groupBy = prefs.SidebarGroupBy
-	}
+	s.groupBy = wakuNormalizeGroupBy(prefs.SidebarGroupBy)
+	s.orderBy = wakuNormalizeOrderBy(prefs.SidebarOrderBy)
 	for _, p := range prefs.PinnedSessions {
 		if strings.TrimSpace(p) != "" {
 			s.pinned[p] = true
@@ -123,6 +150,7 @@ func (m *GuiMode) saveLayoutPrefs() {
 	prefs.SidebarOpen = sb.open
 	prefs.SidebarWidth = sb.width
 	prefs.SidebarGroupBy = sb.groupBy
+	prefs.SidebarOrderBy = sb.orderBy
 	for p, on := range sb.pinned {
 		if on {
 			prefs.PinnedSessions = append(prefs.PinnedSessions, p)
@@ -190,25 +218,210 @@ func (m *GuiMode) toggleRightPanel() {
 	}
 }
 
+func wakuResolvePath(p string) string {
+	p = filepath.Clean(strings.TrimSpace(p))
+	if abs, err := filepath.Abs(p); err == nil {
+		p = abs
+	}
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		return resolved
+	}
+	return p
+}
+
+// wakuIsManagedDefaultSessionDir reports whether dir is inside utils.GetSessionsDir()
+// (where per-project session folders live) or equal to it. External --session-dir
+// locations outside utils.GetSessionsDir() return false.
+func wakuIsManagedDefaultSessionDir(dir string) bool {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return true
+	}
+	sessionsRoot := strings.TrimSpace(utils.GetSessionsDir())
+	if sessionsRoot == "" {
+		return false
+	}
+	if utils.PathsEqual(dir, sessionsRoot) {
+		return true
+	}
+	root := wakuResolvePath(sessionsRoot)
+	target := wakuResolvePath(dir)
+	if utils.PathsEqual(target, root) {
+		return true
+	}
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return false
+	}
+	if rel == "." {
+		return true
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+}
+
+func wakuSessionDedupeKey(s core.SessionInfo) string {
+	if strings.TrimSpace(s.Path) != "" {
+		return wakuResolvePath(s.Path)
+	}
+	return "id:" + s.Id
+}
+
+func wakuSessionSortTime(s core.SessionInfo) time.Time {
+	if !s.Modified.IsZero() {
+		return s.Modified
+	}
+	return s.Created
+}
+
+func (m *GuiMode) loadSidebarSessionsSnapshot(ctx context.Context) []core.SessionInfo {
+	if m == nil {
+		return nil
+	}
+	sess := m.Session()
+
+	var curFile, curId, curCwd, curDir, curName, curFirst string
+	var curCount int
+	var curCreated time.Time
+	if sess != nil {
+		curId, curFile, curDir, curName, curCreated = m.cachedSessionMeta()
+		curCwd = sess.Cwd()
+		curFirst = m.firstTranscriptUserTitle(80)
+		curCount = len(sess.Messages())
+	}
+
+	// Always list all project sessions under the managed sessions root so switching to
+	// a session in another project never collapses the sidebar to a single folder.
+	var baseListed []core.SessionInfo
+	if strings.TrimSpace(utils.GetSessionsDir()) != "" {
+		if items, err := core.SessionManagerListAll(ctx, ""); err == nil {
+			baseListed = items
+		} else if curCwd != "" {
+			baseListed, _ = core.SessionManagerList(ctx, curCwd, "")
+		}
+	}
+
+	var extListed []core.SessionInfo
+	if curDir != "" && !wakuIsManagedDefaultSessionDir(curDir) {
+		items, err := core.SessionManagerListAll(ctx, curDir)
+		if err != nil && curCwd != "" {
+			items, _ = core.SessionManagerList(ctx, curCwd, curDir)
+		}
+		extListed = items
+	}
+
+	mergedByKey := make(map[string]core.SessionInfo, len(baseListed)+len(extListed))
+	order := make([]string, 0, len(baseListed)+len(extListed))
+	addItems := func(items []core.SessionInfo) {
+		for _, item := range items {
+			key := wakuSessionDedupeKey(item)
+			if existing, ok := mergedByKey[key]; ok {
+				if wakuSessionSortTime(item).After(wakuSessionSortTime(existing)) {
+					mergedByKey[key] = item
+				}
+				continue
+			}
+			mergedByKey[key] = item
+			order = append(order, key)
+		}
+	}
+	addItems(baseListed)
+	addItems(extListed)
+
+	listed := make([]core.SessionInfo, 0, len(order))
+	for _, key := range order {
+		listed = append(listed, mergedByKey[key])
+	}
+
+	// Preserve on-disk Modified timestamps on active sessions instead of bumping to time.Now().
+	curFileResolved := ""
+	if curFile != "" {
+		curFileResolved = wakuResolvePath(curFile)
+	}
+	foundActive := false
+	for i := range listed {
+		pathMatch := curFileResolved != "" && wakuResolvePath(listed[i].Path) == curFileResolved
+		idMatch := curId != "" && listed[i].Id == curId
+		if pathMatch || idMatch {
+			foundActive = true
+			if curName != "" {
+				cp := curName
+				listed[i].Name = &cp
+			}
+			if curFirst != "" && listed[i].FirstMessage == "" {
+				listed[i].FirstMessage = curFirst
+			}
+			if curCount > listed[i].MessageCount {
+				listed[i].MessageCount = curCount
+			}
+			break
+		}
+	}
+	if !foundActive && sess != nil {
+		curModified := curCreated
+		if curFile != "" {
+			if st, err := os.Stat(curFile); err == nil {
+				curModified = st.ModTime()
+			}
+		}
+		if curCreated.IsZero() {
+			curCreated = curModified
+			if curCreated.IsZero() {
+				curCreated = time.Now()
+			}
+		}
+		if curModified.IsZero() {
+			curModified = curCreated
+		}
+		var namePtr *string
+		if curName != "" {
+			cp := curName
+			namePtr = &cp
+		}
+		listed = append(listed, core.SessionInfo{
+			Path:         curFile,
+			Id:           curId,
+			Cwd:          curCwd,
+			Name:         namePtr,
+			Created:      curCreated,
+			Modified:     curModified,
+			MessageCount: curCount,
+			FirstMessage: curFirst,
+		})
+	}
+
+	slices.SortStableFunc(listed, func(a, b core.SessionInfo) int {
+		tb, ta := wakuSessionSortTime(b), wakuSessionSortTime(a)
+		if c := tb.Compare(ta); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Path, b.Path)
+	})
+	return listed
+}
+
+func (m *GuiMode) refreshSidebarSessionsSync(ctx context.Context) []core.SessionInfo {
+	if m == nil {
+		return nil
+	}
+	m.ensureWakuState()
+	sb := m.sidebar
+	seq := sb.loadSeq.Add(1)
+	listed := m.loadSidebarSessionsSnapshot(ctx)
+	sb.mu.Lock()
+	if sb.loadSeq.Load() == seq {
+		sb.sessions = listed
+		sb.loading = false
+	}
+	sb.mu.Unlock()
+	return listed
+}
+
 func (m *GuiMode) refreshSidebarSessions() {
 	if m == nil {
 		return
 	}
 	m.ensureWakuState()
 	sb := m.sidebar
-	sess := m.Session()
-
-	var curFile, curId, curCwd, curDir, curName, curFirst string
-	var curCount int
-	var curCreated, curModified time.Time
-
-	if sess != nil {
-		curId, curFile, curDir, curName, curCreated = m.cachedSessionMeta()
-		curCwd = sess.Cwd()
-		curFirst = m.firstTranscriptUserTitle(80)
-		curCount = len(sess.Messages())
-		curModified = time.Now()
-	}
 
 	seq := sb.loadSeq.Add(1)
 	sb.mu.Lock()
@@ -217,61 +430,7 @@ func (m *GuiMode) refreshSidebarSessions() {
 
 	ctx := m.currentCtx()
 	go func() {
-		defaultDir := core.GetDefaultSessionDir(curCwd)
-		customDir := ""
-		if curDir != "" && !utils.PathsEqual(curDir, defaultDir) && !utils.PathsEqual(curDir, utils.GetSessionsDir()) {
-			customDir = curDir
-		}
-
-		var listed []core.SessionInfo
-		var err error
-		if customDir != "" || curDir != "" || utils.GetSessionsDir() != "" {
-			listed, err = core.SessionManagerListAll(ctx, customDir)
-			if err != nil && curCwd != "" {
-				listed, _ = core.SessionManagerList(ctx, curCwd, customDir)
-			}
-		}
-
-		// Ensure active session appears even when brand new (0 msgs) or in-memory.
-		foundActive := false
-		for i := range listed {
-			if (curFile != "" && listed[i].Path == curFile) || (curId != "" && listed[i].Id == curId) {
-				foundActive = true
-				if curName != "" {
-					cp := curName
-					listed[i].Name = &cp
-				}
-				if curFirst != "" && listed[i].FirstMessage == "" {
-					listed[i].FirstMessage = curFirst
-				}
-				if curCount > listed[i].MessageCount {
-					listed[i].MessageCount = curCount
-				}
-				break
-			}
-		}
-		if !foundActive && sess != nil {
-			if curCreated.IsZero() {
-				curCreated = time.Now()
-			}
-			var namePtr *string
-			if curName != "" {
-				cp := curName
-				namePtr = &cp
-			}
-			activeInfo := core.SessionInfo{
-				Path:         curFile,
-				Id:           curId,
-				Cwd:          curCwd,
-				Name:         namePtr,
-				Created:      curCreated,
-				Modified:     curModified,
-				MessageCount: curCount,
-				FirstMessage: curFirst,
-			}
-			listed = append([]core.SessionInfo{activeInfo}, listed...)
-		}
-
+		listed := m.loadSidebarSessionsSnapshot(ctx)
 		if sb.loadSeq.Load() != seq {
 			return
 		}
@@ -371,6 +530,29 @@ func (m *GuiMode) toggleQuickThemeDarkLight() {
 	m.updateFooterAndTitle()
 }
 
+func wakuSidebarOptionRow(c *ui.Context, th *gui.GuiTheme, label string, selected bool) bool {
+	btn := ui.ButtonBase(c).
+		FillWidth().
+		Height(26).
+		Padding(0, 8, 0, 8).
+		Radius(5).
+		AlignItems(ui.Center).
+		Justify(ui.SpaceBetween).
+		Gap(8).
+		Cursor(ui.CursorPointer).
+		Label(label)
+	if btn.Hovered() {
+		btn.Background(th.Overlay)
+	}
+	btn.Children(func() {
+		ui.Text(c, label).TextColor(th.Text).FontSize(12).SingleLine()
+		if selected {
+			gui.IconView(c, gui.IconCheck, 12, th.Accent)
+		}
+	})
+	return btn.Clicked()
+}
+
 func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 	if m == nil {
 		return
@@ -380,7 +562,15 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 
 	sb.mu.Lock()
 	width := sb.width
-	groupBy := sb.groupBy
+	groupBy := wakuNormalizeGroupBy(sb.groupBy)
+	orderBy := wakuNormalizeOrderBy(sb.orderBy)
+	optionsOpen := sb.optionsOpen
+	canBack := len(sb.navBack) > 0
+	canForward := len(sb.navFwd) > 0
+	collapsed := make(map[string]bool, len(sb.collapsed))
+	for k, v := range sb.collapsed {
+		collapsed[k] = v
+	}
 	sessions := append([]core.SessionInfo(nil), sb.sessions...)
 	pinned := make(map[string]bool, len(sb.pinned))
 	for k, v := range sb.pinned {
@@ -390,6 +580,7 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 
 	sess := m.Session()
 	activeID, activeFile, _, _, _ := m.cachedSessionMeta()
+	_, activeBranch := m.rightPanel.gitBranchesSnapshot()
 	var isStreaming bool
 	if sess != nil {
 		isStreaming = sess.IsStreaming() || sess.IsCompacting() || sess.IsRetrying()
@@ -400,7 +591,8 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 		bg = th.SidebarBg.Alpha(0.76)
 	}
 
-	var toggleSidebar, newTask, openSearch, toggleGroup, toggleTheme, openSettings bool
+	var toggleSidebar, goBack, goForward, newTask, openSearch, openSettings bool
+	var toggleCollapseKey, nextGroupBy, nextOrderBy string
 	var switchPath string
 	var togglePinKey string
 	var renameTarget *core.SessionInfo
@@ -416,34 +608,42 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 		Background(bg)
 
 	panel.Children(func() {
-		// 1. Top 48px traffic-light bar + sidebar toggle
+		// 1. Top 48px sidebar-titlebar: macOS traffic-light clearance + Toggle Sidebar + history nav + drag spacer
 		topH := wakuHeaderHeight(c)
+		inset := wakuTrafficLightInset(c)
+		titlePadLeft := float32(0)
+		if inset <= 0 {
+			titlePadLeft = 8
+		}
 		ui.Row(c).
+			Key("waku-sidebar-titlebar").
 			FillWidth().
 			Height(topH).
 			AlignItems(ui.Center).
-			Padding(0, 10, 0, 10).
-			Gap(4).
+			Padding(0, 8, 0, titlePadLeft).
 			Children(func() {
-				inset := wakuTrafficLightInset(c)
-				if inset > 12 {
-					ui.Box(c).Width(inset - 10).FillHeight().DragWindow()
+				if inset > 0 {
+					ui.Box(c).Width(inset).FillHeight().DragWindow()
 				}
+				ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(2).Children(func() {
+					if wakuIconButton(c, th, gui.IconPanelLeft, "Toggle Sidebar", false, th.TextSecondary) {
+						toggleSidebar = true
+					}
+					goBack, goForward = renderWakuHistoryNavButtons(c, th, canBack, canForward)
+				})
 				ui.Box(c).Grow(1).FillHeight().DragWindow()
-				if wakuIconButton(c, th, gui.IconPanelLeft, "Collapse Sidebar", false, th.TextSecondary) {
-					toggleSidebar = true
-				}
 			})
 
-		// 2. Primary Action rows: New Task & Search
-		ui.Column(c).FillWidth().Padding(2, 8, 6, 8).Gap(2).Children(func() {
+		// 2. Pinned New Task action row (32px, regular weight)
+		ui.Box(c).FillWidth().Padding(0, 8, 0, 8).Children(func() {
 			newBtn := ui.ButtonBase(c).
 				FillWidth().
-				Height(32).
-				Padding(0, 10, 0, 10).
-				Radius(8).
+				Height(wakuSidebarActionRowHeight).
+				Padding(0, 8, 0, 8).
+				Radius(6).
 				AlignItems(ui.Center).
-				Gap(9).
+				Justify(ui.Start).
+				Gap(8).
 				Cursor(ui.CursorPointer).
 				Label("New Task")
 			if newBtn.Hovered() {
@@ -451,216 +651,298 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 			}
 			newBtn.Children(func() {
 				gui.IconView(c, gui.IconCompose, 15, th.TextSecondary)
-				ui.Text(c, "New Task").TextColor(th.Text).FontSize(13).FontWeight(500).SingleLine()
+				ui.Text(c, "New Task").TextColor(th.Text).FontSize(13).SingleLine()
 			})
 			if newBtn.Clicked() {
 				newTask = true
 			}
-
-			searchBtn := ui.ButtonBase(c).
-				FillWidth().
-				Height(32).
-				Padding(0, 10, 0, 10).
-				Radius(8).
-				AlignItems(ui.Center).
-				Justify(ui.SpaceBetween).
-				Cursor(ui.CursorPointer).
-				Label("Search")
-			if searchBtn.Hovered() {
-				searchBtn.Background(th.SidebarItemBg)
-			}
-			searchBtn.Children(func() {
-				ui.Row(c).AlignItems(ui.Center).Gap(9).Children(func() {
-					gui.IconView(c, gui.IconSearch, 15, th.TextSecondary)
-					ui.Text(c, "Search").TextColor(th.Text).FontSize(13).FontWeight(500).SingleLine()
-				})
-				ui.Text(c, "⌘K").TextColor(th.TextGhost).FontSize(11).SingleLine()
-			})
-			if searchBtn.Clicked() {
-				openSearch = true
-			}
 		})
 
-		// 3. Sessions section header
-		ui.Row(c).
-			FillWidth().
-			Padding(8, 12, 4, 14).
-			AlignItems(ui.Center).
-			Justify(ui.SpaceBetween).
-			Children(func() {
-				ui.Text(c, "Sessions").TextColor(th.TextTertiary).FontSize(11).FontWeight(600).SingleLine()
-				groupSvg := gui.IconFilter
-				groupLbl := "Group by Project"
-				if groupBy == "project" {
-					groupSvg = gui.IconFolder
-					groupLbl = "Group by Date"
-				}
-				grpBtn := ui.ButtonBase(c).
-					Size(22, 22).
-					Radius(6).
-					AlignItems(ui.Center).
-					Justify(ui.Center).
-					Cursor(ui.CursorPointer).
-					Label(groupLbl)
-				if grpBtn.Hovered() {
-					grpBtn.Background(th.Overlay)
-				}
-				grpBtn.Children(func() {
-					gui.IconView(c, groupSvg, 13, th.TextTertiary)
-				})
-				if grpBtn.Clicked() {
-					toggleGroup = true
-				}
-			})
-
-		// 4. Scrollable Session Cards
-		groups := wakuGroupSessions(sessions, pinned, groupBy)
-		scroll := ui.Scroll(c).FillWidth().Grow(1).Padding(2, 8, 8, 8)
+		// 3. Scrollable Search row + Session Groups & Cards
+		groups := wakuGroupSessions(sessions, pinned, groupBy, orderBy)
+		scroll := ui.Scroll(c).FillWidth().Grow(1).Padding(0, 8, 8, 8)
 		scroll.Children(func() {
-			ui.Column(c).FillWidth().Gap(2).Children(func() {
+			ui.Column(c).FillWidth().Children(func() {
+				// Search row inside scroll (32px + 10px bottom margin, no shortcut badge)
+				ui.Box(c).FillWidth().Margin(0, 0, wakuSidebarSearchBottomGap, 0).Children(func() {
+					searchBtn := ui.ButtonBase(c).
+						FillWidth().
+						Height(wakuSidebarActionRowHeight).
+						Padding(0, 8, 0, 8).
+						Radius(6).
+						AlignItems(ui.Center).
+						Justify(ui.Start).
+						Gap(8).
+						Cursor(ui.CursorPointer).
+						Label("Search")
+					if searchBtn.Hovered() {
+						searchBtn.Background(th.SidebarItemBg)
+					}
+					searchBtn.Children(func() {
+						gui.IconView(c, gui.IconSearch, 15, th.TextSecondary)
+						ui.Text(c, "Search").TextColor(th.Text).FontSize(13).SingleLine()
+					})
+					if searchBtn.Clicked() {
+						openSearch = true
+					}
+				})
+
 				if len(groups) == 0 {
-					ui.Box(c).FillWidth().Padding(14, 10).Children(func() {
+					ui.Box(c).FillWidth().Padding(10, 8).Children(func() {
 						ui.Text(c, "No sessions yet").TextColor(th.TextTertiary).FontSize(12)
 					})
 					return
 				}
+
 				itemIdx := 0
 				for gIdx, grp := range groups {
-					if grp.label != "" {
-						ui.Box(c).
-							Key(fmt.Sprintf("sb-grp-%d-%s", gIdx, grp.label)).
+					isCollapsed := collapsed[grp.collapseKey]
+					isProjectGroup := groupBy == "project" && grp.label != "Pinned"
+					grpCol := ui.Column(c).
+						Key(fmt.Sprintf("sb-grp-%d-%s", gIdx, grp.collapseKey)).
+						FillWidth()
+					if gIdx < len(groups)-1 {
+						grpCol.Margin(0, 0, 10, 0)
+					}
+					grpCol.Children(func() {
+						// Collapsible group header (28px height + 2px bottom margin)
+						ui.Row(c).
 							FillWidth().
-							Padding(8, 6, 3, 6).
+							Height(wakuSidebarGroupHeaderHeight).
+							Margin(0, 0, 2, 0).
+							AlignItems(ui.Center).
+							Justify(ui.SpaceBetween).
+							Gap(4).
 							Children(func() {
-								ui.Text(c, grp.label).TextColor(th.TextGhost).FontSize(11).FontWeight(600).SingleLine()
-							})
-					}
-					for _, info := range grp.items {
-						s := info
-						key := wakuSessionPinKey(s)
-						isActive := (activeFile != "" && s.Path == activeFile) || (activeID != "" && s.Id == activeID)
-						isPinned := pinned[key]
-						title := wakuSessionTitle(s)
-						age := wakuFormatShortAge(s.Modified)
-						proj := filepath.Base(s.Cwd)
-						if proj == "" || proj == "." {
-							proj = "workspace"
-						}
-
-						row := ui.ButtonBase(c).
-							Key(fmt.Sprintf("sb-item-%d-%s", itemIdx, key)).
-							FillWidth().
-							MinHeight(50).
-							Padding(7, 10, 7, 10).
-							Radius(8).
-							Cursor(ui.CursorPointer).
-							Label(title)
-						itemIdx++
-
-						if isActive {
-							row.Background(th.SidebarItemBg)
-						} else if row.Hovered() {
-							row.Background(th.Overlay)
-						}
-
-						row.Children(func() {
-							ui.Column(c).FillWidth().Gap(3).Children(func() {
-								ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(6).Children(func() {
-									ui.Row(c).Shrink(1).AlignItems(ui.Center).Gap(6).Children(func() {
-										if isActive && isStreaming {
-											ui.Spinner(c).TextColor(th.Accent).Label("Running")
-										} else if isActive {
-											ui.Box(c).Size(6, 6).Radius(999).Background(th.Accent)
-										}
-										col := th.TextSecondary
-										weight := 500
-										if isActive {
-											col = th.Text
-											weight = 600
-										}
-										ui.Text(c, title).TextColor(col).FontSize(13).FontWeight(weight).SingleLine()
-									})
-									if age != "" {
-										ui.Text(c, age).TextColor(th.TextGhost).FontSize(11).SingleLine()
-									}
-								})
-								ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(6).Children(func() {
-									ui.Text(c, proj).TextColor(th.TextTertiary).FontSize(11).SingleLine()
-									if s.MessageCount > 0 {
-										ui.Textf(c, "%d msgs", s.MessageCount).TextColor(th.TextGhost).FontSize(11).SingleLine()
-									}
-								})
-							})
-						})
-
-						if row.Clicked() && s.Path != "" {
-							switchPath = s.Path
-						}
-
-						row.PopoverMenu(func(menu *ui.Menu) {
-							pinLbl := "Pin Session"
-							if isPinned {
-								pinLbl = "Unpin Session"
-							}
-							if menu.Item(pinLbl).Chosen() {
-								togglePinKey = key
-							}
-							if s.Path != "" && menu.Item("Rename…").Chosen() {
-								cp := s
-								renameTarget = &cp
-							}
-							if isActive && menu.Item("Fork Session…").Chosen() {
-								forkActive = true
-							}
-							if s.Path != "" && menu.Item("Copy Session Path").Chosen() {
-								copyPathTarget = s.Path
-							}
-							if s.Path != "" && s.Path != activeFile {
-								menu.Separator()
-								if menu.Item("Delete Session").Chosen() {
-									cp := s
-									deleteTarget = &cp
+								hdrBtn := ui.ButtonBase(c).
+									Grow(1).
+									Shrink(1).
+									FillHeight().
+									Padding(0, 6, 0, 6).
+									Radius(6).
+									AlignItems(ui.Center).
+									Justify(ui.Start).
+									Gap(6).
+									Cursor(ui.CursorPointer).
+									Label(grp.label)
+								if hdrBtn.Hovered() {
+									hdrBtn.Background(th.SidebarItemBg)
 								}
+								hdrBtn.Children(func() {
+									if isProjectGroup {
+										folderIcon := gui.IconFolderOpen
+										if isCollapsed {
+											folderIcon = gui.IconFolder
+										}
+										gui.IconView(c, folderIcon, 14, th.TextSecondary)
+										lblCol := th.TextSecondary
+										if hdrBtn.Hovered() {
+											lblCol = th.Text
+										}
+										ui.Text(c, grp.label).TextColor(lblCol).FontSize(12).FontWeight(500).SingleLine()
+									} else {
+										lblCol := th.TextTertiary
+										if hdrBtn.Hovered() {
+											lblCol = th.TextSecondary
+										}
+										ui.Text(c, grp.label).TextColor(lblCol).FontSize(12).SingleLine()
+									}
+								})
+								if hdrBtn.Clicked() {
+									toggleCollapseKey = grp.collapseKey
+								}
+
+								if gIdx == 0 {
+									optAnchor := ui.ButtonBase(c).
+										Size(24, 24).
+										Radius(6).
+										AlignItems(ui.Center).
+										Justify(ui.Center).
+										Cursor(ui.CursorPointer).
+										Label("Sidebar options")
+									if optionsOpen || optAnchor.Hovered() {
+										optAnchor.Background(th.Overlay)
+									}
+									optAnchor.Children(func() {
+										gui.IconView(c, gui.IconFilter, 13, th.TextTertiary)
+									})
+									if optAnchor.Clicked() {
+										optionsOpen = !optionsOpen
+									}
+
+									ui.PopoverBase(c, optAnchor, &optionsOpen, func(popPanel ui.Element) {
+										popPanel.Background(th.Surface).
+											Border(1, th.Border).
+											Radius(8).
+											Padding(6).
+											MinWidth(164).
+											Shadow(0, 6, 20, 0, ui.RGBA(0, 0, 0, 0.28)).
+											Children(func() {
+												ui.Column(c).FillWidth().Gap(2).Children(func() {
+													ui.Box(c).Padding(4, 8, 2, 8).Children(func() {
+														ui.Text(c, "Group by").TextColor(th.TextTertiary).FontSize(11).FontWeight(500).SingleLine()
+													})
+													for _, opt := range []struct {
+														key   string
+														label string
+													}{
+														{key: "updated", label: "Updated"},
+														{key: "project", label: "Project"},
+													} {
+														if wakuSidebarOptionRow(c, th, opt.label, groupBy == opt.key) {
+															nextGroupBy = opt.key
+															optionsOpen = false
+														}
+													}
+													ui.Box(c).FillWidth().Height(1).Background(th.Border).Margin(4, 0, 4, 0)
+													ui.Box(c).Padding(2, 8, 2, 8).Children(func() {
+														ui.Text(c, "Order by").TextColor(th.TextTertiary).FontSize(11).FontWeight(500).SingleLine()
+													})
+													for _, opt := range []struct {
+														key   string
+														label string
+													}{
+														{key: "newest", label: "Newest"},
+														{key: "oldest", label: "Oldest"},
+													} {
+														if wakuSidebarOptionRow(c, th, opt.label, orderBy == opt.key) {
+															nextOrderBy = opt.key
+															optionsOpen = false
+														}
+													}
+												})
+											})
+									})
+								}
+							})
+
+						if isCollapsed {
+							return
+						}
+
+						renderGroupCards := func() {
+							for _, info := range grp.items {
+								s := info
+								key := wakuSessionPinKey(s)
+								isActive := (activeFile != "" && wakuResolvePath(s.Path) == wakuResolvePath(activeFile)) || (activeID != "" && s.Id == activeID)
+								isPinned := pinned[key]
+								title := wakuSessionTitle(s)
+								age := wakuFormatShortAge(wakuSessionSortTime(s))
+								proj := filepath.Base(s.Cwd)
+								if proj == "" || proj == "." {
+									proj = "workspace"
+								}
+
+								row := ui.ButtonBase(c).
+									Key(fmt.Sprintf("sb-item-%d-%s", itemIdx, key)).
+									FillWidth().
+									Height(wakuSidebarSessionCardHeight).
+									Padding(6, 10, 6, 10).
+									Radius(8).
+									AlignItems(ui.Center).
+									Justify(ui.Start).
+									Cursor(ui.CursorPointer).
+									Label(title)
+								itemIdx++
+
+								if isActive {
+									row.Background(th.SidebarItemBg)
+								} else if row.Hovered() {
+									row.Background(th.Overlay)
+								}
+
+								row.Children(func() {
+									ui.Column(c).FillWidth().Gap(3).Children(func() {
+										// Line 1: title + busy spinner only (no status dot)
+										ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(6).Children(func() {
+											ui.Text(c, title).TextColor(th.Text).FontSize(13).FontWeight(500).SingleLine().Shrink(1)
+											if isActive && isStreaming {
+												ui.Spinner(c).TextColor(th.Accent).Label("Running")
+											}
+										})
+										// Line 2: folder/branch + workspace/branch + relative age / "Working" (no "N msgs")
+										ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(6).Children(func() {
+											ui.Row(c).Shrink(1).AlignItems(ui.Center).Gap(5).Children(func() {
+												metaIcon := gui.IconFolder
+												metaText := proj
+												if isProjectGroup && isActive && activeBranch != "" {
+													metaIcon = gui.IconGitBranch
+													metaText = activeBranch
+												}
+												gui.IconView(c, metaIcon, 11, th.TextTertiary)
+												ui.Text(c, metaText).TextColor(th.TextTertiary).FontSize(11).SingleLine().Shrink(1)
+											})
+											if isActive && isStreaming {
+												ui.Text(c, "Working").TextColor(th.Accent).FontSize(11).SingleLine()
+											} else if age != "" {
+												ui.Text(c, age).TextColor(th.TextGhost).FontSize(11).SingleLine()
+											}
+										})
+									})
+								})
+
+								if row.Clicked() && s.Path != "" {
+									switchPath = s.Path
+								}
+
+								row.PopoverMenu(func(menu *ui.Menu) {
+									pinLbl := "Pin Session"
+									if isPinned {
+										pinLbl = "Unpin Session"
+									}
+									if menu.Item(pinLbl).Chosen() {
+										togglePinKey = key
+									}
+									if s.Path != "" && menu.Item("Rename…").Chosen() {
+										cp := s
+										renameTarget = &cp
+									}
+									if isActive && menu.Item("Fork Session…").Chosen() {
+										forkActive = true
+									}
+									if s.Path != "" && menu.Item("Copy Session Path").Chosen() {
+										copyPathTarget = s.Path
+									}
+									if s.Path != "" && s.Path != activeFile {
+										menu.Separator()
+										if menu.Item("Delete Session").Chosen() {
+											cp := s
+											deleteTarget = &cp
+										}
+									}
+								})
 							}
-						})
-					}
+						}
+
+						if isProjectGroup {
+							ui.Box(c).FillWidth().Children(func() {
+								ui.Box(c).
+									Absolute().
+									Left(15).
+									Top(0).
+									Bottom(0).
+									Width(1).
+									Background(th.Border)
+								ui.Box(c).FillWidth().Padding(0, 0, 0, wakuSidebarGroupChildPadding).Children(func() {
+									ui.Column(c).FillWidth().Gap(1).Children(renderGroupCards)
+								})
+							})
+						} else {
+							ui.Column(c).FillWidth().Gap(1).Children(renderGroupCards)
+						}
+					})
 				}
 			})
 		})
 
-		// 5. Bottom footer strip
-		ui.Box(c).FillWidth().Height(1).Background(th.SidebarBorder)
+		// 4. Borderless 40px bottom footer with only Open Settings on the left
 		ui.Row(c).
 			FillWidth().
-			Height(40).
+			Height(wakuSidebarFooterHeight).
 			Padding(0, 10, 0, 10).
 			AlignItems(ui.Center).
-			Justify(ui.SpaceBetween).
 			Children(func() {
-				modeLbl := "Dark"
-				if !th.Dark {
-					modeLbl = "Light"
-				}
-				themeBtn := ui.ButtonBase(c).
-					Height(26).
-					Padding(0, 8, 0, 8).
-					Radius(6).
-					AlignItems(ui.Center).
-					Gap(6).
-					Cursor(ui.CursorPointer).
-					Label("Toggle Appearance")
-				if themeBtn.Hovered() {
-					themeBtn.Background(th.Overlay)
-				}
-				themeBtn.Children(func() {
-					gui.IconView(c, gui.IconAppearance, 13, th.TextSecondary)
-					ui.Text(c, modeLbl).TextColor(th.TextSecondary).FontSize(12).SingleLine()
-				})
-				if themeBtn.Clicked() {
-					toggleTheme = true
-				}
-
-				if wakuIconButton(c, th, gui.IconSettings, "Settings", false, th.TextSecondary) {
+				if wakuIconButton(c, th, gui.IconSettings, "Open Settings", false, th.TextSecondary) {
 					openSettings = true
 				}
 			})
@@ -683,27 +965,42 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 		func() { m.saveLayoutPrefs() },
 	)
 
+	prefsChanged := false
+	sb.mu.Lock()
+	sb.optionsOpen = optionsOpen
+	if toggleCollapseKey != "" {
+		if sb.collapsed == nil {
+			sb.collapsed = make(map[string]bool)
+		}
+		sb.collapsed[toggleCollapseKey] = !sb.collapsed[toggleCollapseKey]
+	}
+	if nextGroupBy != "" && sb.groupBy != nextGroupBy {
+		sb.groupBy = nextGroupBy
+		prefsChanged = true
+	}
+	if nextOrderBy != "" && sb.orderBy != nextOrderBy {
+		sb.orderBy = nextOrderBy
+		prefsChanged = true
+	}
+	sb.mu.Unlock()
+	if prefsChanged {
+		m.saveLayoutPrefs()
+	}
+
 	if toggleSidebar {
 		m.toggleLeftSidebar()
+	}
+	if goBack {
+		m.navigateSessionHistory(-1)
+	}
+	if goForward {
+		m.navigateSessionHistory(1)
 	}
 	if newTask {
 		go m.newSession(m.currentCtx())
 	}
 	if openSearch {
 		m.ShowCommandPalette()
-	}
-	if toggleGroup {
-		sb.mu.Lock()
-		if sb.groupBy == "project" {
-			sb.groupBy = "date"
-		} else {
-			sb.groupBy = "project"
-		}
-		sb.mu.Unlock()
-		m.saveLayoutPrefs()
-	}
-	if toggleTheme {
-		m.toggleQuickThemeDarkLight()
 	}
 	if openSettings {
 		m.ShowSettingsSelector()
@@ -808,14 +1105,34 @@ func wakuSessionTitle(s core.SessionInfo) string {
 }
 
 type wakuSessionGroup struct {
-	label string
-	items []core.SessionInfo
+	collapseKey string
+	label       string
+	items       []core.SessionInfo
 }
 
-func wakuGroupSessions(sessions []core.SessionInfo, pinned map[string]bool, groupBy string) []wakuSessionGroup {
+func wakuSortSessionsByOrder(items []core.SessionInfo, orderBy string) {
+	slices.SortStableFunc(items, func(a, b core.SessionInfo) int {
+		ta, tb := wakuSessionSortTime(a), wakuSessionSortTime(b)
+		var cmp int
+		if orderBy == "oldest" {
+			cmp = ta.Compare(tb)
+		} else {
+			cmp = tb.Compare(ta)
+		}
+		if cmp != 0 {
+			return cmp
+		}
+		return strings.Compare(a.Path, b.Path)
+	})
+}
+
+func wakuGroupSessions(sessions []core.SessionInfo, pinned map[string]bool, groupBy, orderBy string) []wakuSessionGroup {
 	if len(sessions) == 0 {
 		return nil
 	}
+	groupBy = wakuNormalizeGroupBy(groupBy)
+	orderBy = wakuNormalizeOrderBy(orderBy)
+
 	var pinnedList, rest []core.SessionInfo
 	for _, s := range sessions {
 		if pinned[wakuSessionPinKey(s)] {
@@ -824,10 +1141,16 @@ func wakuGroupSessions(sessions []core.SessionInfo, pinned map[string]bool, grou
 			rest = append(rest, s)
 		}
 	}
+	wakuSortSessionsByOrder(pinnedList, orderBy)
+	wakuSortSessionsByOrder(rest, orderBy)
 
 	var groups []wakuSessionGroup
 	if len(pinnedList) > 0 {
-		groups = append(groups, wakuSessionGroup{label: "Pinned", items: pinnedList})
+		groups = append(groups, wakuSessionGroup{
+			collapseKey: "pinned",
+			label:       "Pinned",
+			items:       pinnedList,
+		})
 	}
 
 	if groupBy == "project" {
@@ -844,44 +1167,67 @@ func wakuGroupSessions(sessions []core.SessionInfo, pinned map[string]bool, grou
 			buckets[proj] = append(buckets[proj], s)
 		}
 		for _, proj := range order {
-			groups = append(groups, wakuSessionGroup{label: proj, items: buckets[proj]})
+			groups = append(groups, wakuSessionGroup{
+				collapseKey: "project:" + proj,
+				label:       proj,
+				items:       buckets[proj],
+			})
 		}
 		return groups
 	}
 
 	now := time.Now()
-	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	yesterdayStart := todayStart.Add(-24 * time.Hour)
-	weekStart := todayStart.Add(-7 * 24 * time.Hour)
+	loc := now.Location()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	yesterdayStart := todayStart.AddDate(0, 0, -1)
+	weekStart := todayStart.AddDate(0, 0, -6)
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
+	yearStart := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, loc)
 
-	var today, yesterday, prev7, older []core.SessionInfo
+	var today, yesterday, thisWeek, thisMonth, thisYear, more []core.SessionInfo
 	for _, s := range rest {
-		t := s.Modified
-		if t.IsZero() {
-			t = s.Created
-		}
+		t := wakuSessionSortTime(s)
 		switch {
 		case !t.Before(todayStart):
 			today = append(today, s)
 		case !t.Before(yesterdayStart):
 			yesterday = append(yesterday, s)
 		case !t.Before(weekStart):
-			prev7 = append(prev7, s)
+			thisWeek = append(thisWeek, s)
+		case !t.Before(monthStart):
+			thisMonth = append(thisMonth, s)
+		case !t.Before(yearStart):
+			thisYear = append(thisYear, s)
 		default:
-			older = append(older, s)
+			more = append(more, s)
 		}
 	}
-	if len(today) > 0 {
-		groups = append(groups, wakuSessionGroup{label: "Today", items: today})
+
+	orderedBuckets := []struct {
+		key   string
+		label string
+		items []core.SessionInfo
+	}{
+		{key: "updated:today", label: "Today", items: today},
+		{key: "updated:yesterday", label: "Yesterday", items: yesterday},
+		{key: "updated:week", label: "This Week", items: thisWeek},
+		{key: "updated:month", label: "This Month", items: thisMonth},
+		{key: "updated:year", label: "This Year", items: thisYear},
+		{key: "updated:more", label: "More", items: more},
 	}
-	if len(yesterday) > 0 {
-		groups = append(groups, wakuSessionGroup{label: "Yesterday", items: yesterday})
+	if orderBy == "oldest" {
+		for i, j := 0, len(orderedBuckets)-1; i < j; i, j = i+1, j-1 {
+			orderedBuckets[i], orderedBuckets[j] = orderedBuckets[j], orderedBuckets[i]
+		}
 	}
-	if len(prev7) > 0 {
-		groups = append(groups, wakuSessionGroup{label: "Previous 7 Days", items: prev7})
-	}
-	if len(older) > 0 {
-		groups = append(groups, wakuSessionGroup{label: "Older", items: older})
+	for _, b := range orderedBuckets {
+		if len(b.items) > 0 {
+			groups = append(groups, wakuSessionGroup{
+				collapseKey: b.key,
+				label:       b.label,
+				items:       b.items,
+			})
+		}
 	}
 	return groups
 }

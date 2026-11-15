@@ -285,6 +285,8 @@ func gevHandleMessageStart(m *GuiMode, sess *core.AgentSession, th *gui.GuiTheme
 					WithUserTimestamp(msg.Timestamp),
 					WithUserTheme(th),
 					WithUserOnLink(gmOpenLink),
+					WithUserOnCopy(func(s string) { _ = gmWriteClipboardText(m.host, s) }),
+					WithUserWakuStyle(true),
 				)
 				m.appendCard("user", m.nextEntryID(fmt.Sprintf("user:%d", msg.Timestamp)), uc)
 			}
@@ -295,6 +297,8 @@ func gevHandleMessageStart(m *GuiMode, sess *core.AgentSession, th *gui.GuiTheme
 			WithUserTimestamp(msg.Timestamp),
 			WithUserTheme(th),
 			WithUserOnLink(gmOpenLink),
+			WithUserOnCopy(func(s string) { _ = gmWriteClipboardText(m.host, s) }),
+			WithUserWakuStyle(true),
 		)
 		m.appendCard("user", m.nextEntryID(fmt.Sprintf("user:%d", msg.Timestamp)), uc)
 
@@ -314,6 +318,7 @@ func gevHandleMessageStart(m *GuiMode, sess *core.AgentSession, th *gui.GuiTheme
 			WithAssistantOnCopyCode(func(_, code string) {
 				_ = gmWriteClipboardText(m.host, code)
 			}),
+			WithAssistantWakuStyle(true),
 		)
 		m.mu.Lock()
 		if prev := m.streamingCard; prev != nil {

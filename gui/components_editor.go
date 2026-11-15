@@ -324,6 +324,13 @@ func (e *Editor) SetDisabled(disabled bool) {
 	e.mu.Unlock()
 }
 
+// Placeholder returns the empty prompt placeholder text.
+func (e *Editor) Placeholder() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.placeholder
+}
+
 // SetPlaceholder changes the empty prompt placeholder text.
 func (e *Editor) SetPlaceholder(placeholder string) {
 	e.mu.Lock()

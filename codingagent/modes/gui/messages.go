@@ -151,6 +151,30 @@ func msgFormatTimestamp(ts int64) string {
 	return time.UnixMilli(ts).Format("15:04:05")
 }
 
+func msgFormatShortClock(ts int64) string {
+	if ts <= 0 {
+		return ""
+	}
+	return time.UnixMilli(ts).Format("15:04")
+}
+
+func msgRenderWakuCopyIconButton(c *ui.Context, th *gui.GuiTheme) bool {
+	btn := ui.ButtonBase(c).
+		Size(27, 27).
+		Radius(8).
+		AlignItems(ui.Center).
+		Justify(ui.Center).
+		Cursor(ui.CursorPointer).
+		Label("Copy message")
+	if btn.Hovered() {
+		btn.Background(th.OverlayStrong)
+	}
+	btn.Children(func() {
+		gui.IconView(c, gui.IconCopy, 14, th.TextGhost)
+	})
+	return btn.Clicked()
+}
+
 func msgExtractTextAndImages(content ai.UserMessageContent) (string, []ai.ImageContent) {
 	if content.Text != nil {
 		return *content.Text, nil
@@ -214,6 +238,11 @@ func WithUserOnCopy(fn func(string)) UserMessageOption {
 	return func(u *UserMessageCard) { u.onCopy = fn }
 }
 
+// WithUserWakuStyle enables Waku's minimal right-aligned user bubble and footer.
+func WithUserWakuStyle(waku bool) UserMessageOption {
+	return func(u *UserMessageCard) { u.wakuStyle = waku }
+}
+
 // UserMessageCard renders a user prompt turn inside the native GUI transcript.
 type UserMessageCard struct {
 	mu        sync.Mutex
@@ -224,6 +253,7 @@ type UserMessageCard struct {
 	theme     *gui.GuiTheme
 	onLink    func(string)
 	onCopy    func(string)
+	wakuStyle bool
 	mdView    *gui.MarkdownView
 	imgCache  map[string]msgDecodedImage
 }
@@ -311,64 +341,108 @@ func (u *UserMessageCard) View(c *ui.Context) ui.Element {
 	u.mu.Lock()
 	text := u.text
 	images := append([]ai.ImageContent(nil), u.images...)
-	ts := msgFormatTimestamp(u.timestamp)
+	rawTs := u.timestamp
+	ts := msgFormatTimestamp(rawTs)
 	th := gui.ResolveGuiTheme(c, u.theme)
 	onCopy := u.onCopy
+	wakuStyle := u.wakuStyle
 	md := u.mdView
 	imgCache := u.imgCache
 	u.mu.Unlock()
 
 	var copyClicked bool
-	outer := ui.Row(c).FillWidth().Justify(ui.End)
-	outer.Children(func() {
-		bubble := ui.Column(c).
-			MaxWidth(540).
-			Background(th.UserMessageBg).
-			Border(1, th.Border).
-			Radius(14).
-			Padding(9, 14).
-			Gap(4)
-
-		bubble.Children(func() {
-			ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(10).Children(func() {
-				ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-					ui.Text(c, "You").TextColor(th.TextTertiary).FontWeight(600).FontSize(11).SingleLine()
-					if ts != "" {
-						ui.Text(c, ts).TextColor(th.TextGhost).FontSize(10).SingleLine()
-					}
-				})
-				if text != "" {
-					copyBtn := ui.ButtonBase(c).
-						Height(18).
-						Padding(0, 5, 0, 5).
-						Radius(5).
-						AlignItems(ui.Center).
-						Gap(4).
-						Cursor(ui.CursorPointer).
-						Label("Copy")
-					if copyBtn.Hovered() {
-						copyBtn.Background(th.Overlay)
-					}
-					copyBtn.Children(func() {
-						gui.IconView(c, gui.IconCopy, 11, th.TextTertiary)
-						ui.Text(c, "Copy").TextColor(th.TextTertiary).FontSize(10).SingleLine()
-					})
-					if copyBtn.Clicked() {
-						copyClicked = true
-					}
-				}
-			})
-
-			if text != "" && md != nil {
-				md.View(c)
-			}
+	var root ui.Element
+	if wakuStyle {
+		tsClock := msgFormatShortClock(rawTs)
+		col := ui.Column(c).FillWidth().AlignItems(ui.End).Gap(3)
+		col.Children(func() {
 			if len(images) > 0 {
 				u.mu.Lock()
 				msgRenderImageThumbs(c, th, images, imgCache)
 				u.mu.Unlock()
 			}
+			if text != "" && md != nil {
+				ui.Column(c).
+					MaxWidth(wakuUserBubbleMaxWidth).
+					Background(th.Raised).
+					Border(1, th.Raised).
+					Radius(wakuUserBubbleRadius).
+					Padding(7, 11).
+					Children(func() {
+						md.View(c)
+					})
+			}
+			if tsClock != "" || text != "" {
+				ui.Row(c).
+					FillWidth().
+					Height(27).
+					AlignItems(ui.Center).
+					Justify(ui.End).
+					Gap(2).
+					Children(func() {
+						if tsClock != "" {
+							ui.Text(c, tsClock).TextColor(th.TextGhost).FontSize(12).SingleLine()
+						}
+						if text != "" && msgRenderWakuCopyIconButton(c, th) {
+							copyClicked = true
+						}
+					})
+			}
 		})
-	})
+		root = col
+	} else {
+		outer := ui.Row(c).FillWidth().Justify(ui.End)
+		outer.Children(func() {
+			bubble := ui.Column(c).
+				MaxWidth(540).
+				Background(th.UserMessageBg).
+				Border(1, th.Border).
+				Radius(14).
+				Padding(9, 14).
+				Gap(4)
+
+			bubble.Children(func() {
+				ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(10).Children(func() {
+					ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
+						ui.Text(c, "You").TextColor(th.TextTertiary).FontWeight(600).FontSize(11).SingleLine()
+						if ts != "" {
+							ui.Text(c, ts).TextColor(th.TextGhost).FontSize(10).SingleLine()
+						}
+					})
+					if text != "" {
+						copyBtn := ui.ButtonBase(c).
+							Height(18).
+							Padding(0, 5, 0, 5).
+							Radius(5).
+							AlignItems(ui.Center).
+							Gap(4).
+							Cursor(ui.CursorPointer).
+							Label("Copy")
+						if copyBtn.Hovered() {
+							copyBtn.Background(th.Overlay)
+						}
+						copyBtn.Children(func() {
+							gui.IconView(c, gui.IconCopy, 11, th.TextTertiary)
+							ui.Text(c, "Copy").TextColor(th.TextTertiary).FontSize(10).SingleLine()
+						})
+						if copyBtn.Clicked() {
+							copyClicked = true
+						}
+					}
+				})
+
+				if text != "" && md != nil {
+					md.View(c)
+				}
+				if len(images) > 0 {
+					u.mu.Lock()
+					msgRenderImageThumbs(c, th, images, imgCache)
+					u.mu.Unlock()
+				}
+			})
+		})
+		root = outer
+	}
 
 	if copyClicked {
 		if onCopy != nil {
@@ -377,7 +451,7 @@ func (u *UserMessageCard) View(c *ui.Context) ui.Element {
 			_ = utils.CopyToClipboard(text)
 		}
 	}
-	return outer
+	return root
 }
 
 // ============================================================================
@@ -476,8 +550,14 @@ type AssistantMessageCard struct {
 	onLink              func(string)
 	onCopyCode          func(language, code string)
 	onCopyMessage       func(string)
+	wakuStyle           bool
 	mdPool              []*gui.MarkdownView
 	thinkingOpen        map[int]bool
+}
+
+// WithAssistantWakuStyle enables Waku's minimal response footer without verbose metadata.
+func WithAssistantWakuStyle(waku bool) AssistantMessageOption {
+	return func(a *AssistantMessageCard) { a.wakuStyle = waku }
 }
 
 // NewAssistantMessageCard constructs an AssistantMessageCard for msg.
@@ -760,6 +840,7 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 	hiddenThinkLabel := a.hiddenThinkingLabel
 	showUsage := a.showUsage
 	showToolChips := a.showToolCallChips
+	wakuStyle := a.wakuStyle
 	retry := a.retry
 	th := gui.ResolveGuiTheme(c, a.theme)
 	onCopyMsg := a.onCopyMessage
@@ -943,71 +1024,100 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 				})
 		}
 
-		// Quiet Waku metadata & Copy footer bar
-		hasMeta := snap.model != "" || copyPayload != "" || streaming || (showUsage && (snap.usage.Input > 0 || snap.usage.Output > 0 || snap.usage.Cost.Total > 0 || snap.stopReason != ""))
-		if hasMeta && (copyPayload != "" || !streaming || snap.stopReason != "" || snap.usage.Output > 0) {
-			ui.Row(c).FillWidth().Wrap().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Margin(2, 0, 0, 0).Children(func() {
-				ui.Row(c).AlignItems(ui.Center).Wrap().Gap(8).Children(func() {
-					if snap.model != "" {
-						label := snap.model
-						if snap.provider != "" {
-							label = snap.provider + "/" + snap.model
+		if wakuStyle {
+			hasNonNormalStop := snap.stopReason != "" && snap.stopReason != ai.StopReasonStop && snap.stopReason != ai.StopReasonToolUse
+			tsClock := msgFormatShortClock(snap.timestamp)
+			if copyPayload != "" || streaming || hasNonNormalStop || tsClock != "" {
+				ui.Row(c).
+					FillWidth().
+					MinHeight(27).
+					AlignItems(ui.Center).
+					Gap(4).
+					Margin(2, 0, 0, 0).
+					Children(func() {
+						if copyPayload != "" && !streaming && msgRenderWakuCopyIconButton(c, th) {
+							copyClicked = true
 						}
-						ui.Text(c, label).TextColor(th.TextTertiary).FontSize(11)
-					}
-					if snap.thinkingLevel != "" && snap.thinkingLevel != "off" {
-						ui.Text(c, "· "+snap.thinkingLevel).TextColor(th.TextGhost).FontSize(11)
-					}
-					if ts := msgFormatTimestamp(snap.timestamp); ts != "" {
-						ui.Text(c, ts).TextColor(th.TextGhost).FontSize(11)
-					}
-					if showUsage && !streaming && (snap.usage.Input > 0 || snap.usage.Output > 0) {
-						ui.Textf(c, "↑%s ↓%s", FormatTokens(snap.usage.Input), FormatTokens(snap.usage.Output)).
-							TextColor(th.TextTertiary).FontSize(11)
-					}
-					if showUsage && !streaming && snap.usage.CacheRead > 0 {
-						ui.Textf(c, "R%s", FormatTokens(snap.usage.CacheRead)).TextColor(th.TextGhost).FontSize(11)
-					}
-					if showUsage && !streaming && snap.usage.CacheWrite > 0 {
-						ui.Textf(c, "W%s", FormatTokens(snap.usage.CacheWrite)).TextColor(th.TextGhost).FontSize(11)
-					}
-					if showUsage && !streaming && snap.usage.Cost.Total > 0 {
-						ui.Text(c, FormatCost(snap.usage.Cost.Total)).TextColor(th.TextTertiary).FontSize(11)
-					}
-					if showUsage && !streaming && snap.hasDuration && snap.durationMs > 0 {
-						ui.Text(c, FormatDuration(time.Duration(snap.durationMs)*time.Millisecond)).TextColor(th.TextGhost).FontSize(11)
-					}
-					if snap.stopReason != "" && snap.stopReason != ai.StopReasonStop && snap.stopReason != ai.StopReasonToolUse {
-						ui.Box(c).Background(th.Raised).Border(1, th.Border).Radius(4).Padding(1, 5).Children(func() {
-							ui.Text(c, string(snap.stopReason)).TextColor(th.TextSecondary).FontSize(10)
+						if tsClock != "" {
+							ui.Text(c, tsClock).TextColor(th.TextGhost).FontSize(12).SingleLine()
+						}
+						if hasNonNormalStop {
+							ui.Box(c).Background(th.Raised).Border(1, th.Border).Radius(4).Padding(1, 5).Children(func() {
+								ui.Text(c, string(snap.stopReason)).TextColor(th.TextSecondary).FontSize(10)
+							})
+						}
+						if streaming {
+							ui.Spinner(c).TextColor(th.Accent).Label("Streaming assistant response")
+						}
+					})
+			}
+		} else {
+			// Quiet metadata & Copy footer bar
+			hasMeta := snap.model != "" || copyPayload != "" || streaming || (showUsage && (snap.usage.Input > 0 || snap.usage.Output > 0 || snap.usage.Cost.Total > 0 || snap.stopReason != ""))
+			if hasMeta && (copyPayload != "" || !streaming || snap.stopReason != "" || snap.usage.Output > 0) {
+				ui.Row(c).FillWidth().Wrap().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Margin(2, 0, 0, 0).Children(func() {
+					ui.Row(c).AlignItems(ui.Center).Wrap().Gap(8).Children(func() {
+						if snap.model != "" {
+							label := snap.model
+							if snap.provider != "" {
+								label = snap.provider + "/" + snap.model
+							}
+							ui.Text(c, label).TextColor(th.TextTertiary).FontSize(11)
+						}
+						if snap.thinkingLevel != "" && snap.thinkingLevel != "off" {
+							ui.Text(c, "· "+snap.thinkingLevel).TextColor(th.TextGhost).FontSize(11)
+						}
+						if ts := msgFormatTimestamp(snap.timestamp); ts != "" {
+							ui.Text(c, ts).TextColor(th.TextGhost).FontSize(11)
+						}
+						if showUsage && !streaming && (snap.usage.Input > 0 || snap.usage.Output > 0) {
+							ui.Textf(c, "↑%s ↓%s", FormatTokens(snap.usage.Input), FormatTokens(snap.usage.Output)).
+								TextColor(th.TextTertiary).FontSize(11)
+						}
+						if showUsage && !streaming && snap.usage.CacheRead > 0 {
+							ui.Textf(c, "R%s", FormatTokens(snap.usage.CacheRead)).TextColor(th.TextGhost).FontSize(11)
+						}
+						if showUsage && !streaming && snap.usage.CacheWrite > 0 {
+							ui.Textf(c, "W%s", FormatTokens(snap.usage.CacheWrite)).TextColor(th.TextGhost).FontSize(11)
+						}
+						if showUsage && !streaming && snap.usage.Cost.Total > 0 {
+							ui.Text(c, FormatCost(snap.usage.Cost.Total)).TextColor(th.TextTertiary).FontSize(11)
+						}
+						if showUsage && !streaming && snap.hasDuration && snap.durationMs > 0 {
+							ui.Text(c, FormatDuration(time.Duration(snap.durationMs)*time.Millisecond)).TextColor(th.TextGhost).FontSize(11)
+						}
+						if snap.stopReason != "" && snap.stopReason != ai.StopReasonStop && snap.stopReason != ai.StopReasonToolUse {
+							ui.Box(c).Background(th.Raised).Border(1, th.Border).Radius(4).Padding(1, 5).Children(func() {
+								ui.Text(c, string(snap.stopReason)).TextColor(th.TextSecondary).FontSize(10)
+							})
+						}
+						if streaming {
+							ui.Spinner(c).TextColor(th.Accent).Label("Streaming assistant response")
+						}
+					})
+
+					if copyPayload != "" {
+						copyBtn := ui.ButtonBase(c).
+							Height(20).
+							Padding(0, 6, 0, 6).
+							Radius(5).
+							AlignItems(ui.Center).
+							Gap(4).
+							Cursor(ui.CursorPointer).
+							Label("Copy")
+						if copyBtn.Hovered() {
+							copyBtn.Background(th.Overlay)
+						}
+						copyBtn.Children(func() {
+							gui.IconView(c, gui.IconCopy, 11, th.TextTertiary)
+							ui.Text(c, "Copy").TextColor(th.TextTertiary).FontSize(11).SingleLine()
 						})
-					}
-					if streaming {
-						ui.Spinner(c).TextColor(th.Accent).Label("Streaming assistant response")
+						if copyBtn.Clicked() {
+							copyClicked = true
+						}
 					}
 				})
-
-				if copyPayload != "" {
-					copyBtn := ui.ButtonBase(c).
-						Height(20).
-						Padding(0, 6, 0, 6).
-						Radius(5).
-						AlignItems(ui.Center).
-						Gap(4).
-						Cursor(ui.CursorPointer).
-						Label("Copy")
-					if copyBtn.Hovered() {
-						copyBtn.Background(th.Overlay)
-					}
-					copyBtn.Children(func() {
-						gui.IconView(c, gui.IconCopy, 11, th.TextTertiary)
-						ui.Text(c, "Copy").TextColor(th.TextTertiary).FontSize(11).SingleLine()
-					})
-					if copyBtn.Clicked() {
-						copyClicked = true
-					}
-				}
-			})
+			}
 		}
 	})
 

@@ -369,7 +369,7 @@ func TestGuiModeRunAndInitialLifecycle(t *testing.T) {
 			tt.HasText("requested model fallback used")
 	})
 
-	if mode.Session() != fx.runtime.Session {
+	if mode.Session() != fx.runtime.CurrentSession() {
 		t.Fatal("expected mode.Session() to match active runtime session")
 	}
 	if mode.Runtime() != fx.runtime {

@@ -2,7 +2,7 @@ package gui
 
 import (
 	"fmt"
-	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -154,27 +154,39 @@ func renderWakuFloatingToast(c *ui.Context, m *GuiMode, th *gui.GuiTheme) {
 	}
 }
 
+const (
+	wakuTrafficLightClearance float32 = 86
+	wakuHeaderHeightPx        float32 = 48
+	wakuContentMaxWidth       float32 = 720
+	wakuWorkspaceFooterHeight float32 = 28
+	wakuComposerRadius        float32 = 13
+	wakuUserBubbleMaxWidth    float32 = 540
+	wakuUserBubbleRadius      float32 = 12
+)
+
 func wakuHeaderHeight(c *ui.Context) float32 {
 	if c != nil {
 		if h := c.TitleBar().Height; h > 0 {
-			return max(h, 48)
+			return max(h, wakuHeaderHeightPx)
 		}
 	}
-	return 48
+	return wakuHeaderHeightPx
 }
 
 func wakuTrafficLightInset(c *ui.Context) float32 {
-	if c == nil {
-		return 10
+	if c != nil {
+		tb := c.TitleBar()
+		if tb.Left > 0 {
+			return max(tb.Left, wakuTrafficLightClearance)
+		}
+		if tb.Height > 0 {
+			return wakuTrafficLightClearance
+		}
 	}
-	tb := c.TitleBar()
-	if tb.Left > 0 {
-		return max(tb.Left, 72)
+	if runtime.GOOS == "darwin" {
+		return wakuTrafficLightClearance
 	}
-	if tb.Height > 0 {
-		return 74
-	}
-	return 10
+	return 0
 }
 
 func wakuIconButton(
@@ -186,21 +198,37 @@ func wakuIconButton(
 	iconColor ui.Color,
 ) bool {
 	btn := ui.ButtonBase(c).
-		Size(28, 28).
-		Radius(7).
+		Size(26, 26).
+		Radius(6).
 		AlignItems(ui.Center).
 		Justify(ui.Center).
 		Cursor(ui.CursorPointer).
 		Label(label)
-	if active {
-		btn.Background(th.Overlay)
-	} else if btn.Hovered() {
+	if active || btn.Hovered() {
 		btn.Background(th.Overlay)
 	}
 	btn.Children(func() {
-		gui.IconView(c, svg, 15, iconColor)
+		gui.IconView(c, svg, 14, iconColor)
 	})
 	return btn.Clicked()
+}
+
+func renderWakuHistoryNavButtons(c *ui.Context, th *gui.GuiTheme, canBack, canForward bool) (goBack, goForward bool) {
+	backCol := th.TextSecondary
+	if !canBack {
+		backCol = th.TextGhost
+	}
+	if wakuIconButton(c, th, gui.IconArrowLeft, "Previous Session", false, backCol) && canBack {
+		goBack = true
+	}
+	fwdCol := th.TextSecondary
+	if !canForward {
+		fwdCol = th.TextGhost
+	}
+	if wakuIconButton(c, th, gui.IconArrowRight, "Next Session", false, fwdCol) && canForward {
+		goForward = true
+	}
+	return goBack, goForward
 }
 
 // renderWakuCenterHeader renders the 48px Waku top header bar above the center conversation pane.
@@ -209,130 +237,66 @@ func renderWakuCenterHeader(
 	m *GuiMode,
 	th *gui.GuiTheme,
 	sidebarOpen bool,
+	sidebarWidth float32,
 	rightOpen bool,
-	changedCount int,
 	canBack bool,
 	canForward bool,
 	sessionTitle string,
-	cwdSubtitle string,
 ) {
 	h := wakuHeaderHeight(c)
+	inset := wakuTrafficLightInset(c)
+	leftPad := float32(14)
+	if sidebarOpen {
+		if inset > sidebarWidth {
+			leftPad += inset - sidebarWidth
+		}
+	} else if inset > 8 {
+		leftPad = 8
+	}
+
 	bar := ui.Row(c).
 		Key("waku-center-header").
 		FillWidth().
 		Height(h).
 		AlignItems(ui.Center).
-		Padding(0, 12, 0, 12).
-		Gap(6)
+		Padding(0, 12, 0, leftPad).
+		Gap(8)
 
-	var toggleSidebar, newTask, goBack, goForward, openPalette, toggleRight, openSettings bool
+	var toggleSidebar, goBack, goForward, toggleRight bool
 
 	bar.Children(func() {
-		// Left cluster: when sidebar is collapsed, show macOS traffic-light clearance + sidebar toggle + new task.
+		// When the left sidebar is closed, window chrome controls (macOS traffic-light clearance,
+		// sidebar toggle, and session history navigation) live in the center header.
 		if !sidebarOpen {
-			inset := wakuTrafficLightInset(c)
-			if inset > 12 {
+			if inset > 8 {
 				ui.Box(c).Width(inset - 8).FillHeight().DragWindow()
 			}
-			if wakuIconButton(c, th, gui.IconPanelLeft, "Toggle Sidebar", false, th.TextSecondary) {
-				toggleSidebar = true
-			}
-			if wakuIconButton(c, th, gui.IconCompose, "New Task", false, th.TextSecondary) {
-				newTask = true
-			}
-			ui.Box(c).Width(1).Height(14).Background(th.Border).Margin(0, 2, 0, 2)
+			ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(2).Children(func() {
+				if wakuIconButton(c, th, gui.IconPanelLeft, "Toggle Sidebar", false, th.TextSecondary) {
+					toggleSidebar = true
+				}
+				goBack, goForward = renderWakuHistoryNavButtons(c, th, canBack, canForward)
+			})
 		}
 
-		// Back / Forward session history buttons
-		backCol := th.TextSecondary
-		if !canBack {
-			backCol = th.TextGhost
+		title := strings.TrimSpace(sessionTitle)
+		if title == "" {
+			title = "New task"
 		}
-		if wakuIconButton(c, th, gui.IconArrowLeft, "Previous Session", false, backCol) && canBack {
-			goBack = true
-		}
-		fwdCol := th.TextSecondary
-		if !canForward {
-			fwdCol = th.TextGhost
-		}
-		if wakuIconButton(c, th, gui.IconArrowRight, "Next Session", false, fwdCol) && canForward {
-			goForward = true
-		}
-
-		// Session title + folder subtitle
-		ui.Row(c).Shrink(1).AlignItems(ui.Center).Gap(8).Margin(0, 4, 0, 4).Children(func() {
-			title := strings.TrimSpace(sessionTitle)
-			if title == "" {
-				title = "New task"
-			}
-			ui.Text(c, title).TextColor(th.Text).FontSize(13).FontWeight(600).SingleLine()
-			if cwdSubtitle != "" {
-				ui.Box(c).
-					Background(th.Raised).
-					Border(1, th.Border).
-					Radius(6).
-					Padding(2, 7).
-					Children(func() {
-						ui.Text(c, filepath.Base(cwdSubtitle)).TextColor(th.TextTertiary).FontSize(11).SingleLine()
-					})
-			}
-		})
+		ui.Text(c, title).TextColor(th.Text).FontSize(13).FontWeight(500).SingleLine().Shrink(1)
 
 		// Non-interactive window drag spacer
 		ui.Box(c).Grow(1).FillHeight().DragWindow()
 
-		// Right utility controls
-		ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(4).Children(func() {
-			if wakuIconButton(c, th, gui.IconSearch, "Command Palette", false, th.TextSecondary) {
-				openPalette = true
-			}
-
-			// Right panel (Changes / Tree) toggle pill with optional changed count badge
-			rpCol := th.TextSecondary
-			if rightOpen {
-				rpCol = th.Accent
-			}
-			rpBtn := ui.ButtonBase(c).
-				Height(28).
-				Padding(0, 8, 0, 8).
-				Radius(7).
-				AlignItems(ui.Center).
-				Justify(ui.Center).
-				Gap(5).
-				Cursor(ui.CursorPointer).
-				Label("Toggle Right Panel")
-			if rightOpen {
-				rpBtn.Background(th.Overlay)
-			} else if rpBtn.Hovered() {
-				rpBtn.Background(th.Overlay)
-			}
-			rpBtn.Children(func() {
-				gui.IconView(c, gui.IconChanges, 15, rpCol)
-				if changedCount > 0 {
-					ui.Textf(c, "%d", changedCount).
-						TextColor(rpCol).
-						FontSize(11).
-						FontWeight(600).
-						SingleLine()
-				}
-			})
-			if rpBtn.Clicked() {
+		if !rightOpen {
+			if wakuIconButton(c, th, gui.IconPanelRight, "Toggle Right Panel", false, th.TextSecondary) {
 				toggleRight = true
 			}
-
-			if wakuIconButton(c, th, gui.IconSettings, "Open Settings", false, th.TextSecondary) {
-				openSettings = true
-			}
-		})
+		}
 	})
-
-	ui.Box(c).FillWidth().Height(1).Background(th.Border)
 
 	if toggleSidebar {
 		m.toggleLeftSidebar()
-	}
-	if newTask {
-		go m.newSession(m.currentCtx())
 	}
 	if goBack {
 		m.navigateSessionHistory(-1)
@@ -340,14 +304,8 @@ func renderWakuCenterHeader(
 	if goForward {
 		m.navigateSessionHistory(1)
 	}
-	if openPalette {
-		m.ShowCommandPalette()
-	}
 	if toggleRight {
 		m.toggleRightPanel()
-	}
-	if openSettings {
-		m.ShowSettingsSelector()
 	}
 }
 
@@ -419,14 +377,12 @@ func wakuFormatShortAge(t time.Time) string {
 	}
 	switch {
 	case d < time.Minute:
-		return "now"
+		return "just now"
 	case d < time.Hour:
 		return fmt.Sprintf("%dm", int(d.Minutes()))
 	case d < 24*time.Hour:
 		return fmt.Sprintf("%dh", int(d.Hours()))
-	case d < 7*24*time.Hour:
-		return fmt.Sprintf("%dd", int(d.Hours()/24))
 	default:
-		return t.Format("Jan 2")
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
 	}
 }

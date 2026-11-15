@@ -32,7 +32,7 @@ import (
 	"golang.org/x/term"
 )
 
-// MainOptions configures codingagent.Main for alternative entrypoints (such as pi-gui)
+// MainOptions configures codingagent.Main for alternative entrypoints (such as embedded GUI hosts or --gui)
 // and in-process tests.
 type MainOptions struct {
 	// DefaultGuiMode defaults to GUI mode instead of terminal TUI unless overridden
@@ -1060,7 +1060,7 @@ func camBoolPtr(v bool) *bool {
 }
 
 // Main runs the Pi coding agent CLI entrypoint and returns the process exit code.
-// cmd/pi passes no options (or &MainOptions{}); cmd/pi-gui passes &MainOptions{DefaultGuiMode: true}.
+// cmd/pi passes no options (or &MainOptions{}); callers may pass &MainOptions{DefaultGuiMode: true} to default to GUI mode.
 func Main(ctx context.Context, args []string, opts ...*MainOptions) int {
 	if ctx == nil {
 		ctx = context.Background()

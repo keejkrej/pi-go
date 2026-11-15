@@ -11,6 +11,7 @@ import (
 	"github.com/keejkrej/pi-go/ai"
 	"github.com/keejkrej/pi-go/ai/providers"
 	"github.com/keejkrej/pi-go/codingagent/modes/interactive/theme"
+	"github.com/keejkrej/pi-go/codingagent/utils"
 	"github.com/keejkrej/pi-go/gui"
 	"github.com/keejkrej/pi-go/internal/jsonx"
 	"github.com/keejkrej/pi-go/internal/typebox"
@@ -110,54 +111,74 @@ func TestWakuThemePaletteNoLegacyPurple(t *testing.T) {
 }
 
 func TestWakuThreePaneShellAndToggles(t *testing.T) {
+	t.Setenv(utils.EnvSessionDir, t.TempDir())
+
 	fx := tgmNewFixture(t, nil)
 	mode := NewGuiMode(fx.runtime, &GuiModeOptions{
-		SkipWindow: true,
+		SkipWindow:          true,
+		InitialThemeSetting: tgmStrPtr("dark"),
 	})
 	t.Cleanup(func() { mode.Stop() })
 
 	tt := ui.NewTester(mode.GUI().View, 1280, 820)
+	tt.SetTitleBar(ui.TitleBar{Height: 48, Left: 86})
 	tt.Frame()
 
-	// Empty state and Waku sidebar landmarks
+	// Empty state and genuine Waku landmarks
 	for _, want := range []string{
 		"New Task",
 		"Search",
-		"Collapse Sidebar",
+		"Toggle Sidebar",
 		"Toggle Right Panel",
-		"Ask anything, @ to mention files, / for commands",
-		"Review changes",
-		"Explain codebase",
+		"Open Settings",
+		"What should we build in cwd?",
+		"Prompt editor",
 	} {
 		if !tt.HasText(want) {
-			t.Fatalf("expected initial Waku shell text %q, texts=%v", want, tt.Texts())
+			t.Fatalf("expected initial Waku shell landmark %q, texts=%v", want, tt.Texts())
+		}
+	}
+	if got := mode.editor.Placeholder(); got != "Do anything…" {
+		t.Fatalf("editor.Placeholder() = %q, want %q", got, "Do anything…")
+	}
+
+	// Non-Waku clutter must not be present
+	for _, unwanted := range []string{
+		"⌘K",
+		"Collapse Sidebar",
+		"Review changes",
+		"Explain codebase",
+		"Toggle Appearance",
+	} {
+		if tt.HasText(unwanted) {
+			t.Fatalf("unexpected non-Waku text %q in initial shell, texts=%v", unwanted, tt.Texts())
 		}
 	}
 
-	// Collapse left sidebar -> Toggle Sidebar appears in center header
-	if err := tt.Click("Collapse Sidebar"); err != nil {
-		t.Fatalf("Click Collapse Sidebar: %v", err)
+	// Collapse left sidebar -> Search disappears, Toggle Sidebar remains in center header
+	if err := tt.Click("Toggle Sidebar"); err != nil {
+		t.Fatalf("Click Toggle Sidebar (collapse): %v", err)
 	}
 	tt.Frame()
-	if !tt.HasText("Toggle Sidebar") {
-		t.Fatalf("expected Toggle Sidebar button in header after collapse, texts=%v", tt.Texts())
+	if tt.HasText("Search") {
+		t.Fatalf("expected sidebar collapsed (Search hidden), texts=%v", tt.Texts())
 	}
-	if tt.HasText("Collapse Sidebar") {
-		t.Fatalf("expected sidebar collapsed, texts=%v", tt.Texts())
+	if _, ok := tt.Find("Toggle Sidebar"); !ok {
+		t.Fatalf("expected Toggle Sidebar button in center header after collapse, texts=%v", tt.Texts())
 	}
 
 	// Re-open left sidebar
 	if err := tt.Click("Toggle Sidebar"); err != nil {
-		t.Fatalf("Click Toggle Sidebar: %v", err)
+		t.Fatalf("Click Toggle Sidebar (reopen): %v", err)
 	}
 	tt.Frame()
-	if !tt.HasText("Collapse Sidebar") {
-		t.Fatalf("expected sidebar reopened with Collapse Sidebar button, texts=%v", tt.Texts())
+	if !tt.HasText("Search") {
+		t.Fatalf("expected sidebar reopened with Search visible, texts=%v", tt.Texts())
 	}
 
-	// Open right panel -> Changes tab active, switch to Tree tab
+	// Open right panel -> Changes tab active, switch to Tree tab, then close via Toggle Right Panel
 	if err := tt.Click("Toggle Right Panel"); err != nil {
-		t.Fatalf("Click Toggle Right Panel: %v", err)
+		t.Fatalf("Click Toggle Right Panel (open): %v", err)
 	}
 	tt.Frame()
 	if !tt.HasText("Changes") || !tt.HasText("Tree") || !tt.HasText("Working tree clean") {
@@ -172,14 +193,12 @@ func TestWakuThreePaneShellAndToggles(t *testing.T) {
 		t.Fatalf("expected Tree tab contents in right panel, texts=%v", tt.Texts())
 	}
 
-	// Toggle appearance quick switcher in sidebar footer
-	wasDark := mode.currentGuiTheme().Dark
-	if err := tt.Click("Toggle Appearance"); err != nil {
-		t.Fatalf("Click Toggle Appearance: %v", err)
+	if err := tt.Click("Toggle Right Panel"); err != nil {
+		t.Fatalf("Click Toggle Right Panel (close): %v", err)
 	}
 	tt.Frame()
-	if mode.currentGuiTheme().Dark == wasDark {
-		t.Fatalf("expected Toggle Appearance to flip Dark from %v", wasDark)
+	if tt.HasText("Open Full Tree") {
+		t.Fatalf("expected right panel closed after clicking Toggle Right Panel, texts=%v", tt.Texts())
 	}
 }
 
