@@ -775,4 +775,22 @@ func TestWakuTerminalAndActivityWidthClampedTo720(t *testing.T) {
 			}
 		}
 	}
+
+	// Verify no left vertical turn-body rail: left margin of the 720px column stays pure #1A1A1A
+	// and tool cards start flush at the 720px column inner edge (~508.5px; title text < 544px).
+	for _, px := range []int{490, 496, 502, 506} {
+		for _, py := range []int{140, 200, 260, 320, 380, 440} {
+			got := wpPixelAt(t, img, px, py)
+			if !wpRGBAEqual(got, wantCanvas) {
+				t.Fatalf("left margin pixel (%d,%d) = %+v, want #1A1A1A (%+v) — unexpected left vertical line", px, py, got, wantCanvas)
+			}
+		}
+	}
+	if bashTitleR, ok := tt.Find("bash"); ok {
+		if bashTitleR.X > 544 {
+			t.Fatalf("bash tool title X = %.1f, expected flush in 720px column without left rail indentation (< 544)", bashTitleR.X)
+		}
+	} else {
+		t.Fatalf("expected bash tool title in frame, texts=%v", tt.Texts())
+	}
 }

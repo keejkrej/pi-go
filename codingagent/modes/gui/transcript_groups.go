@@ -203,12 +203,12 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 							if isCollapsed {
 								chevSvg = gui.IconChevronRight
 							}
-							gui.IconView(c, chevSvg, 12, th.TextTertiary)
 							lblCol := th.TextTertiary
 							if hdrBtn.Hovered() {
 								lblCol = th.TextSecondary
 							}
 							ui.Text(c, headerLbl).TextColor(lblCol).FontSize(12).SingleLine()
+							gui.IconView(c, chevSvg, 12, th.TextTertiary)
 							ui.Box(c).Grow(1).Height(1).Background(th.Border)
 						})
 						if hdrBtn.Clicked() {
@@ -216,24 +216,21 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 						}
 
 						if !isCollapsed {
-							ui.Row(c).
+							ui.Column(c).
 								Key("turn-body-"+turnKey).
 								FillWidth().
 								MinWidth(0).
-								Padding(2, 0, 2, 6).
-								Gap(10).
+								Padding(2, 0).
+								Gap(8).
 								Children(func() {
-									ui.Box(c).Width(1).Shrink(0).FillHeight().Background(th.BorderStrong)
-									ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(6).Children(func() {
-										for aIdx, act := range activity {
-											if act.card != nil {
-												actEntry := act
-												ui.Box(c).Key(fmt.Sprintf("act-%s-%d", actEntry.id, aIdx)).FillWidth().MinWidth(0).Children(func() {
-													actEntry.card.View(c)
-												})
-											}
+									for aIdx, act := range activity {
+										if act.card != nil {
+											actEntry := act
+											ui.Box(c).Key(fmt.Sprintf("act-%s-%d", actEntry.id, aIdx)).FillWidth().MinWidth(0).Children(func() {
+												actEntry.card.View(c)
+											})
 										}
-									})
+									}
 								})
 						}
 					}

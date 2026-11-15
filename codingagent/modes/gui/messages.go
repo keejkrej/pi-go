@@ -966,9 +966,8 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 						}{idx: idx, open: open})
 					}
 					cp.Panel(func() {
-						ui.Row(c).FillWidth().MinWidth(0).Padding(2, 0, 2, 2).Gap(8).Children(func() {
-							ui.Box(c).Width(2).Shrink(0).Background(th.BorderStrong).Radius(999)
-							ui.Text(c, thinkText).Grow(1).Shrink(1).MinWidth(0).TextColor(th.ThinkingText).FontSize(13).Selectable()
+						ui.Box(c).FillWidth().MinWidth(0).Padding(2, 0).Children(func() {
+							ui.Text(c, thinkText).FillWidth().MinWidth(0).TextColor(th.ThinkingText).FontSize(13).Selectable()
 						})
 					})
 				})
@@ -1037,8 +1036,13 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 
 		if wakuStyle {
 			hasNonNormalStop := snap.stopReason != "" && snap.stopReason != ai.StopReasonStop && snap.stopReason != ai.StopReasonToolUse
-			tsClock := msgFormatShortClock(snap.timestamp)
-			if copyPayload != "" || streaming || hasNonNormalStop || tsClock != "" {
+			hasProse := textBlockIdx > 0
+			tsClock := ""
+			if hasProse {
+				tsClock = msgFormatShortClock(snap.timestamp)
+			}
+			showCopy := hasProse && copyPayload != "" && !streaming
+			if showCopy || streaming || hasNonNormalStop || tsClock != "" {
 				ui.Row(c).
 					FillWidth().
 					MinHeight(27).
@@ -1046,7 +1050,7 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 					Gap(4).
 					Margin(2, 0, 0, 0).
 					Children(func() {
-						if copyPayload != "" && !streaming && msgRenderWakuCopyIconButton(c, th) {
+						if showCopy && msgRenderWakuCopyIconButton(c, th) {
 							copyClicked = true
 						}
 						if tsClock != "" {
