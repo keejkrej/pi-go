@@ -809,6 +809,7 @@ func (s *AgentSession) Reload(ctx context.Context, options ...*ReloadOptions) er
 			Reason: "reload",
 		})
 		oldRunner.Invalidate("Extension context invalidated by session reload.")
+		oldRunner.Dispose()
 	}
 
 	getDefaultTools := func() []string {
@@ -1820,6 +1821,7 @@ func (s *AgentSession) Dispose() {
 		runner.Invalidate(
 			"This extension ctx is stale after session replacement or reload. Do not use a captured pi or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload(). For newSession, fork, and switchSession, move post-replacement work into withSession and use the ctx passed to withSession. For reload, do not use the old ctx after await ctx.reload().",
 		)
+		runner.Dispose()
 	}
 	s.as1DisconnectFromAgent()
 

@@ -25,6 +25,8 @@ type LoadExtensionsOptions struct {
 	Factories                 []InlineExtension
 	Cwd                       string
 	AgentDir                  string
+	UseCache                  bool
+	PathMetadata              map[string]utils.PathMetadata
 }
 
 var (
@@ -426,12 +428,17 @@ func elLoadExtensions(ctx context.Context, paths []string, opts *LoadExtensionsO
 	var runtime *ExtensionRuntime
 	var factories []InlineExtension
 	var disabled []string
+	var metaMap map[string]utils.PathMetadata
 	if opts != nil {
 		cwd = opts.Cwd
 		bus = opts.EventBus
 		runtime = opts.Runtime
 		factories = opts.Factories
 		disabled = opts.DisabledBuiltinExtensions
+		metaMap = opts.PathMetadata
+		if opts.UseCache {
+			useCache = true
+		}
 	}
 	if cwd == "" {
 		if wd, err := os.Getwd(); err == nil {
@@ -443,6 +450,12 @@ func elLoadExtensions(ctx context.Context, paths []string, opts *LoadExtensionsO
 	}
 	if runtime == nil {
 		runtime = CreateExtensionRuntime()
+	}
+
+	canonMeta := make(map[string]utils.PathMetadata, len(metaMap))
+	for k, v := range metaMap {
+		canonMeta[k] = v
+		canonMeta[elCanonicalPath(k)] = v
 	}
 
 	disabledSet := make(map[string]struct{}, len(disabled))
@@ -487,6 +500,9 @@ func elLoadExtensions(ctx context.Context, paths []string, opts *LoadExtensionsO
 				result.Errors = append(result.Errors, ExtensionLoadError{Path: raw, Error: err.Error()})
 				continue
 			}
+			if meta, hasMeta := elLookupPathMetadata(canonMeta, raw, ext.Path, ext.ResolvedPath); hasMeta {
+				elApplyExtensionMetadata(ext, meta)
+			}
 			result.Extensions = append(result.Extensions, *ext)
 			continue
 		}
@@ -500,7 +516,8 @@ func elLoadExtensions(ctx context.Context, paths []string, opts *LoadExtensionsO
 				continue
 			}
 			for _, ent := range entries {
-				ext, warns, lerr := elLoadScriptExtension(ctx, elCanonicalPath(ent), runtime, cwd, bus, useCache)
+				canonEnt := elCanonicalPath(ent)
+				ext, warns, lerr := elLoadScriptExtension(ctx, canonEnt, runtime, cwd, bus, useCache, canonMeta)
 				for _, w := range warns {
 					result.Warnings = append(result.Warnings, ExtensionLoadWarning{Path: ent, Warning: w})
 				}
@@ -508,19 +525,25 @@ func elLoadExtensions(ctx context.Context, paths []string, opts *LoadExtensionsO
 					result.Errors = append(result.Errors, ExtensionLoadError{Path: ent, Error: lerr.Error()})
 					continue
 				}
+				if meta, hasMeta := elLookupPathMetadata(canonMeta, raw, resolved, ent, canonEnt); hasMeta {
+					elApplyExtensionMetadata(ext, meta)
+				}
 				result.Extensions = append(result.Extensions, *ext)
 			}
 			continue
 		}
 
 		canon := elCanonicalPath(resolved)
-		ext, warns, lerr := elLoadScriptExtension(ctx, canon, runtime, cwd, bus, useCache)
+		ext, warns, lerr := elLoadScriptExtension(ctx, canon, runtime, cwd, bus, useCache, canonMeta)
 		for _, w := range warns {
 			result.Warnings = append(result.Warnings, ExtensionLoadWarning{Path: canon, Warning: w})
 		}
 		if lerr != nil {
 			result.Errors = append(result.Errors, ExtensionLoadError{Path: canon, Error: lerr.Error()})
 			continue
+		}
+		if meta, hasMeta := elLookupPathMetadata(canonMeta, raw, resolved, canon); hasMeta {
+			elApplyExtensionMetadata(ext, meta)
 		}
 		result.Extensions = append(result.Extensions, *ext)
 	}
@@ -535,6 +558,9 @@ func elLoadExtensions(ctx context.Context, paths []string, opts *LoadExtensionsO
 			result.Errors = append(result.Errors, ExtensionLoadError{Path: inline.Name, Error: err.Error()})
 			continue
 		}
+		if meta, hasMeta := elLookupPathMetadata(canonMeta, inline.Name, ext.Path, ext.ResolvedPath); hasMeta {
+			elApplyExtensionMetadata(ext, meta)
+		}
 		result.Extensions = append(result.Extensions, *ext)
 	}
 
@@ -545,6 +571,44 @@ func elLoadExtensions(ctx context.Context, paths []string, opts *LoadExtensionsO
 	return result
 }
 
+func elLookupPathMetadata(metaMap map[string]utils.PathMetadata, keys ...string) (utils.PathMetadata, bool) {
+	if len(metaMap) == 0 {
+		return utils.PathMetadata{}, false
+	}
+	for _, k := range keys {
+		if k == "" {
+			continue
+		}
+		if m, ok := metaMap[k]; ok {
+			return m, true
+		}
+		if m, ok := metaMap[elCanonicalPath(k)]; ok {
+			return m, true
+		}
+	}
+	return utils.PathMetadata{}, false
+}
+
+func elApplyExtensionMetadata(ext *Extension, meta utils.PathMetadata) {
+	if ext == nil {
+		return
+	}
+	target := ext.ResolvedPath
+	if target == "" {
+		target = ext.Path
+	}
+	srcInfo := utils.CreateSourceInfo(target, meta)
+	ext.SourceInfo = srcInfo
+	for name, tool := range ext.Tools {
+		tool.SourceInfo = srcInfo
+		ext.Tools[name] = tool
+	}
+	for name, cmd := range ext.Commands {
+		cmd.SourceInfo = srcInfo
+		ext.Commands[name] = cmd
+	}
+}
+
 func elLoadScriptExtension(
 	ctx context.Context,
 	resolvedPath string,
@@ -552,6 +616,7 @@ func elLoadScriptExtension(
 	cwd string,
 	bus EventBus,
 	useCache bool,
+	metaMaps ...map[string]utils.PathMetadata,
 ) (*Extension, []string, error) {
 	info, err := os.Stat(resolvedPath)
 	if err != nil {
@@ -593,7 +658,13 @@ func elLoadScriptExtension(
 		}
 	}
 
-	srcInfo := utils.CreateSourceInfo(resolvedPath, utils.PathMetadata{Source: "local", Scope: "project"})
+	meta := utils.PathMetadata{Source: "local", Scope: "project"}
+	if len(metaMaps) > 0 {
+		if found, ok := elLookupPathMetadata(metaMaps[0], resolvedPath); ok {
+			meta = found
+		}
+	}
+	srcInfo := utils.CreateSourceInfo(resolvedPath, meta)
 	ext := elNewEmptyExtension(resolvedPath, resolvedPath, false, false, srcInfo)
 	api, state := elCreateExtensionAPI(ext, runtime, cwd, bus)
 	if err := eqjsExecuteBundledExtension(ctx, ext, api, runtime, cwd, bundled); err != nil {

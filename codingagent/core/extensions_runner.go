@@ -911,9 +911,9 @@ func (r *ExtensionRunner) GetCommand(name string) *ResolvedCommand {
 	return nil
 }
 
-// Shutdown runs registered extension cleanup hooks (such as QuickJS VM teardown) and the bound
-// host shutdown handler. Safe on nil runners.
-func (r *ExtensionRunner) Shutdown() {
+// Dispose runs registered runtime and runner cleanup hooks (such as QuickJS VM teardown)
+// without triggering host shutdown callbacks. Safe to call multiple times or on nil runners.
+func (r *ExtensionRunner) Dispose() {
 	if r == nil {
 		return
 	}
@@ -921,7 +921,6 @@ func (r *ExtensionRunner) Shutdown() {
 	hooks := slices.Clone(r.cleanupHooks)
 	r.cleanupHooks = nil
 	rt := r.runtime
-	shutdownFn := r.contextActions.Shutdown
 	r.mu.Unlock()
 
 	erRunRuntimeCleanups(rt)
@@ -934,6 +933,19 @@ func (r *ExtensionRunner) Shutdown() {
 			fn()
 		}()
 	}
+}
+
+// Shutdown runs registered extension cleanup hooks (such as QuickJS VM teardown) and the bound
+// host shutdown handler. Safe on nil runners.
+func (r *ExtensionRunner) Shutdown() {
+	if r == nil {
+		return
+	}
+	r.mu.RLock()
+	shutdownFn := r.contextActions.Shutdown
+	r.mu.RUnlock()
+
+	r.Dispose()
 	if shutdownFn != nil {
 		shutdownFn()
 	}

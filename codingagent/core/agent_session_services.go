@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/keejkrej/pi-go/agent"
@@ -191,7 +192,7 @@ func CreateAgentSessionServices(ctx context.Context, options ...*CreateAgentSess
 	}
 
 	extResult := resourceLoader.GetExtensions()
-	assApplyExtensionsToRuntime(&extResult, flagValues, modelRuntime, &diagnostics)
+	assApplyExtensionsToRuntime(ctx, &extResult, flagValues, modelRuntime, &diagnostics)
 
 	diagnostics = append(diagnostics, assCollectResourceDiagnostics(resourceLoader)...)
 	diagnostics = DeduplicateDiagnostics(diagnostics)
@@ -306,6 +307,7 @@ func assMergeResourceLoaderOptions(
 }
 
 func assApplyExtensionsToRuntime(
+	ctx context.Context,
 	extResult *LoadExtensionsResult,
 	flagValues map[string]any,
 	modelRuntime *ModelRuntime,
@@ -313,6 +315,9 @@ func assApplyExtensionsToRuntime(
 ) {
 	if extResult == nil {
 		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 	for _, extErr := range extResult.Errors {
 		*diagnostics = append(*diagnostics, AgentSessionRuntimeDiagnostic{
@@ -330,25 +335,91 @@ func assApplyExtensionsToRuntime(
 	if extResult.Runtime == nil {
 		return
 	}
+	if extResult.Runtime.FlagValues == nil {
+		extResult.Runtime.FlagValues = make(map[string]any)
+	}
+	registeredFlags := make(map[string]ExtensionFlag)
 	for _, ext := range extResult.Extensions {
 		for _, flag := range ext.Flags {
+			registeredFlags[flag.Name] = flag
 			if _, exists := extResult.Runtime.FlagValues[flag.Name]; !exists && flag.Default != nil {
 				extResult.Runtime.FlagValues[flag.Name] = flag.Default
 			}
 		}
 	}
-	for name, val := range flagValues {
-		extResult.Runtime.FlagValues[name] = val
+	if len(flagValues) > 0 {
+		flagNames := make([]string, 0, len(flagValues))
+		for name := range flagValues {
+			flagNames = append(flagNames, name)
+		}
+		sort.Strings(flagNames)
+		for _, name := range flagNames {
+			val := flagValues[name]
+			flag, known := registeredFlags[name]
+			if !known {
+				*diagnostics = append(*diagnostics, AgentSessionRuntimeDiagnostic{
+					Type:    AgentSessionRuntimeDiagnosticError,
+					Message: fmt.Sprintf("Unknown option --%s. Use --help for available options.", name),
+				})
+				continue
+			}
+			if flag.Type == "string" {
+				if b, isBool := val.(bool); isBool && b {
+					*diagnostics = append(*diagnostics, AgentSessionRuntimeDiagnostic{
+						Type:    AgentSessionRuntimeDiagnosticError,
+						Message: fmt.Sprintf("Option --%s requires a value.", name),
+					})
+					continue
+				}
+			}
+			extResult.Runtime.FlagValues[name] = val
+		}
 	}
 
 	if modelRuntime == nil {
 		return
 	}
+	appliedAny := false
 	for _, reg := range extResult.Runtime.PendingProviderRegistrations {
-		modelRuntime.RegisterProvider(reg.Name, reg.Config)
+		if err := modelRuntime.RegisterProvider(reg.Name, reg.Config); err != nil {
+			*diagnostics = append(*diagnostics, AgentSessionRuntimeDiagnostic{
+				Type:    AgentSessionRuntimeDiagnosticError,
+				Message: fmt.Sprintf("Extension %q failed to register provider %q: %s", reg.ExtensionPath, reg.Name, err.Error()),
+			})
+			continue
+		}
+		appliedAny = true
+	}
+	for _, reg := range extResult.Runtime.PendingNativeProviderRegistrations {
+		if err := modelRuntime.RegisterNativeProvider(reg.Provider); err != nil {
+			provID := ""
+			if reg.Provider != nil {
+				provID = reg.Provider.Id
+			}
+			*diagnostics = append(*diagnostics, AgentSessionRuntimeDiagnostic{
+				Type:    AgentSessionRuntimeDiagnosticError,
+				Message: fmt.Sprintf("Extension %q failed to register provider %q: %s", reg.ExtensionPath, provID, err.Error()),
+			})
+			continue
+		}
+		appliedAny = true
 	}
 	for _, vreg := range extResult.Runtime.PendingVirtualModelRegistrations {
-		modelRuntime.RegisterVirtualModel(vreg.Definition)
+		if err := modelRuntime.RegisterVirtualModel(vreg.Definition); err != nil {
+			*diagnostics = append(*diagnostics, AgentSessionRuntimeDiagnostic{
+				Type:    AgentSessionRuntimeDiagnosticError,
+				Message: fmt.Sprintf("Extension %q failed to register virtual model %s/%s: %s", vreg.ExtensionPath, vreg.Definition.Provider, vreg.Definition.Id, err.Error()),
+			})
+			continue
+		}
+		appliedAny = true
+	}
+	extResult.Runtime.PendingProviderRegistrations = nil
+	extResult.Runtime.PendingNativeProviderRegistrations = nil
+	extResult.Runtime.PendingVirtualModelRegistrations = nil
+	if appliedAny {
+		allowNet := false
+		_, _ = modelRuntime.Refresh(ctx, &ai.ModelsRefreshOptions{AllowNetwork: &allowNet})
 	}
 }
 
