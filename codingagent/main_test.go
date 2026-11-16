@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -522,12 +523,67 @@ func TestMainValidationAndSubcommands(t *testing.T) {
 		}
 	})
 
-	t.Run("no mcp subcommand wired in barebone", func(t *testing.T) {
+	t.Run("pi mcp subcommand routes to mcpext.RunMcpCli", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		opts := tmBaseMainOpts(h, &stdout, &stderr)
-		code := codingagent.Main(t.Context(), []string{"mcp", "unknown", "--version"}, opts)
-		if code != 0 || strings.TrimSpace(stdout.String()) != utils.VERSION {
-			t.Fatalf("expected mcp arg to fall through as positional without mcp handler, code=%d out=%q err=%s", code, stdout.String(), stderr.String())
+		code := codingagent.Main(t.Context(), []string{"mcp", "--help"}, opts)
+		if code != 0 || !strings.Contains(stdout.String(), "mcp add <server>") || !strings.Contains(stdout.String(), "mcp list") {
+			t.Fatalf("expected mcp --help output, code=%d out=%q err=%s", code, stdout.String(), stderr.String())
+		}
+
+		stdout.Reset()
+		stderr.Reset()
+		code = codingagent.Main(t.Context(), []string{"mcp", "unknown", "--version"}, opts)
+		if code != 1 || !strings.Contains(stderr.String(), `Unknown mcp command "unknown"`) {
+			t.Fatalf("expected mcp unknown subcommand exit 1, code=%d out=%q err=%s", code, stdout.String(), stderr.String())
+		}
+	})
+
+	t.Run("MainOptions.ExtensionFactories and --no-extensions", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		opts := tmBaseMainOpts(h, &stdout, &stderr)
+		var capturedPaths []string
+		opts.ExtensionFactories = []core.InlineExtension{
+			{
+				Name: "custom-inline",
+				Factory: func(pi core.ExtensionAPI) error {
+					desc := "custom inline flag"
+					pi.RegisterFlag("inline-flag", core.ExtensionFlagOptions{
+						Type:        "string",
+						Description: &desc,
+					})
+					return nil
+				},
+			},
+		}
+		opts.RunPrintMode = func(_ context.Context, rt *core.AgentSessionRuntime, _ *modes.PrintModeOptions) int {
+			for _, ext := range rt.Services.ResourceLoader.GetExtensions().Extensions {
+				capturedPaths = append(capturedPaths, ext.Path)
+			}
+			return 0
+		}
+
+		if err := codingagent.Main(t.Context(), []string{"-p", "--no-mcp", "hi"}, opts); err != 0 {
+			t.Fatalf("expected exit 0, got %d stderr=%s", err, stderr.String())
+		}
+		if !slices.Contains(capturedPaths, "builtin:codemode") || !slices.Contains(capturedPaths, "builtin:llama.cpp") || !slices.Contains(capturedPaths, "custom-inline") {
+			t.Fatalf("expected built-ins + custom inline extension loaded, got %v", capturedPaths)
+		}
+		if slices.Contains(capturedPaths, "builtin:mcp") {
+			t.Fatalf("expected --no-mcp to omit builtin:mcp, got %v", capturedPaths)
+		}
+
+		capturedPaths = nil
+		stdout.Reset()
+		stderr.Reset()
+		code := codingagent.Main(t.Context(), []string{"-p", "--no-extensions", "hi"}, opts)
+		if code != 0 {
+			t.Fatalf("expected --no-extensions exit 0, got %d stderr=%s", code, stderr.String())
+		}
+		for _, p := range capturedPaths {
+			if strings.HasPrefix(p, "builtin:") {
+				t.Fatalf("expected --no-extensions to disable built-in extensions, found %q in %v", p, capturedPaths)
+			}
 		}
 	})
 

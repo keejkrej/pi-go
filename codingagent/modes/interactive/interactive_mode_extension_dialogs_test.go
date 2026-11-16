@@ -5,6 +5,10 @@ package interactive
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -119,5 +123,69 @@ func TestExtensionUIContextDialogsWidgetsHeaderFooterAndTheme(t *testing.T) {
 	tithDrainUI(t, mode)
 	if above := tithRenderOnUI(t, mode.Ui(), mode.aboveEditorWidgetContainer, 100); above != "" {
 		t.Fatalf("expected cleared aboveEditorWidgetContainer after reset, got:\n%s", above)
+	}
+}
+
+func TestInteractiveModeInitRendersBuiltinFooterBeforeSessionStartSetFooter(t *testing.T) {
+	extDir := t.TempDir()
+	extPath := filepath.Join(extDir, "session-start-footer.ts")
+	extSrc := `
+export default function (pi: any) {
+  pi.on("session_start", (_event: any, ctx: any) => {
+    ctx.ui.setFooter((tui: any, _theme: any, footerData: any) => {
+      const unsub = footerData.onBranchChange(() => tui.requestRender());
+      return {
+        dispose: unsub,
+        invalidate() {},
+        render(_width: number) {
+          const providers = footerData.getAvailableProviderCount();
+          return ["SESSION_START_CUSTOM_FOOTER:p=" + String(providers)];
+        },
+      };
+    });
+  });
+}
+`
+	if err := os.WriteFile(extPath, []byte(extSrc), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", extPath, err)
+	}
+
+	mf := tithNewModeFixture(t, &tithRuntimeOptions{
+		ResourceLoaderOptions: &core.DefaultResourceLoaderOptions{
+			NoSkills:                 true,
+			NoPromptTemplates:        true,
+			NoThemes:                 true,
+			NoContextFiles:           true,
+			AdditionalExtensionPaths: []string{extPath},
+		},
+	}, nil)
+
+	mf.Term.mu.Lock()
+	writes := slices.Clone(mf.Term.writes)
+	mf.Term.mu.Unlock()
+
+	builtInIdx := -1
+	customIdx := -1
+	for i, w := range writes {
+		if builtInIdx == -1 && strings.Contains(w, "faux-1") && !strings.Contains(w, "SESSION_START_CUSTOM_FOOTER") {
+			builtInIdx = i
+		}
+		if customIdx == -1 && strings.Contains(w, "SESSION_START_CUSTOM_FOOTER") {
+			customIdx = i
+		}
+	}
+	if builtInIdx == -1 {
+		t.Fatalf("expected initial built-in footer frame with faux-1 before custom footer; writes=%q", writes)
+	}
+	if customIdx == -1 || customIdx <= builtInIdx {
+		t.Fatalf("expected session_start custom footer after initial built-in footer frame (builtInIdx=%d, customIdx=%d)", builtInIdx, customIdx)
+	}
+	wantProviders := mf.Mode.footerDataProvider.GetAvailableProviderCount()
+	if wantProviders < 1 {
+		t.Fatalf("expected at least 1 available provider in footerDataProvider, got %d", wantProviders)
+	}
+	wantCustom := fmt.Sprintf("SESSION_START_CUSTOM_FOOTER:p=%d", wantProviders)
+	if ftr := tithRenderOnUI(t, mf.Mode.Ui(), mf.Mode.customFooter, 100); !strings.Contains(ftr, wantCustom) {
+		t.Fatalf("expected custom footer rendered with %q, got:\n%s", wantCustom, ftr)
 	}
 }

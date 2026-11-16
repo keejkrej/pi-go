@@ -49,6 +49,7 @@ type CreateAgentSessionOptions struct {
 	AdditionalPromptTemplatePaths []string
 	AdditionalThemePaths          []string
 	NoExtensions                  bool
+	DisabledBuiltinExtensions     []string
 	NoSkills                      bool
 	NoPromptTemplates             bool
 	NoThemes                      bool
@@ -113,6 +114,7 @@ func CreateAgentSession(ctx context.Context, options ...*CreateAgentSessionOptio
 		AdditionalPromptTemplatePaths: opts.AdditionalPromptTemplatePaths,
 		AdditionalThemePaths:          opts.AdditionalThemePaths,
 		NoExtensions:                  opts.NoExtensions,
+		DisabledBuiltinExtensions:     opts.DisabledBuiltinExtensions,
 		NoSkills:                      opts.NoSkills,
 		NoPromptTemplates:             opts.NoPromptTemplates,
 		NoThemes:                      opts.NoThemes,
@@ -235,6 +237,31 @@ func CreateAgentSession(ctx context.Context, options ...*CreateAgentSessionOptio
 		ThinkingBudgets: budgetsPtr,
 		ConvertToLlm: func(_ context.Context, messages []agent.AgentMessage) ([]ai.Message, error) {
 			return ConvertToLlm(messages), nil
+		},
+		TransformContext: func(reqCtx context.Context, messages []agent.AgentMessage) ([]agent.AgentMessage, error) {
+			if runner := extensionRunnerRef.currentOrNil(); runner != nil {
+				return runner.EmitContext(reqCtx, messages), nil
+			}
+			return messages, nil
+		},
+		OnPayload: func(payload any, _ *ai.Model) (any, error) {
+			if runner := extensionRunnerRef.currentOrNil(); runner != nil {
+				return runner.EmitBeforeProviderRequest(context.Background(), payload), nil
+			}
+			return payload, nil
+		},
+		OnResponse: func(response *ai.ProviderResponse, _ *ai.Model) error {
+			if response == nil {
+				return nil
+			}
+			if runner := extensionRunnerRef.currentOrNil(); runner != nil && runner.HasHandlers("after_provider_response") {
+				_ = runner.Emit(context.Background(), AfterProviderResponseEvent{
+					Type:    "after_provider_response",
+					Status:  response.Status,
+					Headers: response.Headers,
+				})
+			}
+			return nil
 		},
 		StreamFn:  runtimeStreamFn,
 		SessionId: &sessionId,

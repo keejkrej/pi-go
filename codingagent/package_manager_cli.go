@@ -7,9 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/keejkrej/pi-go/ai"
@@ -17,6 +20,7 @@ import (
 	"github.com/keejkrej/pi-go/codingagent/core"
 	"github.com/keejkrej/pi-go/codingagent/modes/interactive/components"
 	"github.com/keejkrej/pi-go/codingagent/utils"
+	"github.com/keejkrej/pi-go/internal/xspawn"
 )
 
 // PackageCommand identifies a top-level package-management CLI subcommand.
@@ -31,28 +35,47 @@ const (
 
 // PackageCommandOptions configures HandleConfigCommand and HandlePackageCommand for testing or embedding.
 type PackageCommandOptions struct {
-	Cwd              string
-	AgentDir         string
-	Stdout           io.Writer
-	Stderr           io.Writer
-	ConfigUiOptions  *cli.ConfigSelectorOptions
-	StartupUiOptions *cli.StartupUiOptions
-	ModelRuntime     *core.ModelRuntime
-	AllowUi          *bool
-	RefreshTimeout   time.Duration
+	Cwd                string
+	AgentDir           string
+	Stdout             io.Writer
+	Stderr             io.Writer
+	ConfigUiOptions    *cli.ConfigSelectorOptions
+	StartupUiOptions   *cli.StartupUiOptions
+	ModelRuntime       *core.ModelRuntime
+	ExtensionFactories []core.InlineExtension
+	AllowUi            *bool
+	RefreshTimeout     time.Duration
+	HTTPClient         *http.Client
+}
+
+type pmcUpdateTargetType string
+
+const (
+	pmcUpdateSelf       pmcUpdateTargetType = "self"
+	pmcUpdateExtensions pmcUpdateTargetType = "extensions"
+	pmcUpdateModels     pmcUpdateTargetType = "models"
+	pmcUpdateAll        pmcUpdateTargetType = "all"
+)
+
+type pmcUpdateTarget struct {
+	kind   pmcUpdateTargetType
+	source string
 }
 
 type pmcPackageOptions struct {
-	command            PackageCommand
-	source             string
-	modelsTarget       bool
-	local              bool
-	force              bool
-	help               bool
-	invalidOption      string
-	invalidArgument    string
-	missingOptionValue string
-	conflictingOptions string
+	command                   PackageCommand
+	source                    string
+	updateTarget              *pmcUpdateTarget
+	showExtensionsSkippedNote bool
+	modelsTarget              bool
+	local                     bool
+	force                     bool
+	trustOverride             *bool
+	help                      bool
+	invalidOption             string
+	invalidArgument           string
+	missingOptionValue        string
+	conflictingOptions        string
 }
 
 func pmcResolveIO(opts []*PackageCommandOptions) (PackageCommandOptions, io.Writer, io.Writer, string, string) {
@@ -122,42 +145,53 @@ func pmcPrintPackageHelp(out io.Writer, cmd PackageCommand) {
   %s
 
 Install a package and add it to settings.
-Note: pi-go barebone build does not support npm/git package installation.
 
 Options:
   -l, --local       Install project-locally (%s/settings.json)
   -a, --approve     Trust project-local files for this command
   -na, --no-approve Ignore project-local files for this command
-`, pmcPackageUsage(PackageCommandInstall), utils.ConfigDirName)
+
+Examples:
+  %s install npm:@foo/bar
+  %s install git:github.com/user/repo
+  %s install git:git@github.com:user/repo
+  %s install https://github.com/user/repo
+  %s install /path/to/local/package
+  %s install npm:@foo/bar -l
+`, pmcPackageUsage(PackageCommandInstall), utils.ConfigDirName, utils.AppName, utils.AppName, utils.AppName, utils.AppName, utils.AppName, utils.AppName)
 	case PackageCommandRemove:
 		_, _ = fmt.Fprintf(out, `Usage:
   %s
 
 Remove a package and its source from settings.
 Alias: %s uninstall <source> [-l]
-Note: pi-go barebone build does not support npm/git package removal.
 
 Options:
   -l, --local       Remove from project settings (%s/settings.json)
   -a, --approve     Trust project-local files for this command
   -na, --no-approve Ignore project-local files for this command
-`, pmcPackageUsage(PackageCommandRemove), utils.AppName, utils.ConfigDirName)
+
+Examples:
+  %s remove npm:@foo/bar
+  %s remove npm:@foo/bar -l
+  %s uninstall @foo/bar
+`, pmcPackageUsage(PackageCommandRemove), utils.AppName, utils.ConfigDirName, utils.AppName, utils.AppName, utils.AppName)
 	case PackageCommandUpdate:
 		_, _ = fmt.Fprintf(out, `Usage:
   %s
 
-Update pi, installed packages, or model catalogs.
+Update %s, installed packages, or model catalogs.
 
 Options:
-  --self                  Update pi only (default when no target is given)
+  --self                  Update %s only (default when no target is given)
   --extensions            Update installed packages only
   --models                Refresh model catalogs only
-  --all                   Update pi and installed packages
+  --all                   Update %s and installed packages
   --extension <source>    Update one package only
   -a, --approve           Trust project-local files for this command
   -na, --no-approve       Ignore project-local files for this command
-  --force                 Reinstall pi even if the current version is latest
-`, pmcPackageUsage(PackageCommandUpdate))
+  --force                 Reinstall %s even if the current version is latest
+`, pmcPackageUsage(PackageCommandUpdate), utils.AppName, utils.AppName, utils.AppName, utils.AppName)
 	case PackageCommandList:
 		_, _ = fmt.Fprintf(out, `Usage:
   %s
@@ -269,25 +303,32 @@ func HandleConfigCommand(ctx context.Context, args []string, opts ...*PackageCom
 
 	pmcReportSettingsErrors(sm, "config command", stderr)
 
+	builtinExts := core.CollectBuiltinExtensionNames(cfg.ExtensionFactories)
 	globalSm := core.SettingsManagerCreateWithOptions(cwd, agentDir, &core.SettingsManagerCreateOptions{
 		ProjectTrusted: &falseVal,
 	})
 	globalPaths, _ := core.NewDefaultPackageManager(core.DefaultPackageManagerOptions{
-		Cwd:             cwd,
-		AgentDir:        agentDir,
-		SettingsManager: globalSm,
+		Cwd:               cwd,
+		AgentDir:          agentDir,
+		SettingsManager:   globalSm,
+		BuiltinExtensions: builtinExts,
+		HTTPClient:        cfg.HTTPClient,
 	}).Resolve(ctx)
 
 	projectPaths := globalPaths
 	if sm.IsProjectTrusted() {
 		if resolved, err := core.NewDefaultPackageManager(core.DefaultPackageManagerOptions{
-			Cwd:             cwd,
-			AgentDir:        agentDir,
-			SettingsManager: sm,
+			Cwd:               cwd,
+			AgentDir:          agentDir,
+			SettingsManager:   sm,
+			BuiltinExtensions: builtinExts,
+			HTTPClient:        cfg.HTTPClient,
 		}).Resolve(ctx); err == nil {
 			projectPaths = resolved
 		}
 	}
+
+	pmcReportInstallFailureWarnings(stderr, globalPaths.InstallFailures, projectPaths.InstallFailures)
 
 	writeScope := components.ConfigWriteScopeGlobal
 	if local {
@@ -374,7 +415,12 @@ func pmcParsePackageCommand(args []string) *pmcPackageOptions {
 			} else if opts.invalidOption == "" {
 				opts.invalidOption = arg
 			}
-		case "--approve", "-a", "--no-approve", "-na":
+		case "--approve", "-a":
+			v := true
+			opts.trustOverride = &v
+		case "--no-approve", "-na":
+			v := false
+			opts.trustOverride = &v
 		case "--force":
 			if cmd == PackageCommandUpdate {
 				opts.force = true
@@ -433,6 +479,7 @@ func pmcParsePackageCommand(args []string) *pmcPackageOptions {
 				opts.conflictingOptions = "--models cannot be combined with a positional source"
 			}
 			opts.modelsTarget = true
+			opts.updateTarget = &pmcUpdateTarget{kind: pmcUpdateModels}
 		} else if extensionFlagSource != "" {
 			if (selfFlag || extensionsFlag || allFlag) && opts.conflictingOptions == "" {
 				opts.conflictingOptions = "--extension cannot be combined with --self, --extensions, or --all"
@@ -440,15 +487,52 @@ func pmcParsePackageCommand(args []string) *pmcPackageOptions {
 			if opts.source != "" && opts.conflictingOptions == "" {
 				opts.conflictingOptions = "--extension cannot be combined with a positional source"
 			}
+			opts.updateTarget = &pmcUpdateTarget{kind: pmcUpdateExtensions, source: extensionFlagSource}
 		} else if opts.source != "" {
 			sourceIsSelf := opts.source == "self" || opts.source == "pi"
-			if !sourceIsSelf && (extensionsFlag || selfFlag || allFlag) && opts.conflictingOptions == "" {
-				opts.conflictingOptions = "positional update targets cannot be combined with --self, --extensions, or --all"
+			if sourceIsSelf {
+				if extensionsFlag {
+					opts.updateTarget = &pmcUpdateTarget{kind: pmcUpdateAll}
+				} else {
+					opts.updateTarget = &pmcUpdateTarget{kind: pmcUpdateSelf}
+				}
+			} else {
+				if (extensionsFlag || selfFlag || allFlag) && opts.conflictingOptions == "" {
+					opts.conflictingOptions = "positional update targets cannot be combined with --self, --extensions, or --all"
+				}
+				opts.updateTarget = &pmcUpdateTarget{kind: pmcUpdateExtensions, source: opts.source}
 			}
+		} else if allFlag || (selfFlag && extensionsFlag) {
+			opts.updateTarget = &pmcUpdateTarget{kind: pmcUpdateAll}
+		} else if selfFlag {
+			opts.updateTarget = &pmcUpdateTarget{kind: pmcUpdateSelf}
+		} else if extensionsFlag {
+			opts.updateTarget = &pmcUpdateTarget{kind: pmcUpdateExtensions}
+		} else {
+			opts.updateTarget = &pmcUpdateTarget{kind: pmcUpdateSelf}
+			opts.showExtensionsSkippedNote = true
 		}
 	}
 
 	return opts
+}
+
+func pmcReportInstallFailureWarnings(stderr io.Writer, failureSlices ...[]core.PackageInstallFailure) {
+	seen := make(map[string]struct{})
+	for _, failures := range failureSlices {
+		for _, f := range failures {
+			msg := f.Message
+			if msg == "" {
+				msg = f.Error
+			}
+			warning := fmt.Sprintf("Failed to install %s: %s", f.Source, msg)
+			if _, ok := seen[warning]; ok {
+				continue
+			}
+			seen[warning] = struct{}{}
+			_, _ = fmt.Fprintf(stderr, "Warning: %s\n", warning)
+		}
+	}
 }
 
 func pmcRefreshModelCatalogs(ctx context.Context, agentDir string, cfg PackageCommandOptions, stdout, stderr io.Writer) error {
@@ -511,9 +595,129 @@ func pmcRefreshModelCatalogs(ctx context.Context, agentDir string, cfg PackageCo
 	return nil
 }
 
+type pmcSelfUpdatePlan struct {
+	packageName string
+	installSpec string
+	version     string
+	shouldRun   bool
+	note        string
+}
+
+func pmcGetSelfUpdatePlan(ctx context.Context, force bool, stdout io.Writer) (*pmcSelfUpdatePlan, error) {
+	latest, err := utils.GetLatestPiRelease(ctx, utils.VERSION, &utils.VersionCheckOptions{Retry: true})
+	if err != nil {
+		return nil, fmt.Errorf("Could not determine latest %s version: %s", utils.AppName, utils.FormatVersionCheckError(err))
+	}
+	if latest == nil {
+		return nil, fmt.Errorf("Could not determine latest %s version.", utils.AppName)
+	}
+	packageName := latest.PackageName
+	if packageName == "" {
+		packageName = utils.PackageName
+	}
+	installSpec := fmt.Sprintf("%s@%s", packageName, latest.Version)
+	if force || packageName != utils.PackageName || utils.IsNewerPackageVersion(latest.Version, utils.VERSION) {
+		return &pmcSelfUpdatePlan{
+			packageName: packageName,
+			installSpec: installSpec,
+			version:     latest.Version,
+			shouldRun:   true,
+			note:        latest.Note,
+		}, nil
+	}
+	_, _ = fmt.Fprintf(stdout, "%s is already up to date (v%s)\n", utils.AppName, utils.VERSION)
+	return &pmcSelfUpdatePlan{
+		packageName: packageName,
+		installSpec: installSpec,
+		version:     latest.Version,
+		shouldRun:   false,
+	}, nil
+}
+
+func pmcRunSelfUpdateCommand(ctx context.Context, command *utils.SelfUpdateCommand, stdout, stderr io.Writer) error {
+	_, _ = fmt.Fprintf(stdout, "Updating %s with %s...\n", utils.AppName, command.Display)
+	steps := command.Steps
+	if len(steps) == 0 {
+		steps = []utils.SelfUpdateCommandStep{{
+			Command: command.Command,
+			Args:    command.Args,
+			Display: command.Display,
+		}}
+	}
+	for _, step := range steps {
+		cmd := xspawn.Command(ctx, step.Command, step.Args)
+		cmd.Stdout = stdout
+		cmd.Stderr = stderr
+		if err := xspawn.VerifyENOENTSync(cmd, cmd.Run()); err != nil {
+			return fmt.Errorf("%s failed: %w", step.Display, err)
+		}
+	}
+	return nil
+}
+
+func pmcPrintSelfUpdateUnavailable(stderr io.Writer, npmCommand []string, target utils.SelfUpdatePackageTarget) {
+	_, _ = fmt.Fprintf(stderr, "error: %s cannot self-update this installation.\n", utils.AppName)
+	_, _ = fmt.Fprintln(stderr, utils.GetSelfUpdateUnavailableInstruction(utils.PackageName, npmCommand, target))
+	_, _ = fmt.Fprintf(stderr, "To make `%s update` run your own update command, set PI_SELF_UPDATE_COMMAND or the selfUpdateCommand setting.\n", utils.AppName)
+	if len(os.Args) > 0 && os.Args[0] != "" {
+		_, _ = fmt.Fprintf(stderr, "\nLocation of %s executable: %s\n", utils.AppName, os.Args[0])
+	}
+}
+
+func pmcHandleSelfUpdate(
+	ctx context.Context,
+	sm *core.SettingsManager,
+	force bool,
+	stdout, stderr io.Writer,
+) int {
+	configuredArgv := utils.GetConfiguredSelfUpdateArgv(sm.GetGlobalSettings().SelfUpdateCommand)
+	plan, err := pmcGetSelfUpdatePlan(ctx, force, stdout)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+	if !plan.shouldRun {
+		return 0
+	}
+
+	target := utils.SelfUpdatePackageTarget{
+		PackageName: plan.packageName,
+		InstallSpec: plan.installSpec,
+		Version:     plan.version,
+	}
+
+	if len(configuredArgv) > 0 {
+		command := utils.MakeConfiguredSelfUpdateCommand(configuredArgv, target)
+		if strings.TrimSpace(plan.note) != "" {
+			_, _ = fmt.Fprintf(stdout, "\nUpdate note\n%s\n\n", strings.TrimSpace(plan.note))
+		}
+		if err := pmcRunSelfUpdateCommand(ctx, command, stdout, stderr); err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+			return 1
+		}
+		_, _ = fmt.Fprintf(stdout, "Updated %s from %s to %s\n", utils.AppName, utils.VERSION, plan.version)
+		return 0
+	}
+
+	selfUpdateNpmCommand := sm.GetGlobalSettings().NpmCommand
+	selfUpdateCmd := utils.GetSelfUpdateCommand(utils.PackageName, selfUpdateNpmCommand, target)
+	if selfUpdateCmd == nil {
+		pmcPrintSelfUpdateUnavailable(stderr, selfUpdateNpmCommand, target)
+		return 1
+	}
+	if strings.TrimSpace(plan.note) != "" {
+		_, _ = fmt.Fprintf(stdout, "\nUpdate note\n%s\n\n", strings.TrimSpace(plan.note))
+	}
+	if err := pmcRunSelfUpdateCommand(ctx, selfUpdateCmd, stdout, stderr); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "If this keeps failing, run this command yourself: %s\n", selfUpdateCmd.Display)
+		return 1
+	}
+	_, _ = fmt.Fprintf(stdout, "Updated %s from %s to %s\n", utils.AppName, utils.VERSION, plan.version)
+	return 0
+}
+
 // HandlePackageCommand handles `install`, `remove`, `uninstall`, `update`, and `list`.
-// In barebone builds, `update --models` and `--help` are supported cleanly while external
-// npm/git Pi package commands and self-update return a clear unsupported message and exit code 1.
 func HandlePackageCommand(ctx context.Context, args []string, opts ...*PackageCommandOptions) (bool, int) {
 	parsed := pmcParsePackageCommand(args)
 	if parsed == nil {
@@ -522,7 +726,7 @@ func HandlePackageCommand(ctx context.Context, args []string, opts ...*PackageCo
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	cfg, stdout, stderr, _, agentDir := pmcResolveIO(opts)
+	cfg, stdout, stderr, cwd, agentDir := pmcResolveIO(opts)
 
 	if parsed.help {
 		pmcPrintPackageHelp(stdout, parsed.command)
@@ -562,6 +766,232 @@ func HandlePackageCommand(ctx context.Context, args []string, opts ...*PackageCo
 		return true, 0
 	}
 
-	_, _ = fmt.Fprintf(stderr, "Error: %v (npm/git package installation, removal, listing, and self-update are not supported in pi-go barebone builds; use `%s config` to toggle local resources)\n", core.ErrPackagesUnsupported, utils.AppName)
-	return true, 1
+	falseVal := false
+	sm := core.SettingsManagerCreateWithOptions(cwd, agentDir, &core.SettingsManagerCreateOptions{
+		ProjectTrusted: &falseVal,
+	})
+	if parsed.command == PackageCommandUpdate {
+		trustStore := core.NewProjectTrustStore(agentDir)
+		savedDecision, _ := trustStore.Get(cwd)
+		savedTrusted := savedDecision != nil && *savedDecision
+		if parsed.trustOverride != nil {
+			sm.SetProjectTrusted(*parsed.trustOverride)
+		} else {
+			sm.SetProjectTrusted(savedTrusted)
+		}
+	} else {
+		hasUI := cli.IsInteractiveProcessTerminal()
+		mode := core.ExtensionModePrint
+		if hasUI {
+			mode = core.ExtensionModeTui
+		}
+		if cfg.AllowUi != nil {
+			hasUI = *cfg.AllowUi
+			if hasUI {
+				mode = core.ExtensionModeTui
+			} else {
+				mode = core.ExtensionModePrint
+			}
+		} else if cfg.StartupUiOptions != nil && (cfg.StartupUiOptions.UI != nil || cfg.StartupUiOptions.Terminal != nil) {
+			hasUI = true
+			mode = core.ExtensionModeTui
+		}
+		trusted, trustErr := cli.ResolveStartupProjectTrust(ctx, cli.PromptProjectTrustOptions{
+			Cwd:             cwd,
+			AgentDir:        agentDir,
+			SettingsManager: sm,
+			TrustOverride:   parsed.trustOverride,
+			Mode:            mode,
+			HasUI:           hasUI,
+			ErrOut:          stderr,
+			UiOptions:       cfg.StartupUiOptions,
+		})
+		if trustErr != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: %v\n", trustErr)
+			return true, 1
+		}
+		sm.SetProjectTrusted(trusted)
+	}
+
+	writesProjectPackageConfig := (parsed.command == PackageCommandInstall || parsed.command == PackageCommandRemove) && parsed.local
+	if !sm.IsProjectTrusted() && writesProjectPackageConfig {
+		_, _ = fmt.Fprintln(stderr, "Project is not trusted. Use --approve to modify local package config.")
+		return true, 1
+	}
+
+	pmcReportSettingsErrors(sm, "package command", stderr)
+
+	pm := core.NewDefaultPackageManager(core.DefaultPackageManagerOptions{
+		Cwd:             cwd,
+		AgentDir:        agentDir,
+		SettingsManager: sm,
+		HTTPClient:      cfg.HTTPClient,
+	})
+
+	var progressMu sync.Mutex
+	var updatedPackages []string
+	var warningCount int
+	lineCh := make(chan string)
+	writerDone := make(chan struct{})
+	go func() {
+		defer close(writerDone)
+		for msg := range lineCh {
+			_, _ = fmt.Fprintln(stdout, msg)
+		}
+	}()
+	var closeWriterOnce sync.Once
+	closeProgressWriter := func() {
+		closeWriterOnce.Do(func() {
+			pm.SetProgressCallback(nil)
+			close(lineCh)
+			<-writerDone
+		})
+	}
+	defer closeProgressWriter()
+
+	pm.SetProgressCallback(func(ev core.ProgressEvent) {
+		switch {
+		case ev.Type == "result" && ev.Action == "update" && ev.Message != "":
+			progressMu.Lock()
+			updatedPackages = append(updatedPackages, ev.Message)
+			progressMu.Unlock()
+		case (ev.Type == "start" || ev.Type == "progress") && ev.Message != "":
+			if ev.Type == "progress" {
+				progressMu.Lock()
+				warningCount++
+				progressMu.Unlock()
+			}
+			lineCh <- ev.Message
+		}
+	})
+
+	switch parsed.command {
+	case PackageCommandInstall:
+		err := pm.InstallAndPersist(ctx, parsed.source, &core.PackageInstallOptions{Local: parsed.local})
+		closeProgressWriter()
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+			return true, 1
+		}
+		_, _ = fmt.Fprintf(stdout, "Installed %s\n", parsed.source)
+		return true, 0
+
+	case PackageCommandRemove:
+		removed, err := pm.RemoveAndPersist(ctx, parsed.source, &core.PackageRemoveOptions{Local: parsed.local})
+		closeProgressWriter()
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+			return true, 1
+		}
+		if !removed {
+			_, _ = fmt.Fprintf(stderr, "No matching package found for %s\n", parsed.source)
+			return true, 1
+		}
+		_, _ = fmt.Fprintf(stdout, "Removed %s\n", parsed.source)
+		return true, 0
+
+	case PackageCommandList:
+		closeProgressWriter()
+		configured := pm.ListConfiguredPackages()
+		if len(configured) == 0 {
+			_, _ = fmt.Fprintln(stdout, "No packages installed.")
+			return true, 0
+		}
+		var userPkgs, projectPkgs []core.ConfiguredPackage
+		for _, pkg := range configured {
+			if pkg.Scope == utils.SourceScopeProject {
+				projectPkgs = append(projectPkgs, pkg)
+			} else {
+				userPkgs = append(userPkgs, pkg)
+			}
+		}
+		formatPkg := func(pkg core.ConfiguredPackage) {
+			display := pkg.Source
+			if pkg.Filtered {
+				display += " (filtered)"
+			}
+			_, _ = fmt.Fprintf(stdout, "  %s\n", display)
+			if pkg.InstalledPath != "" {
+				_, _ = fmt.Fprintf(stdout, "    %s\n", pkg.InstalledPath)
+			}
+		}
+		if len(userPkgs) > 0 {
+			_, _ = fmt.Fprintln(stdout, "User packages:")
+			for _, pkg := range userPkgs {
+				formatPkg(pkg)
+			}
+		}
+		if len(projectPkgs) > 0 {
+			if len(userPkgs) > 0 {
+				_, _ = fmt.Fprintln(stdout)
+			}
+			_, _ = fmt.Fprintln(stdout, "Project packages:")
+			for _, pkg := range projectPkgs {
+				formatPkg(pkg)
+			}
+		}
+		return true, 0
+
+	case PackageCommandUpdate:
+		target := parsed.updateTarget
+		if target == nil {
+			target = &pmcUpdateTarget{kind: pmcUpdateSelf}
+		}
+		if target.kind != pmcUpdateAll && target.kind != pmcUpdateExtensions {
+			closeProgressWriter()
+		}
+		if parsed.showExtensionsSkippedNote {
+			_, _ = fmt.Fprintf(stdout, "Extensions are skipped. Run %s update --extensions to update extensions.\n", utils.AppName)
+		}
+		if target.kind == pmcUpdateAll || target.kind == pmcUpdateExtensions {
+			var err error
+			if target.source != "" {
+				err = pm.Update(ctx, target.source)
+			} else {
+				err = pm.Update(ctx)
+			}
+			closeProgressWriter()
+			if err != nil {
+				_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+				return true, 1
+			}
+			progressMu.Lock()
+			updatedSnapshot := slices.Clone(updatedPackages)
+			warnSnapshot := warningCount
+			progressMu.Unlock()
+			switch {
+			case core.IsOfflineModeEnabled():
+				_, _ = fmt.Fprintln(stdout, "Skipped package updates (offline mode)")
+			case len(updatedSnapshot) == 0 && warnSnapshot > 0:
+				if target.source != "" {
+					_, _ = fmt.Fprintf(stdout, "%s was not updated, see the warnings above\n", target.source)
+				} else {
+					_, _ = fmt.Fprintln(stdout, "No packages were updated, see the warnings above")
+				}
+			case len(updatedSnapshot) == 0:
+				if target.source != "" {
+					_, _ = fmt.Fprintf(stdout, "%s is already up to date\n", target.source)
+				} else {
+					_, _ = fmt.Fprintln(stdout, "Packages are already up to date")
+				}
+			default:
+				plural := "s"
+				if len(updatedSnapshot) == 1 {
+					plural = ""
+				}
+				_, _ = fmt.Fprintf(stdout, "Updated %d package%s:\n", len(updatedSnapshot), plural)
+				for _, msg := range updatedSnapshot {
+					_, _ = fmt.Fprintf(stdout, "  %s\n", msg)
+				}
+			}
+		}
+		if target.kind == pmcUpdateAll || target.kind == pmcUpdateSelf {
+			if code := pmcHandleSelfUpdate(ctx, sm, parsed.force, stdout, stderr); code != 0 {
+				return true, code
+			}
+		}
+		return true, 0
+	}
+
+	return true, 0
 }

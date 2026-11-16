@@ -181,30 +181,47 @@ type GuiMode struct {
 	compacting          bool
 	retrying            bool
 
-	steeringQueue []string
-	followUpQueue []string
-	widgets       []gmWidgetItem
-	headerBanner  string
-	footerBanner  string
-	titleOverride string
-	sessionName   string
-	themeSet      *ThemeSet
-	themeUnsub    func()
-	sessionUnsub  func()
-	activeDialog  *DialogHandle
+	steeringQueue  []string
+	followUpQueue  []string
+	widgets        []gmWidgetItem
+	headerBanner   string
+	footerBanner   string
+	titleOverride  string
+	sessionName    string
+	sessionID      string
+	sessionFile    string
+	sessionDir     string
+	sessionCreated time.Time
+	themeSet       *ThemeSet
+	themeUnsub     func()
+	sessionUnsub   func()
+	activeDialog   *DialogHandle
 
-	lastExitPress      time.Time
-	lastEscPress       time.Time
-	pendingInitHandled bool
-	initialized        bool
-	stopped            bool
-	isRunning          bool
-	autoStartedApp     bool
-	runCtx             context.Context
-	runCancel          context.CancelFunc
-	doneOnce           sync.Once
-	doneCh             chan struct{}
-	nextSeq            atomic.Uint64
+	lastExitPress        time.Time
+	lastEscPress         time.Time
+	pendingInitHandled   bool
+	initialized          bool
+	stopped              bool
+	isRunning            bool
+	autoStartedApp       bool
+	runCtx               context.Context
+	runCancel            context.CancelFunc
+	doneOnce             sync.Once
+	doneCh               chan struct{}
+	nextSeq              atomic.Uint64
+	sessionMutationDepth atomic.Int32
+
+	wakuOnce            sync.Once
+	sidebar             *wakuSidebarState
+	rightPanel          *wakuRightPanelState
+	toast               *wakuToastState
+	turnStartedAt       time.Time
+	turnDurations       map[string]time.Duration
+	collapsedTurns      map[string]bool
+	contextPopoverOpen  bool
+	branchPopoverOpen   bool
+	thinkingPopoverOpen bool
+	settingsState       *wakuSettingsState
 
 	terminalInputHandlers []core.TerminalInputHandler
 	autocompleteFactories []core.AutocompleteProviderFactory
@@ -214,6 +231,59 @@ type GuiMode struct {
 	// Overridable only inside unit tests to exercise Run lifecycle without native OS loop.
 	appRunHook  func() error
 	appQuitHook func()
+}
+
+func (m *GuiMode) ensureWakuState() {
+	if m == nil {
+		return
+	}
+	m.wakuOnce.Do(func() {
+		prefs := m.loadLayoutPrefs()
+		m.mu.Lock()
+		if m.sidebar == nil {
+			m.sidebar = newWakuSidebarState(m.opts.SkipWindow)
+		}
+		if m.rightPanel == nil {
+			m.rightPanel = newWakuRightPanelState(prefs)
+		}
+		if m.toast == nil {
+			m.toast = newWakuToastState()
+		}
+		if m.turnDurations == nil {
+			m.turnDurations = make(map[string]time.Duration)
+		}
+		if m.collapsedTurns == nil {
+			m.collapsedTurns = make(map[string]bool)
+		}
+		if m.settingsState == nil {
+			m.settingsState = newWakuSettingsState()
+		}
+		m.mu.Unlock()
+	})
+}
+
+func (m *GuiMode) recordCurrentTurnDurationLocked() {
+	if m == nil || m.turnStartedAt.IsZero() {
+		return
+	}
+	idx := len(m.entries) - 1
+	for idx >= 0 && m.entries[idx].kind != "assistant" && m.entries[idx].kind != "tool" {
+		idx--
+	}
+	if idx < 0 {
+		return
+	}
+	for idx > 0 && (m.entries[idx-1].kind == "assistant" || m.entries[idx-1].kind == "tool") {
+		idx--
+	}
+	turnKey := m.entries[idx].id
+	if turnKey == "" {
+		return
+	}
+	if m.turnDurations == nil {
+		m.turnDurations = make(map[string]time.Duration)
+	}
+	m.turnDurations[turnKey] = time.Since(m.turnStartedAt)
 }
 
 // NewGuiMode constructs and initializes a GuiMode controller for runtime.
@@ -262,21 +332,25 @@ func NewGuiMode(runtime *core.AgentSessionRuntime, opts *GuiModeOptions) *GuiMod
 		workingVisible:         true,
 		themeSet:               ts,
 		doneCh:                 make(chan struct{}),
+		turnDurations:          make(map[string]time.Duration),
+		collapsedTurns:         make(map[string]bool),
 		appRunHook:             mygo.App.Run,
 		appQuitHook:            mygo.App.Quit,
 	}
+	m.ensureWakuState()
 	if sm != nil {
 		m.hideThinking = sm.GetHideThinkingBlock()
 	}
 
 	m.editor = gui.NewEditor(gui.EditorOptions{
-		Placeholder: "Message pi... (/ for commands, @ for files, ! for bash)",
+		Placeholder: "Do anything…",
 		MinLines:    2,
 		MaxLines:    8,
 		Theme:       guiTheme,
 		Keybindings: km,
 		AutoFocus:   true,
 	})
+	m.editor.SetChromeless(true)
 	if sm != nil {
 		if mv := sm.GetAutocompleteMaxVisible(); mv > 0 {
 			m.editor.AutocompletePopup().SetMaxVisible(mv)
@@ -317,6 +391,11 @@ func NewGuiMode(runtime *core.AgentSessionRuntime, opts *GuiModeOptions) *GuiMod
 	m.RefreshAutocomplete()
 	m.rebuildTranscript()
 	m.updateFooterAndTitle()
+	if runtime != nil {
+		m.refreshSidebarSessions()
+		m.refreshRightPanelChanges()
+		m.refreshGitBranchesAsync()
+	}
 	return m
 }
 
@@ -347,7 +426,7 @@ func (m *GuiMode) Session() *core.AgentSession {
 	if m == nil || m.runtime == nil {
 		return nil
 	}
-	return m.runtime.Session
+	return m.runtime.CurrentSession()
 }
 
 // FlushPending executes any queued UI callbacks immediately. Primarily useful in synchronous tests.
@@ -451,8 +530,32 @@ func (m *GuiMode) Run(ctx context.Context) error {
 		winOpts.Title = m.host.EffectiveTitle()
 	}
 	if winOpts.Width == 0 && winOpts.Height == 0 {
-		winOpts.Width = 1120
-		winOpts.Height = 780
+		winOpts.Width = 1240
+		winOpts.Height = 820
+	}
+	if winOpts.MinWidth == 0 {
+		winOpts.MinWidth = 760
+	}
+	if winOpts.MinHeight == 0 {
+		winOpts.MinHeight = 520
+	}
+	if winOpts.TitleBarStyle == "" {
+		winOpts.TitleBarStyle = mygo.TitleBarHidden
+	}
+	if winOpts.TrafficLightPosition == nil {
+		winOpts.TrafficLightPosition = &mygo.Point{X: 16, Y: 16}
+	}
+	if winOpts.TitleBarHeight == 0 {
+		winOpts.TitleBarHeight = 48
+	}
+	if winOpts.Vibrancy == "" {
+		winOpts.Vibrancy = mygo.VibrancySidebar
+	}
+	if winOpts.BackgroundColor == "" {
+		winOpts.BackgroundColor = "light-dark(#f6f5f6, #1a1a1a)"
+	}
+	if winOpts.StateKey == "" {
+		winOpts.StateKey = "pi-gui-main"
 	}
 	m.autoStartedApp = true
 	m.mu.Unlock()
@@ -552,13 +655,12 @@ func (m *GuiMode) View(c *ui.Context) ui.Element {
 	if m == nil {
 		return ui.Box(c).Fill()
 	}
+	m.ensureWakuState()
 
 	m.mu.Lock()
 	ts := m.themeSet
-	entries := append([]gmTranscriptEntry(nil), m.entries...)
-	widgets := append([]gmWidgetItem(nil), m.widgets...)
-	hdrBanner := m.headerBanner
-	ftrBanner := m.footerBanner
+	_, _, _, sessionTitle, _ := m.cachedSessionMetaLocked()
+	titleOverride := strings.TrimSpace(m.titleOverride)
 	m.mu.Unlock()
 
 	var themeOverride *gui.GuiTheme
@@ -571,62 +673,72 @@ func (m *GuiMode) View(c *ui.Context) ui.Element {
 		m.handleAppShortcuts(c)
 	}
 
-	root := ui.Column(c).
+	if m.SettingsOpen() {
+		return m.renderWakuSettingsView(c, th)
+	}
+
+	if sessionTitle == "" {
+		sessionTitle = m.firstTranscriptUserTitle(56)
+	}
+	if sessionTitle == "" {
+		sessionTitle = titleOverride
+	}
+	if sessionTitle == "" {
+		sessionTitle = "New task"
+	}
+
+	m.sidebar.mu.Lock()
+	sidebarOpen := m.sidebar.open
+	sidebarWidth := m.sidebar.width
+	canBack := len(m.sidebar.navBack) > 0
+	canFwd := len(m.sidebar.navFwd) > 0
+	m.sidebar.mu.Unlock()
+
+	rightOpen, _, _, _ := m.rightPanel.snapshotMeta()
+
+	root := ui.Row(c).
+		Key("waku-shell-root").
 		Fill().
-		Background(th.Background).
-		Padding(10, 14).
-		Gap(8)
+		Clip().
+		Background(th.Background)
 
 	root.Children(func() {
-		if hdrBanner != "" {
-			ui.Row(c).
-				FillWidth().
-				Background(th.Surface).
-				Border(1, th.BorderMuted).
-				Radius(th.Radius).
-				Padding(6, 10).
-				Children(func() {
-					ui.Text(c, hdrBanner).TextColor(th.Muted).FontSize(12)
-				})
+		if sidebarOpen {
+			m.renderWakuSidebar(c, th)
 		}
 
-		// Scrollable transcript takes all remaining vertical space.
-		ui.Box(c).FillWidth().Grow(1).Children(func() {
-			m.scrollView.View(c, len(entries), func(rc *ui.Context, idx int) {
-				if idx < 0 || idx >= len(entries) {
-					return
-				}
-				entry := entries[idx]
-				ui.Box(rc).Key(entry.id).FillWidth().Padding(0, 0, 8, 0).Children(func() {
-					if entry.card != nil {
-						entry.card.View(rc)
-					}
+		center := ui.Column(c).
+			Key("waku-center-pane").
+			Grow(1).
+			Shrink(1).
+			MinWidth(0).
+			FillHeight().
+			Clip().
+			Background(th.Background)
+		center.Children(func() {
+			renderWakuCenterHeader(
+				c, m, th,
+				sidebarOpen, sidebarWidth, rightOpen,
+				canBack, canFwd,
+				sessionTitle,
+			)
+
+			// Virtualized scrollable transcript stream
+			ui.Box(c).FillWidth().Grow(1).Shrink(1).MinWidth(0).Clip().Children(func() {
+				m.scrollView.View(c, 1, func(rc *ui.Context, _ int) {
+					m.renderWakuTranscript(rc, th)
 				})
 			})
+
+			// Floating composer card & 28px workspace status footer
+			m.renderWakuComposerZone(c, th)
+
+			// Floating top notification toast
+			renderWakuFloatingToast(c, m, th)
 		})
 
-		m.statusBanner.View(c)
-		m.queueBanner.View(c)
-		gmRenderWidgets(c, th, widgets, core.WidgetPlacementAboveEditor)
-
-		if m.editor != nil {
-			m.editor.View(c)
-		}
-
-		gmRenderWidgets(c, th, widgets, core.WidgetPlacementBelowEditor)
-
-		if ftrBanner != "" {
-			ui.Row(c).
-				FillWidth().
-				Background(th.Surface).
-				Border(1, th.BorderMuted).
-				Radius(th.Radius).
-				Padding(4, 10).
-				Children(func() {
-					ui.Text(c, ftrBanner).TextColor(th.Muted).FontSize(11)
-				})
-		} else if m.footer != nil {
-			m.footer.View(c)
+		if rightOpen {
+			m.renderWakuRightPanel(c, th)
 		}
 	})
 
@@ -666,6 +778,19 @@ func (m *GuiMode) nextEntryID(prefix string) string {
 }
 
 func (m *GuiMode) appendNotice(level gmNoticeLevel, title, body string) {
+	m.ensureWakuState()
+	kind := wakuToastInfo
+	switch level {
+	case gmNoticeWarning:
+		kind = wakuToastWarning
+	case gmNoticeError:
+		kind = wakuToastError
+	}
+	if m.toast != nil {
+		m.toast.show(kind, title, body, func() {
+			m.postUI(func() {})
+		})
+	}
 	th := m.currentGuiTheme()
 	card := gmNewNoticeCard(title, body, level, th)
 	m.appendCard("notice", m.nextEntryID("notice"), card)
@@ -758,6 +883,15 @@ func (m *GuiMode) applyThemeSet(ts *ThemeSet) {
 	}
 	if m.queueBanner != nil {
 		m.queueBanner.SetTheme(guiTh)
+	}
+	m.ensureWakuState()
+	if m.rightPanel != nil {
+		m.rightPanel.mu.Lock()
+		dv := m.rightPanel.diffViewer
+		m.rightPanel.mu.Unlock()
+		if dv != nil {
+			dv.SetTheme(guiTh)
+		}
 	}
 	_ = dlg
 	if m.host != nil {
@@ -890,15 +1024,34 @@ func (m *GuiMode) bindActiveSession(ctx context.Context) {
 		return
 	}
 
+	sessID := sess.SessionId()
 	sessName := ""
 	if n := sess.SessionName(); n != nil {
 		sessName = strings.TrimSpace(*n)
+	}
+	sessFile := ""
+	sessDir := ""
+	var sessCreated time.Time
+	if sm := sess.SessionManager; sm != nil {
+		if sf := sm.GetSessionFile(); sf != nil {
+			sessFile = *sf
+		}
+		sessDir = sm.GetSessionDir()
+		if hdr := sm.GetHeader(); hdr != nil {
+			if parsed, err := time.Parse(time.RFC3339, hdr.Timestamp); err == nil {
+				sessCreated = parsed
+			}
+		}
 	}
 
 	m.mu.Lock()
 	prevUnsub := m.sessionUnsub
 	m.sessionUnsub = nil
+	m.sessionID = sessID
+	m.sessionFile = sessFile
+	m.sessionDir = sessDir
 	m.sessionName = sessName
+	m.sessionCreated = sessCreated
 	if m.initialized && prevUnsub != nil {
 		// Still rebind on session replacement; detach previous first.
 	}
@@ -1058,6 +1211,9 @@ func (m *GuiMode) handleSessionReplaced() {
 	m.RefreshAutocomplete()
 	m.rebuildTranscript()
 	m.updateFooterAndTitle()
+	m.refreshSidebarSessions()
+	m.refreshRightPanelChanges()
+	m.refreshGitBranchesAsync()
 }
 
 func (m *GuiMode) rebuildTranscript() {
@@ -1124,6 +1280,8 @@ func (m *GuiMode) rebuildTranscript() {
 								WithUserMessageId(e.Id),
 								WithUserTheme(th),
 								WithUserOnLink(gmOpenLink),
+								WithUserOnCopy(func(s string) { _ = gmWriteClipboardText(m.host, s) }),
+								WithUserWakuStyle(true),
 							)
 							entryIdx[uid] = len(entries)
 							entries = append(entries, gmTranscriptEntry{id: uid, kind: "user", card: uc})
@@ -1136,6 +1294,8 @@ func (m *GuiMode) rebuildTranscript() {
 							WithUserMessageId(e.Id),
 							WithUserTheme(th),
 							WithUserOnLink(gmOpenLink),
+							WithUserOnCopy(func(s string) { _ = gmWriteClipboardText(m.host, s) }),
+							WithUserWakuStyle(true),
 						)
 						entryIdx[uid] = len(entries)
 						entries = append(entries, gmTranscriptEntry{id: uid, kind: "user", card: uc})
@@ -1151,6 +1311,9 @@ func (m *GuiMode) rebuildTranscript() {
 						WithAssistantShowUsage(true),
 						WithAssistantTheme(th),
 						WithAssistantOnLink(gmOpenLink),
+						WithAssistantOnCopyMessage(func(s string) { _ = gmWriteClipboardText(m.host, s) }),
+						WithAssistantOnCopyCode(func(_, code string) { _ = gmWriteClipboardText(m.host, code) }),
+						WithAssistantWakuStyle(true),
 					)
 					entryIdx[aid] = len(entries)
 					entries = append(entries, gmTranscriptEntry{id: aid, kind: "assistant", card: ac})
@@ -1217,7 +1380,7 @@ func (m *GuiMode) rebuildTranscript() {
 					if msg.Display {
 						cmid := fmt.Sprintf("custom:%s:%d", e.Id, i)
 						cmc := NewCustomMessageCard(msg,
-							WithCustomRenderer(customMsgRenderers[msg.CustomType]),
+							WithCustomRenderer(gmResolveCustomMessageRenderer(m, sess, msg.CustomType, customMsgRenderers)),
 							WithCustomExpanded(toolsExpanded),
 							WithCustomTheme(th),
 							WithCustomOnLink(gmOpenLink),
@@ -1275,7 +1438,7 @@ func (m *GuiMode) rebuildTranscript() {
 						cmsg.Details = jsonx.Some(e.Details)
 					}
 					cmc := NewCustomMessageCard(cmsg,
-						WithCustomRenderer(customMsgRenderers[e.CustomType]),
+						WithCustomRenderer(gmResolveCustomMessageRenderer(m, sess, e.CustomType, customMsgRenderers)),
 						WithCustomExpanded(toolsExpanded),
 						WithCustomTheme(th),
 						WithCustomOnLink(gmOpenLink),
@@ -1293,8 +1456,10 @@ func (m *GuiMode) rebuildTranscript() {
 	m.streamingCard = nil
 	m.streamingEntryID = ""
 	m.streamingTools = make(map[string]*ToolExecutionCard)
+	m.collapsedTurns = make(map[string]bool)
 	m.mu.Unlock()
 
+	m.refreshRightPanelTreeSnapshot()
 	if m.scrollView != nil {
 		m.scrollView.JumpToBottom()
 	}
@@ -1357,6 +1522,60 @@ func (m *GuiMode) setCachedSessionName(name string) {
 	m.mu.Lock()
 	m.sessionName = strings.TrimSpace(name)
 	m.mu.Unlock()
+}
+
+func (m *GuiMode) cachedSessionMetaLocked() (id, file, dir, name string, created time.Time) {
+	return m.sessionID, m.sessionFile, m.sessionDir, m.sessionName, m.sessionCreated
+}
+
+func (m *GuiMode) cachedSessionMeta() (id, file, dir, name string, created time.Time) {
+	if m == nil {
+		return "", "", "", "", time.Time{}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.cachedSessionMetaLocked()
+}
+
+func (m *GuiMode) firstTranscriptUserTitle(maxRunes int) string {
+	if m == nil {
+		return ""
+	}
+	m.mu.Lock()
+	entries := append([]gmTranscriptEntry(nil), m.entries...)
+	m.mu.Unlock()
+
+	for _, entry := range entries {
+		if entry.kind != "user" {
+			continue
+		}
+		uc, ok := entry.card.(*UserMessageCard)
+		if !ok || uc == nil {
+			continue
+		}
+		txt := uc.Text()
+		if sbParsed := core.ParseSkillBlock(txt); sbParsed != nil && sbParsed.UserMessage != nil {
+			txt = *sbParsed.UserMessage
+		}
+		if trimmed := strings.TrimSpace(txt); trimmed != "" {
+			return selTruncateSingleLine(trimmed, maxRunes)
+		}
+	}
+
+	if sess := m.Session(); sess != nil {
+		for _, msg := range sess.Messages() {
+			if um, ok := msg.(*ai.UserMessage); ok && um != nil {
+				txt, _ := gevExtractUserContent(um.Content)
+				if sbParsed := core.ParseSkillBlock(txt); sbParsed != nil && sbParsed.UserMessage != nil {
+					txt = *sbParsed.UserMessage
+				}
+				if trimmed := strings.TrimSpace(txt); trimmed != "" {
+					return selTruncateSingleLine(trimmed, maxRunes)
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func (m *GuiMode) buildSafeFooterState(sess *core.AgentSession) FooterState {
@@ -1496,6 +1715,69 @@ func (m *GuiMode) updateProgramStatus(state gui.ProgramStatusState, msg string, 
 	})
 }
 
+func gmResolveCustomMessageRenderer(
+	m *GuiMode,
+	sess *core.AgentSession,
+	customType string,
+	customRenderers map[string]CustomMessageRenderer,
+) CustomMessageRenderer {
+	if customRenderers != nil {
+		if fn := customRenderers[customType]; fn != nil {
+			return fn
+		}
+	}
+	if sess == nil || customType == "" {
+		return nil
+	}
+	runner := sess.ExtensionRunner()
+	if runner == nil {
+		return nil
+	}
+	extRenderer := runner.GetMessageRenderer(customType)
+	if extRenderer == nil {
+		return nil
+	}
+	return func(c *ui.Context, msg *core.CustomMessage, expanded bool, th *gui.GuiTheme) ui.Element {
+		var tuiTheme *theme.Theme
+		if m != nil && m.uiCtx != nil {
+			tuiTheme = m.uiCtx.Theme()
+		}
+		if tuiTheme == nil {
+			tuiTheme = theme.CurrentTheme()
+		}
+		comp := extRenderer(msg, core.MessageRenderOptions{Expanded: expanded}, tuiTheme)
+		if comp == nil {
+			return ui.Element{}
+		}
+		rawLines := comp.Render(92)
+		cleanLines := make([]string, 0, len(rawLines))
+		for _, line := range rawLines {
+			clean := strings.TrimRight(utils.StripAnsi(line), " \t\r")
+			cleanLines = append(cleanLines, clean)
+		}
+		for len(cleanLines) > 0 && cleanLines[len(cleanLines)-1] == "" {
+			cleanLines = cleanLines[:len(cleanLines)-1]
+		}
+		body := strings.TrimSpace(strings.Join(cleanLines, "\n"))
+		if body == "" {
+			return ui.Element{}
+		}
+		th = gui.ResolveGuiTheme(c, th)
+		card := ui.Column(c).
+			FillWidth().
+			Background(th.CustomMessageBg).
+			Border(1, th.BorderMuted).
+			Radius(th.Radius).
+			Padding(10, 14).
+			Gap(6)
+		card.Children(func() {
+			ui.Text(c, "["+customType+"]").TextColor(th.CustomMessageLabel).FontWeight(700)
+			ui.Text(c, body).TextColor(th.Text).Font("monospace").FontSize(12).Selectable().Wrap()
+		})
+		return card
+	}
+}
+
 // RefreshAutocomplete rebuilds the slash command + @file autocomplete provider on Editor.
 func (m *GuiMode) RefreshAutocomplete() {
 	if m == nil || m.editor == nil {
@@ -1618,6 +1900,7 @@ func (m *GuiMode) executeBashCommand(ctx context.Context, command string, exclud
 		m.mu.Unlock()
 		m.appendCard("bash", id, card)
 		m.statusBanner.SetWorking(true, "Running: "+command)
+		m.refreshSidebarSessions()
 	})
 
 	defer cancel()
@@ -1685,6 +1968,19 @@ func (m *GuiMode) handleAppShortcuts(c *ui.Context) {
 	km.OnAppContext(c, gui.AppSessionFork, func() { m.ShowForkSelector() })
 	km.OnAppContext(c, gui.AppSessionResume, func() { m.ShowSessionSelector() })
 	km.OnAppContext(c, gui.AppClipboardPasteImage, func() { m.pasteImageFromClipboard() })
+
+	if c.Shortcut(ui.Cmd, ui.KeyK) || c.Shortcut(ui.Ctrl, ui.KeyK) {
+		m.ShowCommandPalette()
+	}
+	if c.Shortcut(ui.Cmd, ui.KeyB) || c.Shortcut(ui.Ctrl, ui.KeyB) {
+		m.toggleLeftSidebar()
+	}
+	if c.Shortcut(ui.Cmd, ui.KeyJ) || c.Shortcut(ui.Ctrl|ui.Alt, ui.KeyB) {
+		m.toggleRightPanel()
+	}
+	if c.Shortcut(ui.Cmd, ui.KeyComma) || c.Shortcut(ui.Ctrl, ui.KeyComma) {
+		m.OpenSettingsPage("")
+	}
 }
 
 func (m *GuiMode) currentCtx() context.Context {
@@ -1697,6 +1993,10 @@ func (m *GuiMode) currentCtx() context.Context {
 func (m *GuiMode) handleEscapeAbort() {
 	if m.host != nil && m.host.HasOverlay() {
 		m.host.HideOverlay()
+		return
+	}
+	if m.SettingsOpen() {
+		m.CloseSettingsPage()
 		return
 	}
 	sess := m.Session()
@@ -1813,6 +2113,9 @@ func (m *GuiMode) toggleToolsExpanded() {
 	m.mu.Lock()
 	next := !m.toolsExpanded
 	m.toolsExpanded = next
+	if next {
+		m.collapsedTurns = make(map[string]bool)
+	}
 	entries := append([]gmTranscriptEntry(nil), m.entries...)
 	m.mu.Unlock()
 
@@ -1841,6 +2144,9 @@ func (m *GuiMode) toggleThinkingExpanded() {
 	m.mu.Lock()
 	next := !m.thinkingExpanded
 	m.thinkingExpanded = next
+	if next {
+		m.collapsedTurns = make(map[string]bool)
+	}
 	entries := append([]gmTranscriptEntry(nil), m.entries...)
 	m.mu.Unlock()
 
@@ -1932,8 +2238,8 @@ func gmLoadKeybindings() *gui.KeybindingsManager {
 }
 
 func gmRuntimeSettings(rt *core.AgentSessionRuntime) *core.SettingsManager {
-	if rt != nil && rt.Session != nil {
-		return rt.Session.SettingsManager
+	if sess := rt.CurrentSession(); sess != nil {
+		return sess.SettingsManager
 	}
 	return nil
 }
@@ -1947,8 +2253,8 @@ func gmRuntimeCwd(rt *core.AgentSessionRuntime) string {
 
 func gmInitialTitle(rt *core.AgentSessionRuntime, explicit string) string {
 	sessName := ""
-	if rt != nil && rt.Session != nil {
-		if name := rt.Session.SessionName(); name != nil {
+	if sess := rt.CurrentSession(); sess != nil {
+		if name := sess.SessionName(); name != nil {
 			sessName = strings.TrimSpace(*name)
 		}
 	}

@@ -1003,15 +1003,6 @@ func (s *AgentSession) Messages() agent.AgentMessageList {
 	return s.Agent.Messages()
 }
 
-// SystemPrompt returns the effective system prompt including pending loadout/section changes.
-func as1AppendPromptPtr(s string) *string {
-	if s == "" {
-		return nil
-	}
-	cp := s
-	return &cp
-}
-
 // SystemPrompt returns the effective system prompt for the current session or active run.
 func (s *AgentSession) SystemPrompt() string {
 	s.mu.Lock()
@@ -1020,18 +1011,7 @@ func (s *AgentSession) SystemPrompt() string {
 		opts = *s.runSystemPromptOpts
 	}
 	s.mu.Unlock()
-	prompt, _ := BuildSystemPrompt(BuildSystemPromptOptions{
-		Cwd:                opts.Cwd,
-		Skills:             opts.Skills,
-		ContextFiles:       opts.ContextFiles,
-		CustomPrompt:       opts.CustomPrompt,
-		AppendSystemPrompt: as1AppendPromptPtr(opts.AppendSystemPrompt),
-		SelectedTools:      opts.SelectedTools,
-		HiddenTools:        opts.HiddenTools,
-		ToolSnippets:       opts.ToolSnippets,
-		ToolGuidelines:     opts.ToolGuidelines,
-		ForceSystemPrompt:  opts.ForceSystemPrompt,
-	})
+	prompt, _ := BuildSystemPrompt(as1NormalizedToBuildSystemPromptOptions(opts))
 	return prompt
 }
 
@@ -1911,18 +1891,11 @@ func (s *AgentSession) as1InstallAgentNextTurnRefresh() {
 			mergedGuidelines[k] = slices.Clone(v)
 		}
 
-		normOpts := NormalizeBuildSystemPromptOptions(BuildSystemPromptOptions{
-			Cwd:                runOpts.Cwd,
-			Skills:             runOpts.Skills,
-			ContextFiles:       runOpts.ContextFiles,
-			CustomPrompt:       runOpts.CustomPrompt,
-			AppendSystemPrompt: as1AppendPromptPtr(runOpts.AppendSystemPrompt),
-			SelectedTools:      s.GetActiveToolNames(),
-			HiddenTools:        runOpts.HiddenTools,
-			ToolSnippets:       mergedSnippets,
-			ToolGuidelines:     mergedGuidelines,
-			ForceSystemPrompt:  runOpts.ForceSystemPrompt,
-		})
+		turnInput := as1NormalizedToBuildSystemPromptOptions(runOpts)
+		turnInput.SelectedTools = s.GetActiveToolNames()
+		turnInput.ToolSnippets = mergedSnippets
+		turnInput.ToolGuidelines = mergedGuidelines
+		normOpts := NormalizeBuildSystemPromptOptions(turnInput)
 		var msgs agent.AgentMessageList
 		if nextCtx != nil {
 			msgs = nextCtx.Messages
@@ -2667,7 +2640,9 @@ func (s *AgentSession) as1EmitExtensionEvent(ctx context.Context, event agent.Ag
 		if runner != nil {
 			replacement := runner.EmitMessageEnd(ctx, MessageEndEvent{Type: "message_end", Message: e.Message})
 			if replacement != nil {
-				s.as1ReplaceMessageInPlace(e.Message, replacement)
+				if !s.as1ReplaceMessageInPlace(e.Message, replacement) {
+					e.Message = replacement
+				}
 			}
 		}
 	case *agent.AgentEventToolExecutionStart:
@@ -2854,38 +2829,62 @@ func (s *AgentSession) as1FindLastAssistantMessage() *ai.AssistantMessage {
 	return nil
 }
 
-func (s *AgentSession) as1ReplaceMessageInPlace(target, replacement agent.AgentMessage) {
+func (s *AgentSession) as1ReplaceMessageInPlace(target, replacement agent.AgentMessage) bool {
 	if target == nil || replacement == nil || as1SameMessage(target, replacement) {
-		return
+		return true
 	}
 	switch dst := target.(type) {
 	case *ai.UserMessage:
 		if src, ok := replacement.(*ai.UserMessage); ok {
 			*dst = *src
-			return
+			return true
+		}
+	case *ai.AssistantMessage:
+		if src, ok := replacement.(*ai.AssistantMessage); ok {
+			// Copy exported fields explicitly so AssistantMessage's internal mutex is not copied.
+			dst.Role = src.Role
+			dst.Content = src.Content
+			dst.Api = src.Api
+			dst.Provider = src.Provider
+			dst.Model = src.Model
+			dst.ResponseModel = src.ResponseModel
+			dst.ResponseId = src.ResponseId
+			dst.ProviderThinkingLevel = src.ProviderThinkingLevel
+			dst.ThinkingLevel = src.ThinkingLevel
+			dst.Diagnostics = src.Diagnostics
+			dst.Usage = src.Usage
+			dst.StopReason = src.StopReason
+			dst.Deferred = src.Deferred
+			dst.ErrorMessage = src.ErrorMessage
+			dst.RawStopReason = src.RawStopReason
+			dst.EndTurn = src.EndTurn
+			dst.Timestamp = src.Timestamp
+			dst.DurationMs = src.DurationMs
+			return true
 		}
 	case *ai.ToolResultMessage:
 		if src, ok := replacement.(*ai.ToolResultMessage); ok {
 			*dst = *src
-			return
+			return true
 		}
 	case *CustomMessage:
 		if src, ok := replacement.(*CustomMessage); ok {
 			*dst = *src
-			return
+			return true
 		}
 	}
 	if s.Agent == nil {
-		return
+		return false
 	}
 	msgs := s.Agent.Messages()
 	for i, m := range msgs {
 		if as1SameMessage(m, target) {
 			msgs[i] = replacement
 			s.Agent.ReplaceMessages(msgs)
-			return
+			break
 		}
 	}
+	return false
 }
 
 // Subscribe attaches an event listener and returns a function that unsubscribes it.
@@ -3871,18 +3870,7 @@ func (s *AgentSession) emitShutdown(reason string, targetSessionFile *string) {
 }
 
 func as1NormalizedToBuildSystemPromptOptions(opts NormalizedBuildSystemPromptOptions) BuildSystemPromptOptions {
-	return BuildSystemPromptOptions{
-		Cwd:                opts.Cwd,
-		Skills:             opts.Skills,
-		ContextFiles:       opts.ContextFiles,
-		CustomPrompt:       opts.CustomPrompt,
-		AppendSystemPrompt: as1AppendPromptPtr(opts.AppendSystemPrompt),
-		SelectedTools:      opts.SelectedTools,
-		HiddenTools:        opts.HiddenTools,
-		ToolSnippets:       opts.ToolSnippets,
-		ToolGuidelines:     opts.ToolGuidelines,
-		ForceSystemPrompt:  opts.ForceSystemPrompt,
-	}
+	return erNormalizedToBuildSystemPromptOptions(opts)
 }
 
 func (s *AgentSession) settleForReplacement(ctx context.Context) {

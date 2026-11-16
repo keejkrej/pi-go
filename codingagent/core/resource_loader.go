@@ -1,7 +1,4 @@
 // Ported from packages/coding-agent/src/core/resource-loader.ts (pi v1.5.2).
-// Barebone build: discovers local/user skills, prompt templates, themes,
-// AGENTS.md/CLAUDE.md context files, and SYSTEM.md/APPEND_SYSTEM.md without
-// loading external npm/git packages or JS/TS extensions.
 
 package core
 
@@ -11,12 +8,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/keejkrej/pi-go/codingagent/modes/interactive/theme"
 	"github.com/keejkrej/pi-go/codingagent/utils"
+	"github.com/keejkrej/pi-go/internal/jsonx"
 	"github.com/keejkrej/pi-go/internal/minimatch"
 	"github.com/keejkrej/pi-go/tui"
 )
@@ -267,7 +266,9 @@ type DefaultResourceLoaderOptions struct {
 	AdditionalThemePaths          []string
 	SystemPrompt                  *string
 	AppendSystemPrompt            []string
+	ExtensionFactories            []InlineExtension
 	DisabledBuiltinExtensions     []string
+	ExtensionsOverride            func(LoadExtensionsResult) LoadExtensionsResult
 	SkillsOverride                func(LoadSkillsResult) LoadSkillsResult
 	PromptsOverride               func(LoadPromptTemplatesResult) LoadPromptTemplatesResult
 	ThemesOverride                func(LoadThemesResult) LoadThemesResult
@@ -276,23 +277,30 @@ type DefaultResourceLoaderOptions struct {
 	AppendSystemPromptOverride    func([]string) []string
 }
 
-// DefaultResourceLoader is the barebone ResourceLoader implementation.
+// DefaultResourceLoader discovers and loads extensions, packages, skills, prompt templates,
+// themes, AGENTS/CLAUDE context files, and SYSTEM/APPEND_SYSTEM prompts.
 type DefaultResourceLoader struct {
 	mu                         sync.RWMutex
+	reloadMu                   sync.Mutex
 	cwd                        string
 	agentDir                   string
 	settingsManager            *SettingsManager
+	packageManager             *DefaultPackageManager
 	eventBus                   EventBus
 	noExtensions               bool
 	noSkills                   bool
 	noPromptTemplates          bool
 	noThemes                   bool
 	noContextFiles             bool
+	additionalExtensionPaths   []string
 	additionalSkillPaths       []string
 	additionalPromptPaths      []string
 	additionalThemePaths       []string
+	disabledBuiltinExtensions  []string
+	extensionFactories         []InlineExtension
 	systemPromptOpt            *string
 	appendSystemPromptOpt      []string
+	extensionsOverride         func(LoadExtensionsResult) LoadExtensionsResult
 	skillsOverride             func(LoadSkillsResult) LoadSkillsResult
 	promptsOverride            func(LoadPromptTemplatesResult) LoadPromptTemplatesResult
 	themesOverride             func(LoadThemesResult) LoadThemesResult
@@ -300,6 +308,7 @@ type DefaultResourceLoader struct {
 	systemPromptOverride       func(*string) *string
 	appendSystemPromptOverride func([]string) []string
 
+	loaded                    bool
 	extensions                LoadExtensionsResult
 	skills                    LoadSkillsResult
 	prompts                   LoadPromptTemplatesResult
@@ -325,21 +334,37 @@ func NewDefaultResourceLoader(options DefaultResourceLoaderOptions) *DefaultReso
 	if agentDir == "" {
 		agentDir = utils.GetAgentDir()
 	}
+	sm := options.SettingsManager
+	if sm == nil {
+		sm = SettingsManagerCreate(cwd, agentDir)
+	}
+	builtinNames := rlCollectBuiltinExtensionNames(options.ExtensionFactories)
+	pm := NewDefaultPackageManager(DefaultPackageManagerOptions{
+		Cwd:               cwd,
+		AgentDir:          agentDir,
+		SettingsManager:   sm,
+		BuiltinExtensions: builtinNames,
+	})
 	return &DefaultResourceLoader{
 		cwd:                        cwd,
 		agentDir:                   agentDir,
-		settingsManager:            options.SettingsManager,
+		settingsManager:            sm,
+		packageManager:             pm,
 		eventBus:                   options.EventBus,
 		noExtensions:               options.NoExtensions,
 		noSkills:                   options.NoSkills,
 		noPromptTemplates:          options.NoPromptTemplates,
 		noThemes:                   options.NoThemes,
 		noContextFiles:             options.NoContextFiles,
-		additionalSkillPaths:       append([]string(nil), options.AdditionalSkillPaths...),
-		additionalPromptPaths:      append([]string(nil), options.AdditionalPromptTemplatePaths...),
-		additionalThemePaths:       append([]string(nil), options.AdditionalThemePaths...),
+		additionalExtensionPaths:   slices.Clone(options.AdditionalExtensionPaths),
+		additionalSkillPaths:       slices.Clone(options.AdditionalSkillPaths),
+		additionalPromptPaths:      slices.Clone(options.AdditionalPromptTemplatePaths),
+		additionalThemePaths:       slices.Clone(options.AdditionalThemePaths),
+		disabledBuiltinExtensions:  slices.Clone(options.DisabledBuiltinExtensions),
+		extensionFactories:         slices.Clone(options.ExtensionFactories),
 		systemPromptOpt:            options.SystemPrompt,
-		appendSystemPromptOpt:      append([]string(nil), options.AppendSystemPrompt...),
+		appendSystemPromptOpt:      slices.Clone(options.AppendSystemPrompt),
+		extensionsOverride:         options.ExtensionsOverride,
 		skillsOverride:             options.SkillsOverride,
 		promptsOverride:            options.PromptsOverride,
 		themesOverride:             options.ThemesOverride,
@@ -370,6 +395,28 @@ func NewDefaultResourceLoader(options DefaultResourceLoaderOptions) *DefaultReso
 		appendSystemPrompt:        []string{},
 		appendSystemPromptSources: []SystemPromptSource{},
 		pathMetadata:              make(map[string]utils.PathMetadata),
+	}
+}
+
+// GetPackageManager returns the loader's package manager instance.
+func (d *DefaultResourceLoader) GetPackageManager() *DefaultPackageManager {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.packageManager
+}
+
+// Close releases extension runtime resources held by the loader (e.g., QuickJS VMs).
+// Safe to call multiple times.
+func (d *DefaultResourceLoader) Close() {
+	if d == nil {
+		return
+	}
+	d.mu.Lock()
+	rt := d.extensions.Runtime
+	d.extensions.Runtime = nil
+	d.mu.Unlock()
+	if rt != nil {
+		ShutdownExtensionRuntime(rt)
 	}
 }
 
@@ -559,6 +606,7 @@ func (d *DefaultResourceLoader) rlLoadThemes(
 	extraPaths []string,
 	excludes []rlExclusionRule,
 	extraMeta map[string]utils.PathMetadata,
+	outMeta map[string]utils.PathMetadata,
 ) LoadThemesResult {
 	var themeFiles []struct {
 		path string
@@ -592,7 +640,9 @@ func (d *DefaultResourceLoader) rlLoadThemes(
 					continue
 				}
 				m := meta
-				m.BaseDir = resolved
+				if m.BaseDir == "" {
+					m.BaseDir = resolved
+				}
 				themeFiles = append(themeFiles, struct {
 					path string
 					meta utils.PathMetadata
@@ -612,9 +662,6 @@ func (d *DefaultResourceLoader) rlLoadThemes(
 		}
 	}
 
-	for _, p := range d.additionalThemePaths {
-		collectFromPath(p, utils.PathMetadata{Source: "path", Scope: utils.SourceScopeTemporary, Origin: utils.SourceOriginTopLevel})
-	}
 	for _, p := range extraPaths {
 		collectFromPath(p, utils.PathMetadata{Source: "settings", Scope: utils.SourceScopeUser, Origin: utils.SourceOriginTopLevel})
 	}
@@ -681,7 +728,9 @@ func (d *DefaultResourceLoader) rlLoadThemes(
 		seenReal[rp] = struct{}{}
 		byName[loaded.Name] = loaded
 		themesList = append(themesList, loaded)
-		d.pathMetadata[item.path] = item.meta
+		if outMeta != nil {
+			outMeta[item.path] = item.meta
+		}
 	}
 
 	if themesList == nil {
@@ -693,30 +742,420 @@ func (d *DefaultResourceLoader) rlLoadThemes(
 	}
 }
 
-// Reload discovers all barebone local/user resources according to current settings and overrides.
+// CollectBuiltinExtensionNames returns unique built-in extension names registered
+// globally or passed as built-in inline factories, preserving discovery order.
+func CollectBuiltinExtensionNames(extraFactories []InlineExtension) []string {
+	return rlCollectBuiltinExtensionNames(extraFactories)
+}
+
+func rlCollectBuiltinExtensionNames(extraFactories []InlineExtension) []string {
+	seen := make(map[string]struct{})
+	var names []string
+	add := func(name string) {
+		clean := strings.TrimPrefix(strings.TrimSpace(name), utils.BuiltinPathPrefix)
+		if clean == "" {
+			return
+		}
+		if _, exists := seen[clean]; exists {
+			return
+		}
+		seen[clean] = struct{}{}
+		names = append(names, clean)
+	}
+	for _, b := range GetDefaultBuiltinExtensions() {
+		add(b.Name)
+	}
+	for _, f := range extraFactories {
+		if f.Builtin || strings.HasPrefix(f.Name, utils.BuiltinPathPrefix) {
+			add(f.Name)
+		}
+	}
+	return names
+}
+
+func rlCollectPackageInstallWarnings(failures []PackageInstallFailure) []ExtensionLoadWarning {
+	if len(failures) == 0 {
+		return nil
+	}
+	warnings := make([]ExtensionLoadWarning, 0, len(failures))
+	for _, f := range failures {
+		msg := fmt.Sprintf("Package %q could not be resolved", f.Source)
+		if f.Message != "" {
+			msg = fmt.Sprintf("%s: %s", msg, f.Message)
+		} else if f.Error != "" {
+			msg = fmt.Sprintf("%s: %s", msg, f.Error)
+		}
+		warnings = append(warnings, ExtensionLoadWarning{
+			Path:    f.Source,
+			Warning: msg,
+		})
+	}
+	return warnings
+}
+
+var rlHostProvidedPackages = map[string]struct{}{
+	"@mariozechner/pi-coding-agent": {},
+	"@mariozechner/pi-agent-core":   {},
+	"@mariozechner/pi-ai":           {},
+	"@mariozechner/pi-tui":          {},
+	"@sinclair/typebox":             {},
+}
+
+func rlCollectExtensionPackageWarnings(extensions []Extension) []ExtensionLoadWarning {
+	var warnings []ExtensionLoadWarning
+	checkedPkgs := make(map[string]struct{})
+	for _, ext := range extensions {
+		p := ext.ResolvedPath
+		if p == "" {
+			p = ext.Path
+		}
+		if p == "" || strings.HasPrefix(p, utils.BuiltinPathPrefix) || strings.HasPrefix(p, "inline:") {
+			continue
+		}
+		pkgPath := rlFindNearestPackageJSON(filepath.Dir(p))
+		if pkgPath == "" {
+			continue
+		}
+		if _, seen := checkedPkgs[pkgPath]; seen {
+			continue
+		}
+		checkedPkgs[pkgPath] = struct{}{}
+
+		raw, err := os.ReadFile(pkgPath)
+		if err != nil {
+			continue
+		}
+		var manifest struct {
+			Dependencies     map[string]string `json:"dependencies"`
+			PeerDependencies map[string]string `json:"peerDependencies"`
+		}
+		if err := jsonx.Unmarshal(raw, &manifest); err != nil || len(manifest.Dependencies) == 0 {
+			continue
+		}
+		var bundled []string
+		for dep := range manifest.Dependencies {
+			if _, isHost := rlHostProvidedPackages[dep]; isHost {
+				if _, isPeer := manifest.PeerDependencies[dep]; !isPeer {
+					bundled = append(bundled, dep)
+				}
+			}
+		}
+		if len(bundled) > 0 {
+			sort.Strings(bundled)
+			warnings = append(warnings, ExtensionLoadWarning{
+				Path: pkgPath,
+				Warning: fmt.Sprintf(
+					"Package lists host-provided packages in dependencies instead of peerDependencies: %s",
+					strings.Join(bundled, ", "),
+				),
+			})
+		}
+	}
+	return warnings
+}
+
+func rlFindNearestPackageJSON(startDir string) string {
+	dir := startDir
+	for dir != "" && dir != "." {
+		base := filepath.Base(dir)
+		if base == "node_modules" {
+			return ""
+		}
+		cand := filepath.Join(dir, "package.json")
+		if info, err := os.Stat(cand); err == nil && !info.IsDir() {
+			return cand
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return ""
+}
+
+func rlCollectExtensionTargets(
+	cwd string,
+	noExtensions bool,
+	resolvedExtensions []ResolvedResource,
+	cliExtensions []ResolvedResource,
+	additionalExtensionPaths []string,
+	disabledBuiltinExtensions []string,
+	pathMetadata map[string]utils.PathMetadata,
+) ([]string, map[string]utils.PathMetadata) {
+	disabledSet := make(map[string]struct{}, len(disabledBuiltinExtensions))
+	for _, name := range disabledBuiltinExtensions {
+		clean := strings.TrimPrefix(strings.TrimSpace(name), utils.BuiltinPathPrefix)
+		if clean != "" {
+			disabledSet[clean] = struct{}{}
+		}
+	}
+
+	var paths []string
+	extMeta := make(map[string]utils.PathMetadata)
+	seen := make(map[string]struct{})
+
+	addResource := func(res ResolvedResource) {
+		if pathMetadata != nil {
+			pathMetadata[res.Path] = res.Metadata
+		}
+		if !res.Enabled {
+			return
+		}
+		if strings.HasPrefix(res.Path, utils.BuiltinPathPrefix) {
+			name := strings.TrimPrefix(res.Path, utils.BuiltinPathPrefix)
+			if _, disabled := disabledSet[name]; disabled {
+				return
+			}
+		}
+		if _, dup := seen[res.Path]; dup {
+			return
+		}
+		seen[res.Path] = struct{}{}
+		paths = append(paths, res.Path)
+		extMeta[res.Path] = res.Metadata
+	}
+
+	if !noExtensions {
+		for _, res := range resolvedExtensions {
+			addResource(res)
+		}
+	}
+	for _, res := range cliExtensions {
+		addResource(res)
+	}
+
+	// Preserve missing local explicit -e paths so LoadExtensionsWithOptions surfaces load errors.
+	for _, raw := range additionalExtensionPaths {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" || strings.HasPrefix(trimmed, "-") || strings.HasPrefix(trimmed, "!") || strings.HasPrefix(trimmed, "+") {
+			continue
+		}
+		if pmParseSource(trimmed).kind != pmSourceLocal {
+			continue
+		}
+		decoded := rlDecodeResourcePath(trimmed, cwd)
+		if _, err := os.Stat(decoded); err == nil {
+			continue
+		}
+		if _, dup := seen[decoded]; dup {
+			continue
+		}
+		seen[decoded] = struct{}{}
+		meta := utils.PathMetadata{Source: "path", Scope: utils.SourceScopeTemporary, Origin: utils.SourceOriginTopLevel}
+		paths = append(paths, decoded)
+		extMeta[decoded] = meta
+		if pathMetadata != nil {
+			pathMetadata[decoded] = meta
+		}
+	}
+
+	return paths, extMeta
+}
+
+func rlCollectResourceInputs(
+	cwd string,
+	disabled bool,
+	resolvedResources []ResolvedResource,
+	cliResources []ResolvedResource,
+	additionalPaths []string,
+	pathMetadata map[string]utils.PathMetadata,
+) ([]string, map[string]utils.PathMetadata) {
+	var paths []string
+	metaMap := make(map[string]utils.PathMetadata)
+	seen := make(map[string]struct{})
+
+	add := func(p string, meta utils.PathMetadata, enabled bool) {
+		if pathMetadata != nil {
+			pathMetadata[p] = meta
+		}
+		if !enabled {
+			return
+		}
+		if _, exists := metaMap[p]; !exists {
+			metaMap[p] = meta
+		}
+		if _, dup := seen[p]; dup {
+			return
+		}
+		seen[p] = struct{}{}
+		paths = append(paths, p)
+	}
+
+	if !disabled {
+		for _, r := range resolvedResources {
+			add(r.Path, r.Metadata, r.Enabled)
+		}
+		for _, r := range cliResources {
+			add(r.Path, r.Metadata, r.Enabled)
+		}
+	}
+
+	for _, raw := range additionalPaths {
+		decoded := rlDecodeResourcePath(raw, cwd)
+		if _, exists := metaMap[decoded]; exists {
+			if _, dup := seen[decoded]; !dup {
+				seen[decoded] = struct{}{}
+				paths = append(paths, decoded)
+			}
+			continue
+		}
+		meta := utils.PathMetadata{
+			Source: "path",
+			Scope:  utils.SourceScopeTemporary,
+			Origin: utils.SourceOriginTopLevel,
+		}
+		add(decoded, meta, true)
+	}
+
+	return paths, metaMap
+}
+
+// Reload discovers extensions, packages, skills, prompt templates, themes,
+// context files, and system prompts according to current settings and overrides.
 func (d *DefaultResourceLoader) Reload(ctx context.Context, options ...*ResourceLoaderReloadOptions) error {
-	if ctx != nil && ctx.Err() != nil {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if ctx.Err() != nil {
 		return ctx.Err()
 	}
 
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.reloadMu.Lock()
+	defer d.reloadMu.Unlock()
 
+	d.mu.RLock()
+	cwd := d.cwd
+	agentDir := d.agentDir
 	sm := d.settingsManager
+	pm := d.packageManager
+	eventBus := d.eventBus
+	noExtensions := d.noExtensions
+	noSkills := d.noSkills
+	noPromptTemplates := d.noPromptTemplates
+	noThemes := d.noThemes
+	noContextFiles := d.noContextFiles
+	additionalExtensionPaths := slices.Clone(d.additionalExtensionPaths)
+	additionalSkillPaths := slices.Clone(d.additionalSkillPaths)
+	additionalPromptPaths := slices.Clone(d.additionalPromptPaths)
+	additionalThemePaths := slices.Clone(d.additionalThemePaths)
+	disabledBuiltinExtensions := slices.Clone(d.disabledBuiltinExtensions)
+	extensionFactories := slices.Clone(d.extensionFactories)
+	extensionsOverride := d.extensionsOverride
+	skillsOverride := d.skillsOverride
+	promptsOverride := d.promptsOverride
+	themesOverride := d.themesOverride
+	agentsFilesOverride := d.agentsFilesOverride
+	systemPromptOverride := d.systemPromptOverride
+	appendSystemPromptOverride := d.appendSystemPromptOverride
+	wasLoaded := d.loaded
+	d.mu.RUnlock()
+
 	if sm == nil {
-		sm = SettingsManagerCreate(d.cwd, d.agentDir)
-		d.settingsManager = sm
+		sm = SettingsManagerCreate(cwd, agentDir)
+	}
+	if pm == nil {
+		pm = NewDefaultPackageManager(DefaultPackageManagerOptions{
+			Cwd:               cwd,
+			AgentDir:          agentDir,
+			SettingsManager:   sm,
+			BuiltinExtensions: rlCollectBuiltinExtensionNames(extensionFactories),
+		})
 	}
 
-	projectTrusted := sm.IsProjectTrusted()
-	if len(options) > 0 && options[0] != nil && options[0].ResolveProjectTrust != nil {
-		trusted, err := options[0].ResolveProjectTrust(ctx, ResolveProjectTrustInput{
-			ExtensionsResult: d.extensions,
+	if wasLoaded {
+		ClearExtensionCache()
+	}
+
+	var cliPaths ResolvedPaths
+	if len(additionalExtensionPaths) > 0 {
+		resolvedCli, err := pm.ResolveExtensionSources(ctx, additionalExtensionPaths, &ResolveExtensionSourcesOptions{
+			Temporary: true,
 		})
 		if err != nil {
 			return err
 		}
-		projectTrusted = trusted
+		cliPaths = resolvedCli
+	}
+
+	var resolveTrust func(context.Context, ResolveProjectTrustInput) (bool, error)
+	if len(options) > 0 && options[0] != nil {
+		resolveTrust = options[0].ResolveProjectTrust
+	}
+
+	var resolvedPaths ResolvedPaths
+	var extRes LoadExtensionsResult
+	haveResolvedAndLoaded := false
+	pathMetadata := make(map[string]utils.PathMetadata)
+
+	loadExtensionsFromTargets := func(resolved ResolvedPaths, metaOut map[string]utils.PathMetadata) LoadExtensionsResult {
+		extTargets, extMeta := rlCollectExtensionTargets(
+			cwd,
+			noExtensions,
+			resolved.Extensions,
+			cliPaths.Extensions,
+			additionalExtensionPaths,
+			disabledBuiltinExtensions,
+			metaOut,
+		)
+		return LoadExtensionsWithOptions(ctx, extTargets, &LoadExtensionsOptions{
+			EventBus:                  eventBus,
+			DisabledBuiltinExtensions: disabledBuiltinExtensions,
+			Factories:                 extensionFactories,
+			Cwd:                       cwd,
+			AgentDir:                  agentDir,
+			UseCache:                  true,
+			PathMetadata:              extMeta,
+		})
+	}
+
+	if resolveTrust != nil {
+		initialTrusted := sm.IsProjectTrusted()
+		sm.SetProjectTrusted(false)
+
+		untrustedResolved, err := pm.Resolve(ctx)
+		if err != nil {
+			sm.SetProjectTrusted(initialTrusted)
+			return err
+		}
+		bootstrapExts := loadExtensionsFromTargets(untrustedResolved, pathMetadata)
+
+		trusted, err := resolveTrust(ctx, ResolveProjectTrustInput{
+			ExtensionsResult: bootstrapExts,
+		})
+		if err != nil {
+			ShutdownExtensionRuntime(bootstrapExts.Runtime)
+			sm.SetProjectTrusted(initialTrusted)
+			return err
+		}
+		sm.SetProjectTrusted(trusted)
+
+		if !trusted {
+			resolvedPaths = untrustedResolved
+			extRes = bootstrapExts
+			haveResolvedAndLoaded = true
+		} else {
+			ShutdownExtensionRuntime(bootstrapExts.Runtime)
+			pathMetadata = make(map[string]utils.PathMetadata)
+		}
+	}
+
+	if !haveResolvedAndLoaded {
+		resolved, err := pm.Resolve(ctx)
+		if err != nil {
+			return err
+		}
+		resolvedPaths = resolved
+		extRes = loadExtensionsFromTargets(resolvedPaths, pathMetadata)
+	}
+
+	projectTrusted := sm.IsProjectTrusted()
+
+	extRes.Warnings = append(extRes.Warnings, rlCollectPackageInstallWarnings(resolvedPaths.InstallFailures)...)
+	extRes.Warnings = append(extRes.Warnings, rlCollectPackageInstallWarnings(cliPaths.InstallFailures)...)
+	extRes.Warnings = append(extRes.Warnings, rlCollectExtensionPackageWarnings(extRes.Extensions)...)
+	if extensionsOverride != nil {
+		extRes = extensionsOverride(extRes)
 	}
 
 	capOverrides := sm.GetTerminalCapabilityOverrides()
@@ -724,42 +1163,29 @@ func (d *DefaultResourceLoader) Reload(ctx context.Context, options ...*Resource
 	caps := tui.GetCapabilities()
 	colorMode := tui.GetTerminalColorMode(&caps)
 
-	d.pathMetadata = make(map[string]utils.PathMetadata)
-
-	// Extensions are always empty in the barebone build.
-	d.extensions = LoadExtensionsResult{
-		Extensions: []Extension{},
-		Errors:     []ExtensionLoadError{},
-		Warnings:   []ExtensionLoadWarning{},
-		Runtime:    CreateExtensionRuntime(),
-	}
-
 	// Skills.
-	var skillExcludes []rlExclusionRule
-	var skillSettingsIncludes []string
-	if len(sm.GetSkillPaths()) > 0 {
-		skillSettingsIncludes, skillExcludes = rlSplitConfiguredPaths(sm.GetSkillPaths(), d.cwd, d.agentDir)
-	}
-	var allSkillPaths []string
-	allSkillPaths = append(allSkillPaths, d.additionalSkillPaths...)
-	allSkillPaths = append(allSkillPaths, skillSettingsIncludes...)
-	decodedSkillPaths := make([]string, len(allSkillPaths))
-	for i, p := range allSkillPaths {
-		decodedSkillPaths[i] = rlDecodeResourcePath(p, d.cwd)
-	}
-	incSkills := !d.noSkills
+	_, skillExcludes := rlSplitConfiguredPaths(sm.GetSkillPaths(), cwd, agentDir)
+	skillPaths, skillMeta := rlCollectResourceInputs(
+		cwd,
+		noSkills,
+		resolvedPaths.Skills,
+		cliPaths.Skills,
+		additionalSkillPaths,
+		pathMetadata,
+	)
+	incFalse := false
 	skillsRes := LoadSkills(&LoadSkillsOptions{
-		Cwd:             d.cwd,
-		AgentDir:        d.agentDir,
-		SkillPaths:      decodedSkillPaths,
-		IncludeDefaults: &incSkills,
+		Cwd:             cwd,
+		AgentDir:        agentDir,
+		SkillPaths:      skillPaths,
+		IncludeDefaults: &incFalse,
 		ProjectTrusted:  &projectTrusted,
-		PathMetadata:    d.pathMetadata,
+		PathMetadata:    skillMeta,
 	})
 	if len(skillExcludes) > 0 {
 		var kept []Skill
 		for _, s := range skillsRes.Skills {
-			if !rlIsExcluded(s.FilePath, skillExcludes, d.agentDir, filepath.Join(d.cwd, utils.ConfigDirName), d.cwd) {
+			if !rlIsExcluded(s.FilePath, skillExcludes, agentDir, filepath.Join(cwd, utils.ConfigDirName), cwd) {
 				kept = append(kept, s)
 			}
 		}
@@ -768,52 +1194,31 @@ func (d *DefaultResourceLoader) Reload(ctx context.Context, options ...*Resource
 		}
 		skillsRes.Skills = kept
 	}
-	if d.skillsOverride != nil {
-		skillsRes = d.skillsOverride(skillsRes)
+	if skillsOverride != nil {
+		skillsRes = skillsOverride(skillsRes)
 	}
-	d.skills = skillsRes
 
 	// Prompt templates.
-	promptIncludes, promptExcludes := rlSplitConfiguredPaths(sm.GetPromptTemplatePaths(), d.cwd, d.agentDir)
-	var allPromptPaths []string
-	allPromptPaths = append(allPromptPaths, d.additionalPromptPaths...)
-	allPromptPaths = append(allPromptPaths, promptIncludes...)
-	decodedPromptPaths := make([]string, len(allPromptPaths))
-	for i, p := range allPromptPaths {
-		decodedPromptPaths[i] = rlDecodeResourcePath(p, d.cwd)
-	}
-	incPrompts := !d.noPromptTemplates
-	// Respect project trust for default project prompt templates.
-	promptsMeta := make(map[string]utils.PathMetadata)
-	var promptsRes LoadPromptTemplatesResult
-	if incPrompts && !projectTrusted {
-		incFalse := false
-		userPromptPaths := append([]string(nil), decodedPromptPaths...)
-		if d.agentDir != "" {
-			userPromptsDir := filepath.Join(d.agentDir, "prompts")
-			userPromptPaths = append(userPromptPaths, userPromptsDir)
-			promptsMeta[userPromptsDir] = utils.PathMetadata{Source: "local", Scope: utils.SourceScopeUser, Origin: utils.SourceOriginTopLevel}
-		}
-		promptsRes = LoadPromptTemplates(&LoadPromptTemplatesOptions{
-			Cwd:             d.cwd,
-			AgentDir:        d.agentDir,
-			PromptPaths:     userPromptPaths,
-			IncludeDefaults: &incFalse,
-			PathMetadata:    promptsMeta,
-		})
-	} else {
-		promptsRes = LoadPromptTemplates(&LoadPromptTemplatesOptions{
-			Cwd:             d.cwd,
-			AgentDir:        d.agentDir,
-			PromptPaths:     decodedPromptPaths,
-			IncludeDefaults: &incPrompts,
-			PathMetadata:    d.pathMetadata,
-		})
-	}
+	_, promptExcludes := rlSplitConfiguredPaths(sm.GetPromptTemplatePaths(), cwd, agentDir)
+	promptPaths, promptMeta := rlCollectResourceInputs(
+		cwd,
+		noPromptTemplates,
+		resolvedPaths.Prompts,
+		cliPaths.Prompts,
+		additionalPromptPaths,
+		pathMetadata,
+	)
+	promptsRes := LoadPromptTemplates(&LoadPromptTemplatesOptions{
+		Cwd:             cwd,
+		AgentDir:        agentDir,
+		PromptPaths:     promptPaths,
+		IncludeDefaults: &incFalse,
+		PathMetadata:    promptMeta,
+	})
 	if len(promptExcludes) > 0 {
 		var kept []PromptTemplate
 		for _, p := range promptsRes.Templates {
-			if !rlIsExcluded(p.FilePath, promptExcludes, d.agentDir, filepath.Join(d.cwd, utils.ConfigDirName), d.cwd) {
+			if !rlIsExcluded(p.FilePath, promptExcludes, agentDir, filepath.Join(cwd, utils.ConfigDirName), cwd) {
 				kept = append(kept, p)
 			}
 		}
@@ -822,84 +1227,117 @@ func (d *DefaultResourceLoader) Reload(ctx context.Context, options ...*Resource
 		}
 		promptsRes.Templates = kept
 	}
-	if d.promptsOverride != nil {
-		promptsRes = d.promptsOverride(promptsRes)
+	if promptsOverride != nil {
+		promptsRes = promptsOverride(promptsRes)
 	}
-	d.prompts = promptsRes
 
 	// Themes.
-	themeIncludes, themeExcludes := rlSplitConfiguredPaths(sm.GetThemePaths(), d.cwd, d.agentDir)
-	themesRes := d.rlLoadThemes(colorMode, !d.noThemes, projectTrusted, themeIncludes, themeExcludes, d.pathMetadata)
-	if d.themesOverride != nil {
-		themesRes = d.themesOverride(themesRes)
+	_, themeExcludes := rlSplitConfiguredPaths(sm.GetThemePaths(), cwd, agentDir)
+	themePaths, themeMeta := rlCollectResourceInputs(
+		cwd,
+		noThemes,
+		resolvedPaths.Themes,
+		cliPaths.Themes,
+		additionalThemePaths,
+		pathMetadata,
+	)
+	themesRes := d.rlLoadThemes(colorMode, false, projectTrusted, themePaths, themeExcludes, themeMeta, pathMetadata)
+	if themesOverride != nil {
+		themesRes = themesOverride(themesRes)
 	}
-	d.themes = themesRes
 
 	// Context files (AGENTS.md / CLAUDE.md).
 	var contextRes LoadContextFilesResult
-	if d.noContextFiles {
+	if noContextFiles {
 		contextRes = LoadContextFilesResult{AgentsFiles: []ContextFile{}}
 	} else {
 		contextRes = LoadContextFilesResult{
 			AgentsFiles: LoadProjectContextFiles(&LoadProjectContextFilesOptions{
-				Cwd:      d.cwd,
-				AgentDir: d.agentDir,
+				Cwd:      cwd,
+				AgentDir: agentDir,
 			}),
 		}
 	}
-	if d.agentsFilesOverride != nil {
-		contextRes = d.agentsFilesOverride(contextRes)
+	if agentsFilesOverride != nil {
+		contextRes = agentsFilesOverride(contextRes)
 	}
-	d.agentsFiles = contextRes
 
 	// SYSTEM.md / APPEND_SYSTEM.md.
 	sysPrompt, sysSrc := d.rlDiscoverSystemPrompt(projectTrusted)
-	if d.systemPromptOverride != nil {
-		sysPrompt = d.systemPromptOverride(sysPrompt)
+	if systemPromptOverride != nil {
+		sysPrompt = systemPromptOverride(sysPrompt)
 	}
-	d.systemPrompt = sysPrompt
-	d.systemPromptSource = sysSrc
 
 	appPrompts, appSources := d.rlDiscoverAppendSystemPrompt(projectTrusted)
-	if d.appendSystemPromptOverride != nil {
-		appPrompts = d.appendSystemPromptOverride(appPrompts)
+	if appendSystemPromptOverride != nil {
+		appPrompts = appendSystemPromptOverride(appPrompts)
 	}
+
+	d.mu.Lock()
+	prevRuntime := d.extensions.Runtime
+	d.settingsManager = sm
+	d.packageManager = pm
+	d.extensions = extRes
+	d.skills = skillsRes
+	d.prompts = promptsRes
+	d.themes = themesRes
+	d.agentsFiles = contextRes
+	d.systemPrompt = sysPrompt
+	d.systemPromptSource = sysSrc
 	d.appendSystemPrompt = appPrompts
 	d.appendSystemPromptSources = appSources
+	d.pathMetadata = pathMetadata
+	d.loaded = true
+	d.mu.Unlock()
+
+	if prevRuntime != nil && prevRuntime != extRes.Runtime {
+		ShutdownExtensionRuntime(prevRuntime)
+	}
 
 	return nil
 }
 
 // ExtendResources loads additional skill, prompt, and theme paths with explicit metadata.
 func (d *DefaultResourceLoader) ExtendResources(paths ResourceExtensionPaths) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.reloadMu.Lock()
+	defer d.reloadMu.Unlock()
 
+	d.mu.RLock()
+	cwd := d.cwd
+	agentDir := d.agentDir
+	currentSkills := slices.Clone(d.skills.Skills)
+	currentPrompts := slices.Clone(d.prompts.Templates)
+	currentThemes := slices.Clone(d.themes.Themes)
+	d.mu.RUnlock()
+
+	newMeta := make(map[string]utils.PathMetadata)
+	var extraSkills []Skill
+	var extraSkillDiags []ResourceDiagnostic
 	if len(paths.SkillPaths) > 0 {
 		skillPaths := make([]string, 0, len(paths.SkillPaths))
 		skillMeta := make(map[string]utils.PathMetadata, len(paths.SkillPaths))
 		for _, entry := range paths.SkillPaths {
-			decoded := rlDecodeResourcePath(entry.Path, d.cwd)
+			decoded := rlDecodeResourcePath(entry.Path, cwd)
 			skillPaths = append(skillPaths, decoded)
 			skillMeta[decoded] = entry.Metadata
-			d.pathMetadata[decoded] = entry.Metadata
+			newMeta[decoded] = entry.Metadata
 		}
 		incFalse := false
 		extra := LoadSkills(&LoadSkillsOptions{
-			Cwd:             d.cwd,
-			AgentDir:        d.agentDir,
+			Cwd:             cwd,
+			AgentDir:        agentDir,
 			SkillPaths:      skillPaths,
 			IncludeDefaults: &incFalse,
 			PathMetadata:    skillMeta,
 		})
-		seen := make(map[string]Skill, len(d.skills.Skills))
-		for _, s := range d.skills.Skills {
+		seen := make(map[string]Skill, len(currentSkills))
+		for _, s := range currentSkills {
 			seen[s.Name] = s
 		}
 		for _, s := range extra.Skills {
 			if existing, exists := seen[s.Name]; exists {
 				ws, ls, lp := existing.SourceInfo.Source, s.SourceInfo.Source, s.FilePath
-				d.skills.Diagnostics = append(d.skills.Diagnostics, ResourceDiagnostic{
+				extraSkillDiags = append(extraSkillDiags, ResourceDiagnostic{
 					Type:    "collision",
 					Message: fmt.Sprintf("name collision: %q already loaded from %s", s.Name, existing.FilePath),
 					Path:    &lp,
@@ -915,36 +1353,38 @@ func (d *DefaultResourceLoader) ExtendResources(paths ResourceExtensionPaths) {
 				continue
 			}
 			seen[s.Name] = s
-			d.skills.Skills = append(d.skills.Skills, s)
+			extraSkills = append(extraSkills, s)
 		}
-		d.skills.Diagnostics = append(d.skills.Diagnostics, extra.Diagnostics...)
+		extraSkillDiags = append(extraSkillDiags, extra.Diagnostics...)
 	}
 
+	var extraPrompts []PromptTemplate
+	var extraPromptDiags []ResourceDiagnostic
 	if len(paths.PromptPaths) > 0 {
 		promptPaths := make([]string, 0, len(paths.PromptPaths))
 		promptMeta := make(map[string]utils.PathMetadata, len(paths.PromptPaths))
 		for _, entry := range paths.PromptPaths {
-			decoded := rlDecodeResourcePath(entry.Path, d.cwd)
+			decoded := rlDecodeResourcePath(entry.Path, cwd)
 			promptPaths = append(promptPaths, decoded)
 			promptMeta[decoded] = entry.Metadata
-			d.pathMetadata[decoded] = entry.Metadata
+			newMeta[decoded] = entry.Metadata
 		}
 		incFalse := false
 		extra := LoadPromptTemplates(&LoadPromptTemplatesOptions{
-			Cwd:             d.cwd,
-			AgentDir:        d.agentDir,
+			Cwd:             cwd,
+			AgentDir:        agentDir,
 			PromptPaths:     promptPaths,
 			IncludeDefaults: &incFalse,
 			PathMetadata:    promptMeta,
 		})
-		seen := make(map[string]PromptTemplate, len(d.prompts.Templates))
-		for _, p := range d.prompts.Templates {
+		seen := make(map[string]PromptTemplate, len(currentPrompts))
+		for _, p := range currentPrompts {
 			seen[p.Name] = p
 		}
 		for _, p := range extra.Templates {
 			if existing, exists := seen[p.Name]; exists {
 				ws, ls, lp := existing.SourceInfo.Source, p.SourceInfo.Source, p.FilePath
-				d.prompts.Diagnostics = append(d.prompts.Diagnostics, ResourceDiagnostic{
+				extraPromptDiags = append(extraPromptDiags, ResourceDiagnostic{
 					Type:    "collision",
 					Message: fmt.Sprintf("name collision: %q already loaded from %s", p.Name, existing.FilePath),
 					Path:    &lp,
@@ -960,26 +1400,28 @@ func (d *DefaultResourceLoader) ExtendResources(paths ResourceExtensionPaths) {
 				continue
 			}
 			seen[p.Name] = p
-			d.prompts.Templates = append(d.prompts.Templates, p)
+			extraPrompts = append(extraPrompts, p)
 		}
-		d.prompts.Diagnostics = append(d.prompts.Diagnostics, extra.Diagnostics...)
+		extraPromptDiags = append(extraPromptDiags, extra.Diagnostics...)
 	}
 
+	var extraThemes []*theme.Theme
+	var extraThemeDiags []ResourceDiagnostic
 	if len(paths.ThemePaths) > 0 {
 		caps := tui.GetCapabilities()
 		colorMode := tui.GetTerminalColorMode(&caps)
 		themePaths := make([]string, 0, len(paths.ThemePaths))
 		themeMeta := make(map[string]utils.PathMetadata, len(paths.ThemePaths))
 		for _, entry := range paths.ThemePaths {
-			decoded := rlDecodeResourcePath(entry.Path, d.cwd)
+			decoded := rlDecodeResourcePath(entry.Path, cwd)
 			themePaths = append(themePaths, decoded)
 			themeMeta[decoded] = entry.Metadata
-			d.pathMetadata[decoded] = entry.Metadata
+			newMeta[decoded] = entry.Metadata
 		}
 		// Load extra themes while checking collisions against already-loaded themes.
-		extra := d.rlLoadThemes(colorMode, false, true, themePaths, nil, themeMeta)
-		existingByName := make(map[string]*theme.Theme, len(d.themes.Themes))
-		for _, t := range d.themes.Themes {
+		extra := d.rlLoadThemes(colorMode, false, true, themePaths, nil, themeMeta, newMeta)
+		existingByName := make(map[string]*theme.Theme, len(currentThemes))
+		for _, t := range currentThemes {
 			existingByName[t.Name] = t
 		}
 		for _, t := range extra.Themes {
@@ -993,7 +1435,7 @@ func (d *DefaultResourceLoader) ExtendResources(paths ResourceExtensionPaths) {
 					ls = t.SourceInfo.Source
 				}
 				lp := t.SourcePath
-				d.themes.Diagnostics = append(d.themes.Diagnostics, ResourceDiagnostic{
+				extraThemeDiags = append(extraThemeDiags, ResourceDiagnostic{
 					Type:    "collision",
 					Message: fmt.Sprintf("name collision: %q already loaded from %s", t.Name, existing.SourcePath),
 					Path:    &lp,
@@ -1009,10 +1451,25 @@ func (d *DefaultResourceLoader) ExtendResources(paths ResourceExtensionPaths) {
 				continue
 			}
 			existingByName[t.Name] = t
-			d.themes.Themes = append(d.themes.Themes, t)
+			extraThemes = append(extraThemes, t)
 		}
-		d.themes.Diagnostics = append(d.themes.Diagnostics, extra.Diagnostics...)
+		extraThemeDiags = append(extraThemeDiags, extra.Diagnostics...)
 	}
+
+	d.mu.Lock()
+	if d.pathMetadata == nil {
+		d.pathMetadata = make(map[string]utils.PathMetadata, len(newMeta))
+	}
+	for k, v := range newMeta {
+		d.pathMetadata[k] = v
+	}
+	d.skills.Skills = append(d.skills.Skills, extraSkills...)
+	d.skills.Diagnostics = append(d.skills.Diagnostics, extraSkillDiags...)
+	d.prompts.Templates = append(d.prompts.Templates, extraPrompts...)
+	d.prompts.Diagnostics = append(d.prompts.Diagnostics, extraPromptDiags...)
+	d.themes.Themes = append(d.themes.Themes, extraThemes...)
+	d.themes.Diagnostics = append(d.themes.Diagnostics, extraThemeDiags...)
+	d.mu.Unlock()
 }
 
 func (d *DefaultResourceLoader) GetExtensions() LoadExtensionsResult {

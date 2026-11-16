@@ -115,16 +115,23 @@ func taApplyToken(colors map[string]ui.Color, tok string, dst *ui.Color) {
 
 // BuildGuiTheme converts a codingagent/modes/interactive/theme.Theme (dark, light,
 // system, or custom JSON) into a complete *gui.GuiTheme while preserving desktop surface
-// hierarchy and contrast.
+// hierarchy and Waku's neutral palette for default built-in themes.
 func BuildGuiTheme(th *theme.Theme) *gui.GuiTheme {
 	colors, isLight, name := taSnapshotThemeColors(th)
-	base := gui.ThemeForAppearance(isLight).Clone()
+	base := gui.ThemeForAppearance(!isLight).Clone()
 	if name != "" {
 		base.Name = name
 	}
 	base.Dark = !isLight
 
-	// Foreground semantic & chrome tokens
+	// Preserve pure Waku Dark/Light surfaces and coral accents for the built-in
+	// default themes so terminal dark.json/light.json purple tones don't bleed into GUI.
+	switch name {
+	case "", "dark", "light", "system":
+		return base
+	}
+
+	// Foreground semantic & chrome tokens for custom user JSON themes
 	taApplyToken(colors, theme.FgAccent, &base.Accent)
 	taApplyToken(colors, theme.FgBorder, &base.Border)
 	taApplyToken(colors, theme.FgBorderAccent, &base.BorderAccent)
@@ -198,15 +205,32 @@ func BuildGuiTheme(th *theme.Theme) *gui.GuiTheme {
 		if isLight {
 			base.Background = gui.MixOklab(c, ui.RGB(255, 255, 255), 0.45)
 			base.SurfaceElevated = gui.MixOklab(c, ui.RGB(255, 255, 255), 0.65)
+			base.Raised = base.SurfaceElevated
+			base.ComposerBg = ui.RGB(255, 255, 255)
+			base.SidebarBg = gui.MixOklab(base.Background, ui.RGB(0, 0, 0), 0.03)
 			base.SurfaceHover = gui.MixOklab(c, ui.RGB(0, 0, 0), 0.05)
 			base.SurfacePressed = gui.MixOklab(c, ui.RGB(0, 0, 0), 0.11)
 		} else {
 			base.Background = gui.MixOklab(c, ui.RGB(10, 10, 14), 0.55)
 			base.SurfaceElevated = gui.MixOklab(c, ui.RGB(255, 255, 255), 0.06)
+			base.Raised = base.SurfaceElevated
+			base.ComposerBg = gui.MixOklab(base.Background, ui.RGB(255, 255, 255), 0.03)
+			base.SidebarBg = gui.MixOklab(base.Background, ui.RGB(0, 0, 0), 0.08)
 			base.SurfaceHover = gui.MixOklab(c, ui.RGB(255, 255, 255), 0.09)
 			base.SurfacePressed = gui.MixOklab(c, ui.RGB(255, 255, 255), 0.14)
 		}
 	}
+
+	base.TextSecondary = base.Muted
+	base.TextTertiary = base.Dim
+	base.Overlay = base.SurfaceHover
+	base.OverlayStrong = base.SurfacePressed
+	base.BorderStrong = base.Border.Alpha(0.28)
+	if base.BorderStrong.A == 0 {
+		base.BorderStrong = base.Text.Alpha(0.14)
+	}
+	base.CodeText = base.MdCode
+	base.CodeWash = base.MdCodeBg
 
 	if isLight {
 		base.AccentHover = gui.MixOklab(base.Accent, ui.RGB(0, 0, 0), 0.12)

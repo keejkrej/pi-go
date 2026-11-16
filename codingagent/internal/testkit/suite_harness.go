@@ -186,6 +186,7 @@ type SuiteHarnessOptions struct {
 	AllowedToolNames       []string
 	ExcludedToolNames      []string
 	ResourceLoader         core.ResourceLoader
+	ExtensionFactories     []core.InlineExtension
 	WithConfiguredAuth     *bool
 	ModelsJson             any
 	SessionManager         *core.SessionManager
@@ -414,14 +415,24 @@ func CreateSuiteHarness(ctx context.Context, options ...*SuiteHarnessOptions) (*
 		},
 	})
 
-	resourceLoader := opts.ResourceLoader
-	if resourceLoader == nil {
-		resourceLoader = CreateTestResourceLoader()
-	}
-
 	sessionCwd := tempDir
 	if opts.Cwd != "" {
 		sessionCwd = opts.Cwd
+	}
+	resourceLoader := opts.ResourceLoader
+	if resourceLoader == nil {
+		if len(opts.ExtensionFactories) > 0 {
+			extRes, extErr := CreateTestExtensionsResultWithFactories(ctx, sessionCwd, opts.ExtensionFactories...)
+			if extErr != nil {
+				cleanupResources()
+				return nil, extErr
+			}
+			resourceLoader = CreateTestResourceLoader(&CreateTestResourceLoaderOptions{
+				ExtensionsResult: &extRes,
+			})
+		} else {
+			resourceLoader = CreateTestResourceLoader()
+		}
 	}
 	if opts.SessionManager != nil {
 		if existingContext := sessionManager.BuildSessionContext(); len(existingContext.Messages) > 0 {

@@ -121,13 +121,39 @@ func (m *InteractiveMode) imcInit(ctx context.Context) error {
 	m.iminSetupKeyHandlers()
 	m.iminSetupEditorSubmitHandler()
 
-	// Update terminal title and bind extension UI / session listeners
+	// Update terminal title
 	m.imcUpdateTerminalTitle()
+
+	// Render initial built-in footer snapshot, focus editor, start UI, and flush initial frame
+	// BEFORE binding session extensions so session_start setFooter() replaces an already-rendered footer.
+	m.imlcRefreshFooterSync(true)
+	ui.SetFocus(m.editor)
+
+	// Start UI
+	ui.Start()
+	m.mu.Lock()
+	m.started = true
+	m.mu.Unlock()
+
+	// Wait briefly for startup terminal palette response (timeout is bounded inside controller)
+	_ = m.themeController.WaitForTerminalColors(ctx)
+
+	m.imCallUI(nil, func() {
+		m.imcUpdateAvailableProviderCount()
+		m.imlcRefreshFooterSync(true)
+		m.imcReportProgramStatus()
+		force := false
+		ui.RenderNow(&force)
+	})
+
+	// Bind extension UI / session listeners and agent events
 	m.imsbBindCurrentSessionExtensions(ctx)
 	m.imevSubscribeToAgent()
 
-	// Render initial messages from loaded session transcript
-	m.imtrRenderInitialMessages()
+	// Render initial messages from loaded session transcript safely on the UI thread
+	m.imCallUI(nil, func() {
+		m.imtrRenderInitialMessages()
+	})
 
 	// Drain any startup warnings/notices collected before header rendered
 	m.imcFlushQueuedStartupNotices()
@@ -162,22 +188,9 @@ func (m *InteractiveMode) imcInit(ctx context.Context) error {
 		m.mu.Unlock()
 	}
 
-	// Render initial footer snapshot and focus editor before starting UI render timers.
-	m.imlcRefreshFooterSync(true)
-	ui.SetFocus(m.editor)
-
-	// Start UI
-	ui.Start()
-	m.mu.Lock()
-	m.started = true
-	m.mu.Unlock()
-
-	// Wait briefly for startup terminal palette response (timeout is bounded inside controller)
-	_ = m.themeController.WaitForTerminalColors(ctx)
-
 	m.imCallUI(nil, func() {
 		m.imcUpdateAvailableProviderCount()
-		m.imcReportProgramStatus()
+		m.imlcRefreshFooterSync(true)
 		force := false
 		ui.RenderNow(&force)
 	})

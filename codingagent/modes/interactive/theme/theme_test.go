@@ -526,10 +526,15 @@ func TestThemePickerExportStyleSchemaAndHighlight(t *testing.T) {
 		t.Fatal("expected CodeHighlighter to invalidate cache when theme switches")
 	}
 
+	beforeLangCount := utils.GetHighlightLanguageCount()
 	utils.LoadAllHighlightLanguages()
 	afterLangLoad := highlighter.Highlight(jsSample, &jsLang)
-	if &afterThemeSwitch[0] == &afterLangLoad[0] {
-		t.Fatal("expected CodeHighlighter to recompute when language count increases")
+	if utils.GetHighlightLanguageCount() > beforeLangCount {
+		if &afterThemeSwitch[0] == &afterLangLoad[0] {
+			t.Fatal("expected CodeHighlighter to recompute when language count increases")
+		}
+	} else if &afterThemeSwitch[0] != &afterLangLoad[0] {
+		t.Fatal("expected CodeHighlighter to keep cached slice when language count is unchanged")
 	}
 
 	_, _ = InitTheme("dark")

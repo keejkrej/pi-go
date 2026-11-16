@@ -17,6 +17,7 @@ import (
 	"github.com/keejkrej/pi-go/ai/compat"
 	"github.com/keejkrej/pi-go/ai/providers"
 	"github.com/keejkrej/pi-go/codingagent/core"
+	_ "github.com/keejkrej/pi-go/codingagent/extensions"
 	"github.com/keejkrej/pi-go/codingagent/modes/interactive/theme"
 	"github.com/keejkrej/pi-go/gui"
 	"github.com/keejkrej/pi-go/internal/jsonx"
@@ -31,9 +32,13 @@ func tgmStrPtr(v string) *string {
 }
 
 type tgmFixtureOpts struct {
-	tools         []*agent.AgentTool
-	inMemory      bool
-	withResources bool
+	tools                []*agent.AgentTool
+	inMemory             bool
+	withResources        bool
+	enableExtensions     bool
+	additionalExtensions []string
+	extensionFactories   []core.InlineExtension
+	defaultTools         []string
 }
 
 type tgmFixture struct {
@@ -61,10 +66,18 @@ func tgmNewFixture(t *testing.T, opts *tgmFixtureOpts) *tgmFixture {
 	withResources := false
 	var extraTools []*agent.AgentTool
 	inMemory := false
+	enableExtensions := false
+	var additionalExtensions []string
+	var extensionFactories []core.InlineExtension
+	var defaultTools []string
 	if opts != nil {
 		withResources = opts.withResources
 		extraTools = opts.tools
 		inMemory = opts.inMemory
+		enableExtensions = opts.enableExtensions
+		additionalExtensions = opts.additionalExtensions
+		extensionFactories = opts.extensionFactories
+		defaultTools = opts.defaultTools
 	}
 
 	if withResources {
@@ -112,10 +125,14 @@ func tgmNewFixture(t *testing.T, opts *tgmFixtureOpts) *tgmFixture {
 		}
 	})
 
-	settingsBytes, err := jsonx.Marshal(map[string]any{
+	settingsDoc := map[string]any{
 		"defaultProvider": provName,
 		"defaultModel":    "faux-1",
-	})
+	}
+	if len(defaultTools) > 0 {
+		settingsDoc["defaultTools"] = defaultTools
+	}
+	settingsBytes, err := jsonx.Marshal(settingsDoc)
 	if err != nil {
 		t.Fatalf("Marshal settings: %v", err)
 	}
@@ -164,10 +181,12 @@ func tgmNewFixture(t *testing.T, opts *tgmFixtureOpts) *tgmFixture {
 			AgentDir:    args.AgentDir,
 			AuthStorage: authStorage,
 			ResourceLoaderOptions: &core.DefaultResourceLoaderOptions{
-				NoExtensions:      true,
-				NoSkills:          !withResources,
-				NoPromptTemplates: !withResources,
-				NoThemes:          true,
+				NoExtensions:             !enableExtensions,
+				AdditionalExtensionPaths: additionalExtensions,
+				ExtensionFactories:       extensionFactories,
+				NoSkills:                 !withResources,
+				NoPromptTemplates:        !withResources,
+				NoThemes:                 true,
 			},
 		})
 		if err != nil {
@@ -350,7 +369,7 @@ func TestGuiModeRunAndInitialLifecycle(t *testing.T) {
 			tt.HasText("requested model fallback used")
 	})
 
-	if mode.Session() != fx.runtime.Session {
+	if mode.Session() != fx.runtime.CurrentSession() {
 		t.Fatal("expected mode.Session() to match active runtime session")
 	}
 	if mode.Runtime() != fx.runtime {
@@ -835,18 +854,18 @@ func TestGuiModeSelectorsAndModalOverlays(t *testing.T) {
 		t.Fatalf("expected thinking level high, got %v", mode.Session().ThinkingLevel())
 	}
 
-	// 3. Settings selector -> Done closes it cleanly.
+	// 3. Settings selector -> opens Waku full-window Settings view -> Back closes it cleanly.
 	mode.ShowSettingsSelector()
 	tt.Frame()
-	if !mode.GUI().HasOverlay() || !tt.HasText("Done") {
-		t.Fatalf("expected SettingsSelectorDialog visible, texts=%v", tt.Texts())
+	if !mode.SettingsOpen() || !tt.HasText("Back") || !tt.HasText("General") {
+		t.Fatalf("expected Waku Settings view visible, open=%v texts=%v", mode.SettingsOpen(), tt.Texts())
 	}
-	if err := tt.Click("Done"); err != nil {
-		t.Fatalf("Click Done: %v", err)
+	if err := tt.Click("Back"); err != nil {
+		t.Fatalf("Click Back: %v", err)
 	}
 	tt.Frame()
-	if mode.GUI().HasOverlay() {
-		t.Fatal("expected settings modal dismissed")
+	if mode.SettingsOpen() {
+		t.Fatal("expected Waku Settings view closed after Back")
 	}
 
 	// 4. Scoped models selector, Theme selector, Session selector, Tree selector, Trust selector, Hotkeys, Fork.
@@ -1115,4 +1134,144 @@ func TestGuiModeExtensionUIContextAndRenderers(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("timed out waiting for Custom overlay close")
 	}
+}
+
+func TestGuiModeQuickJSAndBuiltinExtensions(t *testing.T) {
+	t.Setenv("PI_OFFLINE", "1")
+	extDir := t.TempDir()
+	qjsPath := filepath.Join(extDir, "gui_ext.ts")
+	qjsSrc := `
+import { Type } from "@sinclair/typebox";
+
+export default function (pi: any) {
+  pi.registerTool({
+    name: "qjs_hello",
+    label: "QJS Hello",
+    description: "Greeting tool from QuickJS extension",
+    parameters: Type.Object({
+      target: Type.String(),
+    }),
+    async execute(_id: string, params: { target: string }) {
+      return {
+        content: [{ type: "text", text: "qjs-tool:" + params.target }],
+      };
+    },
+  });
+
+  pi.registerCommand("greet-ext", {
+    description: "Run QuickJS GUI command",
+    getArgumentCompletions(prefix: string) {
+      const opts = [
+        { value: "world", label: "world", description: "World target" },
+        { value: "universe", label: "universe", description: "Universe target" },
+      ];
+      return opts.filter((o) => !prefix || o.value.startsWith(prefix));
+    },
+    async handler(args: string, ctx: any) {
+      const ok = await ctx.ui.confirm("QJS Confirm", "Run command for " + args + "?");
+      ctx.ui.notify("QuickJS ext ok=" + String(ok) + " args=" + args, "info");
+      pi.sendMessage({
+        customType: "qjs-banner",
+        content: "QJS Custom Body: " + args + " (ok=" + String(ok) + ")",
+        display: true,
+      });
+    },
+  });
+}
+`
+	if err := os.WriteFile(qjsPath, []byte(qjsSrc), 0o644); err != nil {
+		t.Fatalf("write QuickJS extension: %v", err)
+	}
+
+	tuiMsgExt := core.InlineExtension{
+		Name: "tui-msg-ext",
+		Factory: func(pi core.ExtensionAPI) error {
+			pi.RegisterMessageRenderer("tui-adapted", func(msg *core.CustomMessage, _ core.MessageRenderOptions, _ *theme.Theme) tui.Component {
+				return tui.NewText("TUI-adapted banner body", 0, 0, nil)
+			})
+			return nil
+		},
+	}
+
+	fx := tgmNewFixture(t, &tgmFixtureOpts{
+		enableExtensions:     true,
+		additionalExtensions: []string{qjsPath},
+		extensionFactories:   []core.InlineExtension{tuiMsgExt},
+		defaultTools:         []string{"+codemode"},
+	})
+	stopTool := ai.StopReasonToolUse
+	fx.faux.SetResponses([]providers.FauxResponseStep{
+		providers.FauxResponseMessage{
+			Message: providers.FauxAssistantMessage(providers.FauxAssistantBlocks{
+				providers.FauxToolCall("qjs_hello", jsonx.ObjectOf("target", "mars"), nil),
+				providers.FauxToolCall("codemode", jsonx.ObjectOf("code", `return "codemode:" + (21 * 2);`), nil),
+			}, &providers.FauxAssistantMessageOptions{
+				StopReason: &stopTool,
+			}),
+		},
+		providers.FauxResponseMessage{
+			Message: providers.FauxAssistantMessage(providers.FauxAssistantText("extensions completed"), nil),
+		},
+	})
+
+	mode, tt, _ := tgmNewModeAndTester(t, fx.runtime, nil)
+	tt.Frame()
+
+	// 1. Verify built-in + QuickJS slash commands and getArgumentCompletions appear in GUI autocomplete.
+	cmds := mode.buildSlashCommandList()
+	var sawLlama, sawMcp, sawGreet bool
+	var greetCmd gui.SlashCommand
+	for _, c := range cmds {
+		switch c.Name {
+		case "llama":
+			sawLlama = true
+		case "mcp":
+			sawMcp = true
+		case "greet-ext":
+			sawGreet = true
+			greetCmd = c
+		}
+	}
+	if !sawLlama || !sawMcp || !sawGreet {
+		t.Fatalf("missing slash commands llama=%v mcp=%v greet-ext=%v", sawLlama, sawMcp, sawGreet)
+	}
+	if greetCmd.GetArgumentCompletions == nil {
+		t.Fatal("expected greet-ext GetArgumentCompletions wired")
+	}
+	compItems := greetCmd.GetArgumentCompletions("wor")
+	if len(compItems) != 1 || compItems[0].Value != "world" || compItems[0].Description != "World target" {
+		t.Fatalf("unexpected QuickJS argument completions: %+v", compItems)
+	}
+
+	// 2. Run QuickJS slash command -> exercises ctx.ui.confirm modal, ctx.ui.notify, and CustomMessageCard.
+	tt.Type("/greet-ext earth")
+	tt.Key(0, ui.KeyEnter)
+	tgmWaitUntil(t, mode, tt, 5*time.Second, "QJS Confirm modal visible", func() bool {
+		return mode.GUI().HasOverlay() && tt.HasText("QJS Confirm")
+	})
+	if err := tt.Click("Confirm"); err != nil {
+		t.Fatalf("Click Confirm: %v", err)
+	}
+	tt.Frame()
+	tgmWaitUntil(t, mode, tt, 5*time.Second, "QuickJS notify & custom message visible", func() bool {
+		return tt.HasText("QuickJS ext ok=true args=earth") && tt.HasText("QJS Custom Body: earth (ok=true)")
+	})
+
+	// 3. Verify TUI-registered MessageRenderer fallback works inside GUI CustomMessageCard.
+	if err := mode.Session().SendCustomMessage(context.Background(), "tui-adapted", "", true, nil); err != nil {
+		t.Fatalf("SendCustomMessage(tui-adapted): %v", err)
+	}
+	tgmWaitUntil(t, mode, tt, 3*time.Second, "TUI-adapted banner rendered", func() bool {
+		return tt.HasText("TUI-adapted banner body")
+	})
+
+	// 4. Verify QuickJS extension tool + built-in codemode tool execute & render ToolExecutionCards in GUI.
+	tt.Type("run tools now")
+	tt.Key(0, ui.KeyEnter)
+	tgmWaitUntil(t, mode, tt, 8*time.Second, "extension tools finished and rendered", func() bool {
+		return !mode.Session().IsStreaming() &&
+			tt.HasText("extensions completed") &&
+			tt.HasText("qjs-tool:mars") &&
+			tt.HasText("codemode:42")
+	})
 }

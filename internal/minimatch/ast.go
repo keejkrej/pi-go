@@ -138,7 +138,7 @@ func (a *ast) fillNegs() {
 	if a != a.root || a.filledNegs {
 		return
 	}
-	a.String()
+	_ = a.String()
 	a.filledNegs = true
 	for len(a.negs) > 0 {
 		n := a.negs[len(a.negs)-1]

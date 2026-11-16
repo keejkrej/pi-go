@@ -2,6 +2,7 @@ package gui
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"path"
@@ -931,12 +932,13 @@ func (p *AutocompletePopup) View(c *ui.Context) ui.Element {
 	maxHeight := float32(maxVis)*rowHeight + 8
 
 	container := ui.Column(c).
-		Background(theme.SurfaceElevated).
-		Border(1, theme.BorderAccent).
-		Radius(theme.Radius).
+		Background(theme.Raised).
+		Border(1, theme.BorderStrong).
+		Radius(10).
+		Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.28)).
 		Padding(4).
 		MaxHeight(maxHeight).
-		MinWidth(260)
+		MinWidth(280)
 
 	container.Children(func() {
 		scroll := ui.Scroll(c).TrackScroll(&p.scrollState).FillWidth().MaxHeight(maxHeight - 8)
@@ -947,17 +949,20 @@ func (p *AutocompletePopup) View(c *ui.Context) ui.Element {
 					isSelected := idx == sel
 					bg := ui.Color{}
 					fg := theme.Text
-					descColor := theme.Muted
+					descColor := theme.TextTertiary
 					if isSelected {
-						bg = theme.SelectedBg
-						fg = theme.SelectedText
+						bg = theme.SidebarItemBg
+						if bg.A == 0 {
+							bg = theme.SelectedBg
+						}
+						fg = theme.Text
 					}
 
 					row := ui.Row(c).
-						Key(it.Value).
+						Key(fmt.Sprintf("ac-%d-%s", idx, it.Value)).
 						FillWidth().
 						Padding(6, 10).
-						Radius(theme.Radius - 2).
+						Radius(7).
 						AlignItems(ui.Center).
 						Justify(ui.SpaceBetween).
 						Gap(12).

@@ -240,16 +240,46 @@ func (m *GuiMode) buildSlashCommandList() []gui.SlashCommand {
 
 	if runner := sess.ExtensionRunner(); runner != nil {
 		for _, rc := range runner.GetRegisteredCommands() {
-			if _, dup := seen[rc.InvocationName]; !dup {
-				seen[rc.InvocationName] = struct{}{}
+			rcCopy := rc
+			cmdName := rcCopy.InvocationName
+			if cmdName == "" {
+				cmdName = rcCopy.Name
+			}
+			if cmdName == "" {
+				continue
+			}
+			if _, dup := seen[cmdName]; !dup {
+				seen[cmdName] = struct{}{}
 				desc := ""
-				if rc.Description != nil {
-					desc = *rc.Description
+				if rcCopy.Description != nil {
+					desc = *rcCopy.Description
 				}
-				cmds = append(cmds, gui.SlashCommand{
-					Name:        rc.InvocationName,
+				sc := gui.SlashCommand{
+					Name:        cmdName,
 					Description: desc,
-				})
+				}
+				if rcCopy.GetArgumentCompletions != nil {
+					sc.GetArgumentCompletions = func(prefix string) []gui.AutocompleteItem {
+						items, err := rcCopy.GetArgumentCompletions(m.currentCtx(), prefix)
+						if err != nil || len(items) == 0 {
+							return nil
+						}
+						out := make([]gui.AutocompleteItem, 0, len(items))
+						for _, it := range items {
+							itemDesc := ""
+							if it.Description != nil {
+								itemDesc = *it.Description
+							}
+							out = append(out, gui.AutocompleteItem{
+								Value:       it.Value,
+								Label:       it.Label,
+								Description: itemDesc,
+							})
+						}
+						return out
+					}
+				}
+				cmds = append(cmds, sc)
 			}
 		}
 	}
@@ -970,13 +1000,30 @@ func (m *GuiMode) ShowModelSelector() {
 			if model == nil {
 				return
 			}
-			go func() {
+			apply := func() error {
 				if err := sess.SetModel(m.currentCtx(), model); err != nil {
-					m.postUI(func() { m.ShowError(err.Error()) })
-					return
+					return err
 				}
 				if thinkingOverride != nil {
 					sess.SetThinkingLevel(*thinkingOverride)
+				}
+				return nil
+			}
+			hasExtHook := sess.ExtensionRunner() != nil && sess.ExtensionRunner().HasHandlers("model_select")
+			if !hasExtHook && !sess.IsStreaming() && !sess.IsCompacting() {
+				if err := apply(); err != nil {
+					m.ShowError(err.Error())
+					return
+				}
+				m.updateFooterAndTitle()
+				return
+			}
+			m.sessionMutationDepth.Add(1)
+			go func() {
+				defer m.sessionMutationDepth.Add(-1)
+				if err := apply(); err != nil {
+					m.postUI(func() { m.ShowError(err.Error()) })
+					return
 				}
 				m.postUI(func() { m.updateFooterAndTitle() })
 			}()
@@ -1010,17 +1057,13 @@ func (m *GuiMode) ShowSessionSelector() {
 		return
 	}
 	cwd := sess.Cwd()
-	sessDir := sess.SessionManager.GetSessionDir()
+	curId, curFile, sessDir, _, _ := m.cachedSessionMeta()
 	sessions, _ := LoadSessionSelectorItems(m.currentCtx(), cwd, sessDir, false)
-	curFile := ""
-	if sf := sess.SessionFile(); sf != nil {
-		curFile = *sf
-	}
 
 	dlg := NewSessionSelectorDialog(SessionSelectorConfig{
 		Sessions:           sessions,
 		CurrentSessionFile: curFile,
-		CurrentSessionId:   sess.SessionId(),
+		CurrentSessionId:   curId,
 		Cwd:                cwd,
 		SessionDir:         sessDir,
 		Theme:              m.currentGuiTheme(),
@@ -1114,51 +1157,12 @@ func (m *GuiMode) ShowTreeSelector() {
 	m.setActiveDialog(dlg.Show(m.host))
 }
 
-// ShowSettingsSelector opens the categorized settings overlay.
+// ShowSettingsSelector opens the full-window Waku Settings view.
 func (m *GuiMode) ShowSettingsSelector() {
-	sess := m.Session()
-	if m == nil || m.host == nil || sess == nil || sess.SettingsManager == nil {
+	if m == nil {
 		return
 	}
-	var themes []string
-	for _, ti := range theme.GetAvailableThemesWithPaths() {
-		themes = append(themes, ti.Name)
-	}
-	var models []*ai.Model
-	if sess.ModelRegistry() != nil {
-		models = sess.ModelRegistry().GetAvailable()
-	}
-
-	dlg := NewSettingsSelectorDialog(SettingsSelectorConfig{
-		SettingsManager: sess.SettingsManager,
-		Session:         sess,
-		AvailableThemes: themes,
-		AvailableModels: models,
-		Theme:           m.currentGuiTheme(),
-		OnChange: func(id, value string) {
-			ApplySettingsChange(sess.SettingsManager, sess, id, value)
-			if id == "hideThinkingBlock" {
-				m.mu.Lock()
-				hide := sess.SettingsManager.GetHideThinkingBlock()
-				m.hideThinking = hide
-				entries := append([]gmTranscriptEntry(nil), m.entries...)
-				m.mu.Unlock()
-				for _, e := range entries {
-					if ac, ok := e.card.(*AssistantMessageCard); ok {
-						ac.SetHideThinkingBlock(hide)
-					}
-				}
-			}
-			m.updateFooterAndTitle()
-		},
-		OnThemePreview: func(themeName string) {
-			_, ts := ApplyThemeToHost(m.host, themeName)
-			if ts != nil {
-				m.applyThemeSet(ts)
-			}
-		},
-	})
-	m.setActiveDialog(dlg.Show(m.host))
+	m.OpenSettingsPage("")
 }
 
 // ShowThemeSelector opens the theme selector overlay with live preview.

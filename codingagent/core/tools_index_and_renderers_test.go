@@ -293,25 +293,32 @@ func TestToolRenderersAndUtils(t *testing.T) {
 	})
 }
 
-func TestBareboneExtensionsShims(t *testing.T) {
+func TestExtensionsQuickJSAndRunnerShims(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	t.Run("LoadExtensions and DiscoverAndLoadExtensions return 0 extensions and warn on script files", func(t *testing.T) {
+	t.Run("LoadExtensions and DiscoverAndLoadExtensions load TS extensions via QuickJS", func(t *testing.T) {
 		scriptPath := filepath.Join(dir, "ext.ts")
-		if err := os.WriteFile(scriptPath, []byte("export default function() {}"), 0o600); err != nil {
+		scriptSrc := "export default function(pi) { pi.registerFlag('demo-flag', { type: 'boolean', default: true }); }\n"
+		if err := os.WriteFile(scriptPath, []byte(scriptSrc), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		loaded := LoadExtensions(ctx, []string{scriptPath}, dir)
-		if len(loaded.Extensions) != 0 || len(loaded.Errors) != 0 {
-			t.Fatalf("unexpected barebone extensions/errors: %+v", loaded)
+		if loaded.Runtime != nil {
+			defer ShutdownExtensionRuntime(loaded.Runtime)
 		}
-		if len(loaded.Warnings) != 1 || !strings.Contains(loaded.Warnings[0].Warning, scriptPath) {
-			t.Fatalf("expected JS/TS skip warning, got %+v", loaded.Warnings)
+		if len(loaded.Errors) != 0 || len(loaded.Warnings) != 0 || len(loaded.Extensions) != 1 {
+			t.Fatalf("unexpected LoadExtensions result: %+v", loaded)
+		}
+		if _, ok := loaded.Extensions[0].Flags["demo-flag"]; !ok {
+			t.Fatalf("expected registered demo-flag, got %+v", loaded.Extensions[0].Flags)
 		}
 
 		discovered := DiscoverAndLoadExtensions(ctx, []string{scriptPath}, dir, t.TempDir())
-		if len(discovered.Extensions) != 0 || len(discovered.Warnings) != 1 || discovered.Runtime == nil {
+		if discovered.Runtime != nil {
+			defer ShutdownExtensionRuntime(discovered.Runtime)
+		}
+		if len(discovered.Errors) != 0 || len(discovered.Extensions) != 1 || discovered.Runtime == nil {
 			t.Fatalf("unexpected DiscoverAndLoadExtensions result: %+v", discovered)
 		}
 	})

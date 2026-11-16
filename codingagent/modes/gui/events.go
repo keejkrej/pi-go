@@ -45,17 +45,20 @@ func gevHandleSessionEvent(m *GuiMode, rawEv core.AgentSessionEvent) {
 		m.mu.Lock()
 		msg := m.workingMessage
 		visible := m.workingVisible
+		m.turnStartedAt = time.Now()
 		m.mu.Unlock()
 		if visible && m.statusBanner != nil {
 			m.statusBanner.SetWorking(true, msg)
 		}
 		m.updateProgramStatus(gui.StatusWorking, msg)
 		m.updateFooterAndTitle()
+		m.refreshSidebarSessions()
 
 	case *core.AgentSessionEventTurnStart:
 		m.mu.Lock()
 		msg := m.workingMessage
 		visible := m.workingVisible
+		m.turnStartedAt = time.Now()
 		m.mu.Unlock()
 		if visible && m.statusBanner != nil {
 			m.statusBanner.SetWorking(true, msg)
@@ -63,7 +66,11 @@ func gevHandleSessionEvent(m *GuiMode, rawEv core.AgentSessionEvent) {
 		m.updateFooterAndTitle()
 
 	case *core.AgentSessionEventTurnEnd:
+		m.mu.Lock()
+		m.recordCurrentTurnDurationLocked()
+		m.mu.Unlock()
 		m.updateFooterAndTitle()
+		m.refreshRightPanelChanges()
 
 	case *core.AgentSessionEventMessageStart:
 		gevHandleMessageStart(m, sess, th, ev.Message)
@@ -82,9 +89,16 @@ func gevHandleSessionEvent(m *GuiMode, rawEv core.AgentSessionEvent) {
 
 	case *core.AgentSessionEventToolExecutionEnd:
 		gevHandleToolEnd(m, ev)
+		if ev.ToolName == "edit" || ev.ToolName == "write" || ev.ToolName == "bash" {
+			m.refreshRightPanelChanges()
+		}
 
 	case *core.AgentSessionEventAgentEnd:
 		m.mu.Lock()
+		m.recordCurrentTurnDurationLocked()
+		if !ev.WillRetry {
+			m.turnStartedAt = time.Time{}
+		}
 		m.streamingCard = nil
 		m.streamingEntryID = ""
 		m.mu.Unlock()
@@ -94,14 +108,24 @@ func gevHandleSessionEvent(m *GuiMode, rawEv core.AgentSessionEvent) {
 				m.statusBanner.SetWorking(false, "")
 			}
 			m.updateProgramStatus(gui.StatusDone, "")
+			m.refreshRightPanelTreeSnapshot()
 		}
+		m.refreshSidebarSessions()
+		m.refreshRightPanelChanges()
 
 	case *core.AgentSessionEventAgentSettled:
+		m.mu.Lock()
+		m.recordCurrentTurnDurationLocked()
+		m.turnStartedAt = time.Time{}
+		m.mu.Unlock()
 		if m.statusBanner != nil && (sess == nil || (!sess.IsBashRunning() && !sess.IsCompacting())) {
 			m.statusBanner.SetWorking(false, "")
 		}
 		m.syncProgramStatusFromSession()
 		m.updateFooterAndTitle()
+		m.refreshRightPanelTreeSnapshot()
+		m.refreshSidebarSessions()
+		m.refreshRightPanelChanges()
 
 	case *core.AgentSessionEventQueueUpdate:
 		m.mu.Lock()
@@ -117,7 +141,13 @@ func gevHandleSessionEvent(m *GuiMode, rawEv core.AgentSessionEvent) {
 		m.updateFooterAndTitle()
 
 	case *core.AgentSessionEventSessionInfoChanged:
+		if ev.Name != nil {
+			m.setCachedSessionName(*ev.Name)
+		} else {
+			m.setCachedSessionName("")
+		}
 		m.updateFooterAndTitle()
+		m.refreshSidebarSessions()
 
 	case *core.AgentSessionEventThinkingLevelChanged:
 		m.updateFooterAndTitle()
@@ -256,8 +286,11 @@ func gevHandleMessageStart(m *GuiMode, sess *core.AgentSession, th *gui.GuiTheme
 					WithUserTimestamp(msg.Timestamp),
 					WithUserTheme(th),
 					WithUserOnLink(gmOpenLink),
+					WithUserOnCopy(func(s string) { _ = gmWriteClipboardText(m.host, s) }),
+					WithUserWakuStyle(true),
 				)
 				m.appendCard("user", m.nextEntryID(fmt.Sprintf("user:%d", msg.Timestamp)), uc)
+				m.refreshSidebarSessions()
 			}
 			return
 		}
@@ -266,8 +299,11 @@ func gevHandleMessageStart(m *GuiMode, sess *core.AgentSession, th *gui.GuiTheme
 			WithUserTimestamp(msg.Timestamp),
 			WithUserTheme(th),
 			WithUserOnLink(gmOpenLink),
+			WithUserOnCopy(func(s string) { _ = gmWriteClipboardText(m.host, s) }),
+			WithUserWakuStyle(true),
 		)
 		m.appendCard("user", m.nextEntryID(fmt.Sprintf("user:%d", msg.Timestamp)), uc)
+		m.refreshSidebarSessions()
 
 	case *ai.AssistantMessage:
 		aid := m.nextEntryID(fmt.Sprintf("assistant:%d", msg.Timestamp))
@@ -285,6 +321,7 @@ func gevHandleMessageStart(m *GuiMode, sess *core.AgentSession, th *gui.GuiTheme
 			WithAssistantOnCopyCode(func(_, code string) {
 				_ = gmWriteClipboardText(m.host, code)
 			}),
+			WithAssistantWakuStyle(true),
 		)
 		m.mu.Lock()
 		if prev := m.streamingCard; prev != nil {
@@ -308,6 +345,7 @@ func gevHandleMessageStart(m *GuiMode, sess *core.AgentSession, th *gui.GuiTheme
 		bc := NewBashExecutionCard(msg.Command, excl, WithBashExpanded(expanded), WithBashTheme(th))
 		bc.SetFromMessage(msg)
 		m.appendCard("bash", m.nextEntryID(fmt.Sprintf("bash:%d", msg.Timestamp)), bc)
+		m.refreshSidebarSessions()
 
 	case *core.CompactionSummaryMessage:
 		cc := NewCompactionSummaryCard(msg, WithCardExpanded(expanded), WithCardTheme(th), WithCardOnLink(gmOpenLink))
@@ -321,10 +359,7 @@ func gevHandleMessageStart(m *GuiMode, sess *core.AgentSession, th *gui.GuiTheme
 		if !msg.Display {
 			return
 		}
-		var customFn CustomMessageRenderer
-		if customRenderers != nil {
-			customFn = customRenderers[msg.CustomType]
-		}
+		customFn := gmResolveCustomMessageRenderer(m, sess, msg.CustomType, customRenderers)
 		cmc := NewCustomMessageCard(msg,
 			WithCustomRenderer(customFn),
 			WithCustomExpanded(expanded),

@@ -4,6 +4,7 @@ package core_test
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -663,6 +664,153 @@ func TestAgentSessionRetryEventsCharacterization(t *testing.T) {
 	})
 
 	t.Run("extension message_end hooks during retry and events", func(t *testing.T) {
-		t.Skip("barebone excludes extension message_end hooks")
+		t.Run("waits for delayed message_end hooks before settling retry", func(t *testing.T) {
+			var mu sync.Mutex
+			var endedRoles []string
+
+			h, err := testkit.CreateSuiteHarness(ctx, &testkit.SuiteHarnessOptions{
+				Settings: tsasreFastRetrySettings(2, true),
+				ExtensionFactories: []core.InlineExtension{
+					{
+						Name: "delayed-message-end",
+						Factory: func(pi core.ExtensionAPI) error {
+							pi.OnMessageEnd(func(_ context.Context, ev *core.MessageEndEvent, _ core.ExtensionContext) (*core.MessageEndEventResult, error) {
+								if ev != nil && ev.Message != nil {
+									if ev.Message.GetRole() == "assistant" {
+										time.Sleep(40 * time.Millisecond)
+									}
+									mu.Lock()
+									endedRoles = append(endedRoles, ev.Message.GetRole())
+									mu.Unlock()
+								}
+								return nil, nil
+							})
+							return nil
+						},
+					},
+				},
+			})
+			if err != nil {
+				t.Fatalf("CreateSuiteHarness: %v", err)
+			}
+			defer h.Cleanup()
+
+			h.SetResponses([]providers.FauxResponseStep{
+				providers.FauxResponseMessage{Message: tsasreErrorAssistantMessage("overloaded_error: busy")},
+				providers.FauxResponseMessage{Message: providers.FauxAssistantMessage(providers.FauxAssistantText("recovered ok"), nil)},
+			})
+
+			if err := h.Session.Prompt(ctx, "hello retry"); err != nil {
+				t.Fatalf("Prompt: %v", err)
+			}
+			if h.Session.IsRetrying() {
+				t.Fatal("expected IsRetrying() == false when Prompt returns")
+			}
+			if h.Faux.State.CallCount != 2 {
+				t.Fatalf("CallCount = %d, want 2", h.Faux.State.CallCount)
+			}
+
+			mu.Lock()
+			gotEnded := slices.Clone(endedRoles)
+			mu.Unlock()
+			var assistantEnds int
+			for _, r := range gotEnded {
+				if r == "assistant" {
+					assistantEnds++
+				}
+			}
+			if assistantEnds != 2 {
+				t.Fatalf("expected 2 assistant message_end callbacks (error + retry), got %d (%v)", assistantEnds, gotEnded)
+			}
+			assistantTexts := testkit.GetAssistantTexts(h)
+			if len(assistantTexts) == 0 || assistantTexts[len(assistantTexts)-1] != "recovered ok" {
+				t.Fatalf("expected recovered assistant text, got %#v", assistantTexts)
+			}
+		})
+
+		t.Run("runs extension message hooks before public session subscribers", func(t *testing.T) {
+			var mu sync.Mutex
+			var order []string
+
+			h, err := testkit.CreateSuiteHarness(ctx, &testkit.SuiteHarnessOptions{
+				Settings: tsasreFastRetrySettings(0, false),
+				ExtensionFactories: []core.InlineExtension{
+					{
+						Name: "message-order-ext",
+						Factory: func(pi core.ExtensionAPI) error {
+							pi.OnMessageStart(func(_ context.Context, ev *core.MessageStartEvent, _ core.ExtensionContext) (*core.NoResult, error) {
+								if ev != nil && ev.Message != nil {
+									mu.Lock()
+									order = append(order, "extension:message_start:"+ev.Message.GetRole())
+									mu.Unlock()
+								}
+								return nil, nil
+							})
+							pi.OnMessageEnd(func(_ context.Context, ev *core.MessageEndEvent, _ core.ExtensionContext) (*core.MessageEndEventResult, error) {
+								if ev != nil && ev.Message != nil {
+									mu.Lock()
+									order = append(order, "extension:message_end:"+ev.Message.GetRole())
+									mu.Unlock()
+								}
+								return nil, nil
+							})
+							return nil
+						},
+					},
+				},
+			})
+			if err != nil {
+				t.Fatalf("CreateSuiteHarness: %v", err)
+			}
+			defer h.Cleanup()
+
+			unsub := h.Session.Subscribe(func(ev core.AgentSessionEvent) {
+				switch e := ev.(type) {
+				case *core.AgentSessionEventMessageStart:
+					if e != nil && e.Message != nil {
+						mu.Lock()
+						order = append(order, "public:message_start:"+e.Message.GetRole())
+						mu.Unlock()
+					}
+				case *core.AgentSessionEventMessageEnd:
+					if e != nil && e.Message != nil {
+						mu.Lock()
+						order = append(order, "public:message_end:"+e.Message.GetRole())
+						mu.Unlock()
+					}
+				}
+			})
+			defer unsub()
+
+			h.SetResponses([]providers.FauxResponseStep{
+				providers.FauxResponseMessage{Message: providers.FauxAssistantMessage(providers.FauxAssistantText("ordered reply"), nil)},
+			})
+
+			if err := h.Session.Prompt(ctx, "hello order"); err != nil {
+				t.Fatalf("Prompt: %v", err)
+			}
+
+			mu.Lock()
+			gotOrder := slices.Clone(order)
+			mu.Unlock()
+
+			wantOrder := []string{
+				"extension:message_start:system",
+				"public:message_start:system",
+				"extension:message_end:system",
+				"public:message_end:system",
+				"extension:message_start:user",
+				"public:message_start:user",
+				"extension:message_end:user",
+				"public:message_end:user",
+				"extension:message_start:assistant",
+				"public:message_start:assistant",
+				"extension:message_end:assistant",
+				"public:message_end:assistant",
+			}
+			if !slices.Equal(gotOrder, wantOrder) {
+				t.Fatalf("event order mismatch:\n got: %v\nwant: %v", gotOrder, wantOrder)
+			}
+		})
 	})
 }

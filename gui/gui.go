@@ -162,8 +162,30 @@ func (g *GUI) Start(opts ...mygo.WindowOptions) *mygo.Window {
 		wOpts.Title = g.effectiveTitleLocked()
 	}
 	if wOpts.Width == 0 && wOpts.Height == 0 {
-		wOpts.Width = 1100
-		wOpts.Height = 760
+		wOpts.Width = 1240
+		wOpts.Height = 820
+	}
+	if wOpts.MinWidth == 0 && wOpts.MinHeight == 0 {
+		wOpts.MinWidth = 760
+		wOpts.MinHeight = 520
+	}
+	if wOpts.TitleBarStyle == "" {
+		wOpts.TitleBarStyle = mygo.TitleBarHidden
+	}
+	if wOpts.TrafficLightPosition == nil {
+		wOpts.TrafficLightPosition = &mygo.Point{X: 16, Y: 16}
+	}
+	if wOpts.TitleBarHeight == 0 {
+		wOpts.TitleBarHeight = 48
+	}
+	if wOpts.Vibrancy == "" {
+		wOpts.Vibrancy = mygo.VibrancySidebar
+	}
+	if wOpts.BackgroundColor == "" {
+		wOpts.BackgroundColor = "light-dark(#f6f5f6, #1a1a1a)"
+	}
+	if wOpts.StateKey == "" {
+		wOpts.StateKey = "pi-gui-main"
 	}
 	wOpts.Content = ui.View(g.View)
 	g.mu.Unlock()
@@ -648,7 +670,12 @@ func (g *GUI) View(c *ui.Context) {
 	resolved := ResolveGuiTheme(c, themeOverride)
 	c.SetTheme(resolved.UITheme())
 
-	rootBox := ui.Box(c).Fill().Background(resolved.Background)
+	rootBg := resolved.Background
+	if c.Vibrancy() {
+		c.Root().Background(ui.Transparent)
+		rootBg = ui.Transparent
+	}
+	rootBox := ui.Box(c).Fill().Background(rootBg)
 	rootBox.Children(func() {
 		if rootFn != nil {
 			rootFn(c)
@@ -682,12 +709,17 @@ func (g *GUI) View(c *ui.Context) {
 			back.Children(func() {
 				panelBg := entry.opts.PanelBackground
 				if panelBg.A == 0 {
-					panelBg = resolved.SurfaceElevated
+					panelBg = resolved.Raised
+				}
+				panelBorder := resolved.BorderStrong
+				if panelBorder.A == 0 {
+					panelBorder = resolved.Border
 				}
 				panel := ui.Column(c).
 					Background(panelBg).
-					Border(1, resolved.Border).
-					Radius(resolved.Radius).
+					Border(1, panelBorder).
+					Radius(13).
+					Shadow(0, 14, 36, 0, ui.RGBA(0, 0, 0, 0.34)).
 					Padding(16).
 					Gap(10)
 				if entry.opts.Width > 0 {

@@ -3,5 +3,17 @@
 package chord
 
 func DisposeLoadedFacets(loaded []*LoadedFacets) ([]any, error) {
-	panic("unported: DisposeLoadedFacets")
+	if len(loaded) == 0 {
+		return nil, nil
+	}
+	var errs []any
+	for _, entry := range loaded {
+		if entry == nil || entry.Dispose == nil {
+			continue
+		}
+		if err := entry.Dispose(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errs, nil
 }

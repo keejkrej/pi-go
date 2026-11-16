@@ -27,13 +27,13 @@ type ScrollView struct {
 }
 
 // NewScrollView constructs a ScrollView with FollowEnd, smooth scroll, and the
-// floating jump-to-bottom button enabled by default.
+// floating scroll-to-bottom button enabled by default.
 func NewScrollView() *ScrollView {
 	sv := &ScrollView{
 		followEnd:       true,
 		smoothFollow:    true,
 		showJumpButton:  true,
-		jumpButtonLabel: "↓ Jump to bottom",
+		jumpButtonLabel: "Scroll to bottom",
 		wasAtEnd:        true,
 	}
 	sv.list.FollowEnd = true
@@ -90,11 +90,11 @@ func (s *ScrollView) SetShowJumpButton(show bool) {
 	s.mu.Unlock()
 }
 
-// SetJumpButtonLabel customizes the floating button text.
+// SetJumpButtonLabel customizes the floating button's accessible label.
 func (s *ScrollView) SetJumpButtonLabel(label string) {
 	s.mu.Lock()
 	if label == "" {
-		label = "↓ Jump to bottom"
+		label = "Scroll to bottom"
 	}
 	s.jumpButtonLabel = label
 	s.mu.Unlock()
@@ -235,16 +235,41 @@ func (s *ScrollView) View(c *ui.Context, count int, renderRow func(c *ui.Context
 		}).Fill()
 
 		if showJump && ((laidOut && !s.list.AtEnd()) || (manualLocked && !follow)) {
-			pill := ui.Button(c, jumpLabel).
+			bg := theme.ComposerBg
+			if bg.A == 0 {
+				bg = theme.Raised
+			}
+			if bg.A == 0 {
+				bg = theme.SurfaceElevated
+			}
+			bdr := theme.BorderStrong
+			if bdr.A == 0 {
+				bdr = theme.Border
+			}
+			hoverBg := theme.Raised
+			if hoverBg.A == 0 {
+				hoverBg = theme.OverlayStrong
+			}
+			pill := ui.ButtonBase(c).
+				Label(jumpLabel).
 				Absolute().
-				Bottom(12).
-				Right(16).
-				Background(theme.SurfaceElevated).
-				TextColor(theme.Accent).
-				Border(1, theme.BorderAccent).
-				Radius(16).
-				Padding(6, 12).
+				LeftPercent(50).
+				Bottom(8).
+				Margin(0, 0, 0, -16).
+				Size(32, 32).
+				AlignItems(ui.Center).
+				Justify(ui.Center).
+				Background(bg).
+				Border(1, bdr).
+				Radius(999).
+				Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, 0.18)).
 				Cursor(ui.CursorPointer)
+			if pill.Hovered() {
+				pill.Background(hoverBg)
+			}
+			pill.Children(func() {
+				IconView(c, IconArrowDown, 16, theme.Text)
+			})
 			if pill.Clicked() {
 				s.JumpToBottom()
 				c.Invalidate()

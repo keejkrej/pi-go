@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"image"
 	"image/png"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -726,14 +727,285 @@ func TestAgentSessionQueueCharacterization(t *testing.T) {
 	})
 
 	t.Run("runs queued steering before follow-up when extension commands queue both", func(t *testing.T) {
-		t.Skip("barebone excludes extension commands")
+		gate, started, release := tsasqNewBlockingTool()
+		defer release()
+
+		h, err := testkit.CreateSuiteHarness(ctx, &testkit.SuiteHarnessOptions{
+			Tools: []*agent.AgentTool{gate},
+			ExtensionFactories: []core.InlineExtension{
+				{
+					Name: "queue-commands-ext",
+					Factory: func(pi core.ExtensionAPI) error {
+						pi.RegisterCommand("testcmd", core.RegisteredCommand{
+							Name:    "testcmd",
+							Handler: func(context.Context, string, core.ExtensionCommandContext) error { return nil },
+						})
+						pi.RegisterCommand("queue-both", core.RegisteredCommand{
+							Name: "queue-both",
+							Handler: func(context.Context, string, core.ExtensionCommandContext) error {
+								pi.SendUserMessage("queued followUp", &core.SendUserMessageOptions{DeliverAs: "followUp"})
+								pi.SendUserMessage("queued steer", &core.SendUserMessageOptions{DeliverAs: "steer"})
+								return nil
+							},
+						})
+						return nil
+					},
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("CreateSuiteHarness: %v", err)
+		}
+		defer h.Cleanup()
+
+		stopTool := ai.StopReasonToolUse
+		var callOrder []string
+		h.SetResponses([]providers.FauxResponseStep{
+			providers.FauxResponseMessage{
+				Message: providers.FauxAssistantMessage(
+					providers.FauxAssistantBlock{Block: providers.FauxToolCall("gate", jsonx.NewObject(), nil)},
+					&providers.FauxAssistantMessageOptions{StopReason: &stopTool},
+				),
+			},
+			providers.FauxResponseFactory(func(_ context.Context, tc *ai.TranscriptContext, _ *ai.SimpleStreamOptions, _ *providers.FauxProviderState, _ *ai.Model) (*ai.AssistantMessage, error) {
+				var texts []string
+				for _, m := range tc.Messages {
+					texts = append(texts, testkit.GetMessageText(m))
+				}
+				joined := strings.Join(texts, "\n")
+				if strings.Contains(joined, "queued followUp") {
+					t.Fatalf("followUp delivered before steering completed: %v", texts)
+				}
+				if !strings.Contains(joined, "queued steer") {
+					t.Fatalf("expected queued steer on second LLM call, got %v", texts)
+				}
+				callOrder = append(callOrder, "steer")
+				return providers.FauxAssistantMessage(providers.FauxAssistantText("steer handled"), nil), nil
+			}),
+			providers.FauxResponseFactory(func(_ context.Context, tc *ai.TranscriptContext, _ *ai.SimpleStreamOptions, _ *providers.FauxProviderState, _ *ai.Model) (*ai.AssistantMessage, error) {
+				var texts []string
+				for _, m := range tc.Messages {
+					texts = append(texts, testkit.GetMessageText(m))
+				}
+				joined := strings.Join(texts, "\n")
+				if !strings.Contains(joined, "queued followUp") {
+					t.Fatalf("expected queued followUp on third LLM call, got %v", texts)
+				}
+				callOrder = append(callOrder, "followUp")
+				return providers.FauxAssistantMessage(providers.FauxAssistantText("followUp handled"), nil), nil
+			}),
+		})
+
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- h.Session.Prompt(ctx, "run gate")
+		}()
+
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for gate tool")
+		}
+
+		if _, err := h.Session.Steer(ctx, "/testcmd arg", nil); err == nil || !strings.Contains(err.Error(), `Extension command "/testcmd" cannot be queued`) {
+			t.Fatalf("expected Steer(/testcmd) error, got %v", err)
+		}
+		if _, err := h.Session.FollowUp(ctx, "/testcmd arg", nil); err == nil || !strings.Contains(err.Error(), `Extension command "/testcmd" cannot be queued`) {
+			t.Fatalf("expected FollowUp(/testcmd) error, got %v", err)
+		}
+
+		if err := h.Session.Prompt(ctx, "/queue-both"); err != nil {
+			t.Fatalf("Prompt(/queue-both): %v", err)
+		}
+		release()
+
+		if err := <-errCh; err != nil {
+			t.Fatalf("Prompt: %v", err)
+		}
+
+		if !slices.Equal(callOrder, []string{"steer", "followUp"}) {
+			t.Fatalf("callOrder = %v, want [steer followUp]", callOrder)
+		}
+		wantUsers := []string{"run gate", "queued steer", "queued followUp"}
+		if gotUsers := testkit.GetUserTexts(h); !slices.Equal(gotUsers, wantUsers) {
+			t.Fatalf("GetUserTexts = %v, want %v", gotUsers, wantUsers)
+		}
 	})
 
 	t.Run("passes steering messages through extension input handlers", func(t *testing.T) {
-		t.Skip("barebone excludes extension input hooks")
+		gate, started, release := tsasqNewBlockingTool()
+		defer release()
+
+		type inputRecord struct {
+			text              string
+			source            core.InputSource
+			streamingBehavior string
+		}
+		var mu sync.Mutex
+		var records []inputRecord
+
+		h, err := testkit.CreateSuiteHarness(ctx, &testkit.SuiteHarnessOptions{
+			Tools: []*agent.AgentTool{gate},
+			ExtensionFactories: []core.InlineExtension{
+				{
+					Name: "queue-input-ext",
+					Factory: func(pi core.ExtensionAPI) error {
+						pi.OnInput(func(_ context.Context, ev *core.InputEvent, _ core.ExtensionContext) (*core.InputEventResult, error) {
+							if ev == nil {
+								return nil, nil
+							}
+							var sb string
+							if ev.StreamingBehavior != nil {
+								sb = *ev.StreamingBehavior
+							}
+							mu.Lock()
+							records = append(records, inputRecord{
+								text:              ev.Text,
+								source:            ev.Source,
+								streamingBehavior: sb,
+							})
+							mu.Unlock()
+
+							switch ev.Text {
+							case "handle steer", "handle follow":
+								return &core.InputEventResult{Action: "handled"}, nil
+							case "steer me", "follow me":
+								return &core.InputEventResult{
+									Action: "transform",
+									Text:   "transformed: " + ev.Text,
+								}, nil
+							default:
+								return &core.InputEventResult{Action: "continue"}, nil
+							}
+						})
+						return nil
+					},
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("CreateSuiteHarness: %v", err)
+		}
+		defer h.Cleanup()
+
+		stopTool := ai.StopReasonToolUse
+		h.SetResponses([]providers.FauxResponseStep{
+			providers.FauxResponseMessage{
+				Message: providers.FauxAssistantMessage(
+					providers.FauxAssistantBlock{Block: providers.FauxToolCall("gate", jsonx.NewObject(), nil)},
+					&providers.FauxAssistantMessageOptions{StopReason: &stopTool},
+				),
+			},
+			providers.FauxResponseMessage{Message: providers.FauxAssistantMessage(providers.FauxAssistantText("steer ok"), nil)},
+			providers.FauxResponseMessage{Message: providers.FauxAssistantMessage(providers.FauxAssistantText("follow ok"), nil)},
+		})
+
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- h.Session.Prompt(ctx, "start gate")
+		}()
+
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for gate tool")
+		}
+
+		disp, err := h.Session.Steer(ctx, "steer me", nil, &core.QueueInputOptions{Source: core.InputSourceRpc})
+		if err != nil || disp != core.QueuedInputDispositionQueued {
+			t.Fatalf("Steer(steer me) = (%q, %v), want (queued, nil)", disp, err)
+		}
+		disp, err = h.Session.Steer(ctx, "handle steer", nil, &core.QueueInputOptions{Source: core.InputSourceRpc})
+		if err != nil || disp != core.QueuedInputDispositionHandled {
+			t.Fatalf("Steer(handle steer) = (%q, %v), want (handled, nil)", disp, err)
+		}
+		disp, err = h.Session.FollowUp(ctx, "follow me", nil, &core.QueueInputOptions{Source: core.InputSourceRpc})
+		if err != nil || disp != core.QueuedInputDispositionQueued {
+			t.Fatalf("FollowUp(follow me) = (%q, %v), want (queued, nil)", disp, err)
+		}
+		disp, err = h.Session.FollowUp(ctx, "handle follow", nil, &core.QueueInputOptions{Source: core.InputSourceRpc})
+		if err != nil || disp != core.QueuedInputDispositionHandled {
+			t.Fatalf("FollowUp(handle follow) = (%q, %v), want (handled, nil)", disp, err)
+		}
+
+		release()
+		if err := <-errCh; err != nil {
+			t.Fatalf("Prompt: %v", err)
+		}
+
+		wantUsers := []string{"start gate", "transformed: steer me", "transformed: follow me"}
+		if gotUsers := testkit.GetUserTexts(h); !slices.Equal(gotUsers, wantUsers) {
+			t.Fatalf("GetUserTexts = %v, want %v", gotUsers, wantUsers)
+		}
+
+		mu.Lock()
+		gotRecords := slices.Clone(records)
+		mu.Unlock()
+		wantRecords := []inputRecord{
+			{text: "start gate", source: core.InputSourceInteractive, streamingBehavior: ""},
+			{text: "steer me", source: core.InputSourceRpc, streamingBehavior: "steer"},
+			{text: "handle steer", source: core.InputSourceRpc, streamingBehavior: "steer"},
+			{text: "follow me", source: core.InputSourceRpc, streamingBehavior: "followUp"},
+			{text: "handle follow", source: core.InputSourceRpc, streamingBehavior: "followUp"},
+		}
+		if !slices.Equal(gotRecords, wantRecords) {
+			t.Fatalf("input records = %+v, want %+v", gotRecords, wantRecords)
+		}
 	})
 
 	t.Run("runs extension agent_end hooks once queued continuations complete", func(t *testing.T) {
-		t.Skip("barebone excludes extension agent_end hooks")
+		var mu sync.Mutex
+		var agentEndCalls int
+		var sentConflict bool
+
+		h, err := testkit.CreateSuiteHarness(ctx, &testkit.SuiteHarnessOptions{
+			ExtensionFactories: []core.InlineExtension{
+				{
+					Name: "agent-end-followup-ext",
+					Factory: func(pi core.ExtensionAPI) error {
+						pi.OnAgentEnd(func(_ context.Context, _ *core.AgentEndEvent, _ core.ExtensionContext) (*core.NoResult, error) {
+							mu.Lock()
+							agentEndCalls++
+							shouldSend := !sentConflict
+							if shouldSend {
+								sentConflict = true
+							}
+							mu.Unlock()
+
+							if shouldSend {
+								pi.SendUserMessage("conflict report", &core.SendUserMessageOptions{DeliverAs: "followUp"})
+							}
+							return nil, nil
+						})
+						return nil
+					},
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("CreateSuiteHarness: %v", err)
+		}
+		defer h.Cleanup()
+
+		h.SetResponses([]providers.FauxResponseStep{
+			providers.FauxResponseMessage{Message: providers.FauxAssistantMessage(providers.FauxAssistantText("hello reply"), nil)},
+			providers.FauxResponseMessage{Message: providers.FauxAssistantMessage(providers.FauxAssistantText("conflict reply"), nil)},
+		})
+
+		if err := h.Session.Prompt(ctx, "hello"); err != nil {
+			t.Fatalf("Prompt: %v", err)
+		}
+
+		wantUsers := []string{"hello", "conflict report"}
+		if gotUsers := testkit.GetUserTexts(h); !slices.Equal(gotUsers, wantUsers) {
+			t.Fatalf("GetUserTexts = %v, want %v", gotUsers, wantUsers)
+		}
+
+		mu.Lock()
+		gotCalls := agentEndCalls
+		mu.Unlock()
+		if gotCalls != 2 {
+			t.Fatalf("agentEndCalls = %d, want 2", gotCalls)
+		}
 	})
 }
