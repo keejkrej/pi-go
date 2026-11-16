@@ -52,6 +52,7 @@ func gevHandleSessionEvent(m *GuiMode, rawEv core.AgentSessionEvent) {
 		}
 		m.updateProgramStatus(gui.StatusWorking, msg)
 		m.updateFooterAndTitle()
+		m.refreshSidebarSessions()
 
 	case *core.AgentSessionEventTurnStart:
 		m.mu.Lock()
@@ -289,6 +290,7 @@ func gevHandleMessageStart(m *GuiMode, sess *core.AgentSession, th *gui.GuiTheme
 					WithUserWakuStyle(true),
 				)
 				m.appendCard("user", m.nextEntryID(fmt.Sprintf("user:%d", msg.Timestamp)), uc)
+				m.refreshSidebarSessions()
 			}
 			return
 		}
@@ -301,6 +303,7 @@ func gevHandleMessageStart(m *GuiMode, sess *core.AgentSession, th *gui.GuiTheme
 			WithUserWakuStyle(true),
 		)
 		m.appendCard("user", m.nextEntryID(fmt.Sprintf("user:%d", msg.Timestamp)), uc)
+		m.refreshSidebarSessions()
 
 	case *ai.AssistantMessage:
 		aid := m.nextEntryID(fmt.Sprintf("assistant:%d", msg.Timestamp))
@@ -342,6 +345,7 @@ func gevHandleMessageStart(m *GuiMode, sess *core.AgentSession, th *gui.GuiTheme
 		bc := NewBashExecutionCard(msg.Command, excl, WithBashExpanded(expanded), WithBashTheme(th))
 		bc.SetFromMessage(msg)
 		m.appendCard("bash", m.nextEntryID(fmt.Sprintf("bash:%d", msg.Timestamp)), bc)
+		m.refreshSidebarSessions()
 
 	case *core.CompactionSummaryMessage:
 		cc := NewCompactionSummaryCard(msg, WithCardExpanded(expanded), WithCardTheme(th), WithCardOnLink(gmOpenLink))

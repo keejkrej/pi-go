@@ -7,10 +7,32 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/keejkrej/pi-go/agent"
 	"github.com/keejkrej/pi-go/codingagent/core"
 	"github.com/keejkrej/pi-go/codingagent/utils"
 	"github.com/keejkrej/pi-go/gui"
 )
+
+func wakuThinkingLabel(lvl agent.ThinkingLevel) string {
+	switch strings.ToLower(strings.TrimSpace(string(lvl))) {
+	case "", "off":
+		return "Off"
+	case "minimal":
+		return "Minimal"
+	case "low":
+		return "Low"
+	case "medium":
+		return "Medium"
+	case "high":
+		return "High"
+	case "xhigh":
+		return "Extra High"
+	case "max":
+		return "Max"
+	default:
+		return string(lvl)
+	}
+}
 
 // renderWakuComposerZone renders the centered MaxWidth(760) bottom composer zone:
 // above-editor extension widgets, optional docked queue tray, 13px floating Waku
@@ -32,6 +54,7 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 	bashRunning := m.bashRunning
 	ctxPopoverOpen := m.contextPopoverOpen
 	branchPopoverOpen := m.branchPopoverOpen
+	thinkingPopoverOpen := m.thinkingPopoverOpen
 	m.mu.Unlock()
 
 	if m.editor != nil && !m.editor.Chromeless() {
@@ -44,7 +67,6 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 	var (
 		clearQueueClicked bool
 		openModelClicked  bool
-		openThinkClicked  bool
 		attachClicked     bool
 		stopClicked       bool
 		sendClicked       bool
@@ -52,6 +74,7 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 		compactClicked    bool
 		openChanges       bool
 		switchBranch      string
+		pickedThinking    *agent.ThinkingLevel
 	)
 
 	outer := ui.Column(c).
@@ -192,30 +215,116 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 								openModelClicked = true
 							}
 
-							thinkLbl := string(st.ThinkingLevel)
-							if thinkLbl == "" {
-								thinkLbl = "off"
-							}
+							thinkLbl := wakuThinkingLabel(st.ThinkingLevel)
 							thinkBtn := ui.ButtonBase(c).
 								Key("composer-thinking-chip").
 								Height(24).
 								Padding(0, 8, 0, 8).
-								Radius(999).
+								Radius(6).
 								AlignItems(ui.Center).
-								Gap(5).
 								Cursor(ui.CursorPointer).
 								Label("Select Thinking Chip")
-							if thinkBtn.Hovered() {
+							thinkFg := th.TextSecondary
+							if thinkingPopoverOpen {
+								thinkBtn.Background(th.OverlayStrong)
+								thinkFg = th.Text
+							} else if thinkBtn.Hovered() {
 								thinkBtn.Background(th.Overlay)
 							}
 							thinkBtn.Children(func() {
-								gui.IconView(c, gui.IconSparkle, 12, th.TextTertiary)
-								ui.Text(c, thinkLbl).TextColor(th.TextSecondary).FontSize(12).SingleLine()
-								gui.IconView(c, gui.IconChevronDown, 10, th.TextTertiary)
+								ui.Text(c, thinkLbl).TextColor(thinkFg).FontSize(12).SingleLine()
 							})
 							if thinkBtn.Clicked() {
-								openThinkClicked = true
+								thinkingPopoverOpen = !thinkingPopoverOpen
 							}
+
+							ui.PopoverBase(c, thinkBtn, &thinkingPopoverOpen, func(panel ui.Element) {
+								panel.AttachTo(thinkBtn, ui.AnchorTopStart, ui.AnchorBottomStart).
+									Margin(0, 0, 6, 0).
+									MinWidth(212).
+									Background(th.Raised).
+									Border(1, th.BorderStrong).
+									Radius(10).
+									Padding(6).
+									Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.34))
+								panel.Children(func() {
+									levels := core.ThinkingLevelOptions
+									if sess != nil {
+										if avail := sess.GetAvailableThinkingLevels(); len(avail) > 0 {
+											levels = avail
+										}
+									}
+									defaultLvl := core.DefaultThinkingLevel
+									if sess != nil && sess.SettingsManager != nil {
+										if tl := sess.SettingsManager.GetDefaultThinkingLevel(); tl != nil && *tl != "" {
+											defaultLvl = *tl
+										}
+									}
+									hasDefault := false
+									for _, l := range levels {
+										if l == defaultLvl {
+											hasDefault = true
+											break
+										}
+									}
+									if !hasDefault && len(levels) > 0 {
+										defaultLvl = levels[0]
+									}
+
+									ui.Column(c).FillWidth().Gap(2).Children(func() {
+										ui.Box(c).Padding(4, 8, 4, 8).Children(func() {
+											ui.Text(c, "Reasoning").TextColor(th.TextTertiary).FontSize(11.5).FontWeight(500).SingleLine()
+										})
+										for _, lvl := range levels {
+											lvlCopy := lvl
+											dispLbl := wakuThinkingLabel(lvlCopy)
+											isSelected := lvlCopy == st.ThinkingLevel
+											isDefault := lvlCopy == defaultLvl
+											itemBtn := ui.ButtonBase(c).
+												FillWidth().
+												Height(28).
+												Padding(0, 8, 0, 8).
+												Radius(6).
+												AlignItems(ui.Center).
+												Justify(ui.SpaceBetween).
+												Gap(10).
+												Cursor(ui.CursorPointer).
+												Label(dispLbl)
+											if itemBtn.Hovered() {
+												itemBtn.Background(th.Overlay)
+											}
+											itemFg := th.TextSecondary
+											if isSelected {
+												itemFg = th.Text
+											}
+											itemBtn.Children(func() {
+												ui.Text(c, dispLbl).TextColor(itemFg).FontSize(12.5).SingleLine()
+												ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(6).Children(func() {
+													if isDefault {
+														ui.Row(c).
+															Height(18).
+															Padding(0, 5, 0, 5).
+															Radius(4).
+															Border(1, th.BorderStrong).
+															Background(th.Overlay).
+															AlignItems(ui.Center).
+															Children(func() {
+																ui.Text(c, "Default").TextColor(th.TextTertiary).FontSize(11).FontWeight(600).SingleLine()
+															})
+													}
+													if isSelected {
+														gui.IconView(c, gui.IconCheck, 11, th.TextTertiary)
+													}
+												})
+											})
+											if itemBtn.Clicked() {
+												pickedThinking = &lvlCopy
+												thinkingPopoverOpen = false
+											}
+										}
+									})
+								})
+							})
 
 							attBtn := ui.ButtonBase(c).
 								Key("composer-attach-btn").
@@ -582,16 +691,18 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 	m.mu.Lock()
 	m.contextPopoverOpen = ctxPopoverOpen
 	m.branchPopoverOpen = branchPopoverOpen
+	m.thinkingPopoverOpen = thinkingPopoverOpen
 	m.mu.Unlock()
 
+	if pickedThinking != nil && sess != nil {
+		sess.SetThinkingLevel(*pickedThinking)
+		m.updateFooterAndTitle()
+	}
 	if clearQueueClicked {
 		m.restoreQueuedMessages()
 	}
 	if openModelClicked {
 		m.ShowModelSelector()
-	}
-	if openThinkClicked {
-		m.ShowThinkingSelector()
 	}
 	if attachClicked {
 		m.pasteImageFromClipboard()

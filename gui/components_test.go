@@ -143,6 +143,67 @@ func TestSelectListAndSettingsList(t *testing.T) {
 		t.Fatalf("expected sonnet on click, got %+v", chosen)
 	}
 
+	// Non-searchable SelectList keyboard navigation (skipping Disabled items) & zero orange fill.
+	slNav := NewSelectList([]SelectItem{
+		{Value: "first", Label: "First Choice", Description: "anthropic/first · 1.0M ctx", Badge: "active"},
+		{Value: "disabled", Label: "Disabled Choice", Disabled: true},
+		{Value: "second", Label: "Second Choice", Description: "anthropic/second · 200k ctx", Badge: "anthropic"},
+	})
+	slNav.SetSearchable(false)
+	slNav.SetAutoFocus(true)
+	var navChosen SelectItem
+	var navCancelled bool
+	slNav.SetOnSelect(func(it SelectItem) { navChosen = it })
+	slNav.SetOnCancel(func() { navCancelled = true })
+
+	ttNav := ui.NewTesterWith(func(c *ui.Context) {
+		ui.Column(c).Fill().Padding(12).Background(DarkGuiTheme().Background).Children(func() {
+			slNav.View(c)
+		})
+	}, 520, 320, ui.TesterOptions{Dark: true})
+	ttNav.SetVibrancy(false)
+	ttNav.SetDark(true)
+	ttNav.Frame()
+
+	firstRect, ok := ttNav.Find("First Choice")
+	if !ok {
+		t.Fatalf("expected First Choice row, texts=%v", ttNav.Texts())
+	}
+	img := ttNav.Image()
+	if img == nil {
+		t.Fatal("expected non-nil framebuffer from Tester.Image()")
+	}
+	maxSampleX := int(firstRect.X + firstRect.W*0.72)
+	for py := int(firstRect.Y) + 4; py < int(firstRect.Y+firstRect.H)-4; py++ {
+		for px := int(firstRect.X) + 8; px < maxSampleX; px++ {
+			col := img.RGBAAt(px, py)
+			if col.R > 180 && int(col.R)-int(col.B) > 50 {
+				t.Fatalf("unexpected orange background fill at (%d,%d): %+v", px, py, col)
+			}
+		}
+	}
+
+	ttNav.Key(0, ui.KeyDown)
+	ttNav.Frame()
+	if cur, ok := slNav.SelectedItem(); !ok || cur.Value != "second" {
+		t.Fatalf("expected KeyDown to skip disabled item to 'second', got %+v (ok=%v)", cur, ok)
+	}
+	ttNav.Key(0, ui.KeyUp)
+	ttNav.Frame()
+	if cur, ok := slNav.SelectedItem(); !ok || cur.Value != "first" {
+		t.Fatalf("expected KeyUp to return to 'first', got %+v (ok=%v)", cur, ok)
+	}
+	ttNav.Key(0, ui.KeyDown)
+	ttNav.Frame()
+	ttNav.Key(0, ui.KeyEnter)
+	if navChosen.Value != "second" {
+		t.Fatalf("expected Enter to confirm 'second', got %+v", navChosen)
+	}
+	ttNav.Key(0, ui.KeyEscape)
+	if !navCancelled {
+		t.Fatal("expected Escape on non-searchable SelectList to trigger OnCancel")
+	}
+
 	// SettingsList toggle & enum & search
 	var changes []string
 	var openedSub string

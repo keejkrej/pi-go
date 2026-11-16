@@ -211,15 +211,17 @@ type GuiMode struct {
 	nextSeq              atomic.Uint64
 	sessionMutationDepth atomic.Int32
 
-	wakuOnce           sync.Once
-	sidebar            *wakuSidebarState
-	rightPanel         *wakuRightPanelState
-	toast              *wakuToastState
-	turnStartedAt      time.Time
-	turnDurations      map[string]time.Duration
-	collapsedTurns     map[string]bool
-	contextPopoverOpen bool
-	branchPopoverOpen  bool
+	wakuOnce            sync.Once
+	sidebar             *wakuSidebarState
+	rightPanel          *wakuRightPanelState
+	toast               *wakuToastState
+	turnStartedAt       time.Time
+	turnDurations       map[string]time.Duration
+	collapsedTurns      map[string]bool
+	contextPopoverOpen  bool
+	branchPopoverOpen   bool
+	thinkingPopoverOpen bool
+	settingsState       *wakuSettingsState
 
 	terminalInputHandlers []core.TerminalInputHandler
 	autocompleteFactories []core.AutocompleteProviderFactory
@@ -252,6 +254,9 @@ func (m *GuiMode) ensureWakuState() {
 		}
 		if m.collapsedTurns == nil {
 			m.collapsedTurns = make(map[string]bool)
+		}
+		if m.settingsState == nil {
+			m.settingsState = newWakuSettingsState()
 		}
 		m.mu.Unlock()
 	})
@@ -666,6 +671,10 @@ func (m *GuiMode) View(c *ui.Context) ui.Element {
 
 	if m.host == nil || !m.host.HasOverlay() {
 		m.handleAppShortcuts(c)
+	}
+
+	if m.SettingsOpen() {
+		return m.renderWakuSettingsView(c, th)
 	}
 
 	if sessionTitle == "" {
@@ -1891,6 +1900,7 @@ func (m *GuiMode) executeBashCommand(ctx context.Context, command string, exclud
 		m.mu.Unlock()
 		m.appendCard("bash", id, card)
 		m.statusBanner.SetWorking(true, "Running: "+command)
+		m.refreshSidebarSessions()
 	})
 
 	defer cancel()
@@ -1968,6 +1978,9 @@ func (m *GuiMode) handleAppShortcuts(c *ui.Context) {
 	if c.Shortcut(ui.Cmd, ui.KeyJ) || c.Shortcut(ui.Ctrl|ui.Alt, ui.KeyB) {
 		m.toggleRightPanel()
 	}
+	if c.Shortcut(ui.Cmd, ui.KeyComma) || c.Shortcut(ui.Ctrl, ui.KeyComma) {
+		m.OpenSettingsPage("")
+	}
 }
 
 func (m *GuiMode) currentCtx() context.Context {
@@ -1980,6 +1993,10 @@ func (m *GuiMode) currentCtx() context.Context {
 func (m *GuiMode) handleEscapeAbort() {
 	if m.host != nil && m.host.HasOverlay() {
 		m.host.HideOverlay()
+		return
+	}
+	if m.SettingsOpen() {
+		m.CloseSettingsPage()
 		return
 	}
 	sess := m.Session()

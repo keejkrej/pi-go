@@ -854,18 +854,18 @@ func TestGuiModeSelectorsAndModalOverlays(t *testing.T) {
 		t.Fatalf("expected thinking level high, got %v", mode.Session().ThinkingLevel())
 	}
 
-	// 3. Settings selector -> Done closes it cleanly.
+	// 3. Settings selector -> opens Waku full-window Settings view -> Back closes it cleanly.
 	mode.ShowSettingsSelector()
 	tt.Frame()
-	if !mode.GUI().HasOverlay() || !tt.HasText("Done") {
-		t.Fatalf("expected SettingsSelectorDialog visible, texts=%v", tt.Texts())
+	if !mode.SettingsOpen() || !tt.HasText("Back") || !tt.HasText("General") {
+		t.Fatalf("expected Waku Settings view visible, open=%v texts=%v", mode.SettingsOpen(), tt.Texts())
 	}
-	if err := tt.Click("Done"); err != nil {
-		t.Fatalf("Click Done: %v", err)
+	if err := tt.Click("Back"); err != nil {
+		t.Fatalf("Click Back: %v", err)
 	}
 	tt.Frame()
-	if mode.GUI().HasOverlay() {
-		t.Fatal("expected settings modal dismissed")
+	if mode.SettingsOpen() {
+		t.Fatal("expected Waku Settings view closed after Back")
 	}
 
 	// 4. Scoped models selector, Theme selector, Session selector, Tree selector, Trust selector, Hotkeys, Fork.

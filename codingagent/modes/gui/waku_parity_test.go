@@ -325,7 +325,15 @@ func TestWakuChromeAndSidebarGeometryParity(t *testing.T) {
 	}
 	tt.Frame()
 
-	// Sidebar options popover -> Group by Project -> check child card indentation
+	// Before dispatching a prompt, sidebar must NOT list an undispatched "New task" card,
+	// while still showing Today / project group header + Sidebar options filter button.
+	for _, info := range tt.AccessAll() {
+		if info.Name == "New task" && info.Bounds.X < wakuSidebarDefaultWidth {
+			t.Fatalf("unexpected undispatched 'New task' card inside sidebar: %+v", info.Bounds)
+		}
+	}
+
+	// Sidebar options popover -> Group by Project -> still shows 'cwd' header without undispatched card.
 	if err := tt.Click("Sidebar options"); err != nil {
 		t.Fatalf("Click Sidebar options: %v", err)
 	}
@@ -339,17 +347,13 @@ func TestWakuChromeAndSidebarGeometryParity(t *testing.T) {
 		t.Fatalf("Click Project option: %v", err)
 	}
 	tt.Frame()
-	hdrR, ok := tt.Find("cwd")
-	if !ok {
-		t.Fatalf("expected project header 'cwd', texts=%v", tt.Texts())
+	if _, ok := tt.Find("cwd"); !ok {
+		t.Fatalf("expected empty project header 'cwd', texts=%v", tt.Texts())
 	}
-	// Session card title in the fixture before first prompt is "New task" (lowercase t).
-	cardR, ok := tt.Find("New task")
-	if !ok {
-		t.Fatalf("expected session card 'New task' indented under project header, texts=%v", tt.Texts())
-	}
-	if cardR.X < hdrR.X+wakuSidebarGroupChildPadding-1 {
-		t.Fatalf("project child card X = %.1f should be indented %.0fpx right of header X = %.1f", cardR.X, wakuSidebarGroupChildPadding, hdrR.X)
+	for _, info := range tt.AccessAll() {
+		if info.Name == "New task" && info.Bounds.X < wakuSidebarDefaultWidth {
+			t.Fatalf("unexpected undispatched 'New task' card under Project grouping: %+v", info.Bounds)
+		}
 	}
 
 	// Switch back to Updated grouping
@@ -362,7 +366,7 @@ func TestWakuChromeAndSidebarGeometryParity(t *testing.T) {
 	}
 	tt.Frame()
 
-	// Send one prompt/assistant turn and confirm Waku minimal metadata (no clutter)
+	// Send one prompt/assistant turn, confirm started task appears in sidebar, and verify indentation under Project.
 	fx.faux.SetResponses([]providers.FauxResponseStep{
 		providers.FauxResponseMessage{
 			Message: providers.FauxAssistantMessage(providers.FauxAssistantBlocks{
@@ -379,6 +383,57 @@ func TestWakuChromeAndSidebarGeometryParity(t *testing.T) {
 	tgmWaitUntil(t, mode, tt, 5*time.Second, "assistant reply visible", func() bool {
 		return !mode.Session().IsStreaming() && tt.HasText("waku parity response")
 	})
+
+	var hasSidebarCard bool
+	tgmWaitUntil(t, mode, tt, 5*time.Second, "started task promoted into sidebar", func() bool {
+		for _, info := range tt.AccessAll() {
+			if info.Name == "hello parity" && info.Bounds.X < wakuSidebarDefaultWidth {
+				hasSidebarCard = true
+				return true
+			}
+		}
+		return false
+	})
+	if !hasSidebarCard {
+		t.Fatal("expected dispatched 'hello parity' session card in sidebar")
+	}
+
+	// Group by Project -> check started session card indentation under 'cwd' header.
+	if err := tt.Click("Sidebar options"); err != nil {
+		t.Fatalf("Click Sidebar options (3): %v", err)
+	}
+	tt.Frame()
+	if err := tt.Click("Project"); err != nil {
+		t.Fatalf("Click Project option (2): %v", err)
+	}
+	tt.Frame()
+	hdrR, ok := tt.Find("cwd")
+	if !ok {
+		t.Fatalf("expected project header 'cwd', texts=%v", tt.Texts())
+	}
+	var cardR ui.Rect
+	foundCard := false
+	for _, info := range tt.AccessAll() {
+		if info.Name == "hello parity" && info.Bounds.X < wakuSidebarDefaultWidth {
+			cardR = info.Bounds
+			foundCard = true
+			break
+		}
+	}
+	if !foundCard {
+		t.Fatalf("expected session card 'hello parity' under project header, texts=%v", tt.Texts())
+	}
+	if cardR.X < hdrR.X+wakuSidebarGroupChildPadding-1 {
+		t.Fatalf("project child card X = %.1f should be indented %.0fpx right of header X = %.1f", cardR.X, wakuSidebarGroupChildPadding, hdrR.X)
+	}
+	if err := tt.Click("Sidebar options"); err != nil {
+		t.Fatalf("Click Sidebar options (4): %v", err)
+	}
+	tt.Frame()
+	if err := tt.Click("Updated"); err != nil {
+		t.Fatalf("Click Updated option (2): %v", err)
+	}
+	tt.Frame()
 
 	for _, clutter := range []string{"⌘K", "Sessions", " msgs", "You", "↑", "↓"} {
 		if tt.HasText(clutter) {
@@ -792,5 +847,206 @@ func TestWakuTerminalAndActivityWidthClampedTo720(t *testing.T) {
 		}
 	} else {
 		t.Fatalf("expected bash tool title in frame, texts=%v", tt.Texts())
+	}
+}
+
+func TestWakuModelSelectorAndComposerReasoningPopoverParity(t *testing.T) {
+	t.Setenv(utils.EnvSessionDir, t.TempDir())
+
+	fx := tgmNewFixture(t, nil)
+	mode := NewGuiMode(fx.runtime, &GuiModeOptions{
+		SkipWindow:          true,
+		InitialThemeSetting: tgmStrPtr("dark"),
+	})
+	t.Cleanup(func() { mode.Stop() })
+
+	// Switch to reasoning-capable model faux-2 so Reasoning popover exposes Low/Medium/High.
+	faux2 := fx.runtime.CurrentSession().ModelRegistry().Find(fx.provider, "faux-2")
+	if faux2 == nil {
+		t.Fatalf("expected faux-2 reasoning model in registry")
+	}
+	if err := fx.runtime.CurrentSession().SetModel(context.Background(), faux2); err != nil {
+		t.Fatalf("SetModel(faux-2): %v", err)
+	}
+
+	mode.refreshSidebarSessionsSync(context.Background())
+
+	tt := ui.NewTester(mode.GUI().View, 1280, 820)
+	tt.SetTitleBar(ui.TitleBar{Height: 48, Left: 86})
+	tt.SetVibrancy(false)
+	tt.SetDark(true)
+	tt.Frame()
+
+	chipR, ok := tt.Find("Select Thinking Chip")
+	if !ok {
+		t.Fatalf("expected Select Thinking Chip in composer, texts=%v", tt.Texts())
+	}
+	if err := tt.Click("Select Thinking Chip"); err != nil {
+		t.Fatalf("Click Select Thinking Chip: %v", err)
+	}
+	tt.Frame()
+
+	if mode.GUI().HasOverlay() {
+		t.Fatal("composer reasoning selector should open as an anchored popover, not a centered modal overlay")
+	}
+	popR, ok := tt.Find("Reasoning")
+	if !ok || !tt.HasText("Default") {
+		t.Fatalf("expected anchored Reasoning popover with Default badge, texts=%v", tt.Texts())
+	}
+	if popR.Y >= chipR.Y {
+		t.Fatalf("Reasoning popover header Y = %.1f should be above composer chip Y = %.1f", popR.Y, chipR.Y)
+	}
+
+	imgPop := tt.Image()
+	bPop := imgPop.Bounds()
+	for py := max(bPop.Min.Y, int(popR.Y)); py < min(bPop.Max.Y, int(popR.Y)+120); py++ {
+		for px := max(bPop.Min.X, int(popR.X)); px < min(bPop.Max.X, int(popR.X)+200); px++ {
+			col := wpPixelAt(t, imgPop, px, py)
+			if col.R > 180 && int(col.R)-int(col.B) > 50 {
+				t.Fatalf("unexpected orange fill inside Reasoning popover at (%d,%d): %+v", px, py, col)
+			}
+		}
+	}
+
+	if err := tt.Click("High"); err != nil {
+		t.Fatalf("Click High in Reasoning popover: %v", err)
+	}
+	tt.Frame()
+	if mode.Session().ThinkingLevel() != ai.ModelThinkingLevelHigh {
+		t.Fatalf("expected ThinkingLevel=high after popover selection, got %v", mode.Session().ThinkingLevel())
+	}
+	if tt.HasText("Reasoning") {
+		t.Fatal("expected Reasoning popover to close after selection")
+	}
+
+	// Verify ModelSelectorDialog active row has zero coral-orange fill and high text contrast.
+	mode.ShowModelSelector()
+	tt.Frame()
+	if !mode.GUI().HasOverlay() || !tt.HasText("Select Model") {
+		t.Fatalf("expected Select Model overlay, texts=%v", tt.Texts())
+	}
+
+	var activeRow ui.Rect
+	var foundRow bool
+	for _, info := range tt.AccessAll() {
+		if strings.HasPrefix(info.Name, "✓ ") && info.Bounds.W > 120 {
+			activeRow = info.Bounds
+			foundRow = true
+			break
+		}
+	}
+	if !foundRow {
+		t.Fatalf("expected active model row prefixed with check mark, access=%v", tt.Texts())
+	}
+
+	imgModal := tt.Image()
+	maxSampleX := int(activeRow.X + activeRow.W*0.72)
+	bgCounts := make(map[color.RGBA]int)
+	for py := int(activeRow.Y) + 4; py < int(activeRow.Y+activeRow.H)-4; py++ {
+		for px := int(activeRow.X) + 8; px < maxSampleX; px++ {
+			col := wpPixelAt(t, imgModal, px, py)
+			if col.R > 180 && int(col.R)-int(col.B) > 50 {
+				t.Fatalf("unreadable orange fill in selected model row at (%d,%d): %+v", px, py, col)
+			}
+			bgCounts[col]++
+		}
+	}
+	var dominant color.RGBA
+	var maxCount int
+	for col, n := range bgCounts {
+		if n > maxCount {
+			maxCount = n
+			dominant = col
+		}
+	}
+	if dominant.R > 75 || dominant.G > 75 || dominant.B > 75 {
+		t.Fatalf("unexpectedly bright dominant background in selected model row: %+v", dominant)
+	}
+	darkTheme := gui.DarkGuiTheme()
+	bgUI := ui.RGB(dominant.R, dominant.G, dominant.B)
+	if ratio := gui.ContrastRatio(bgUI, darkTheme.TextSecondary); ratio < 4.5 {
+		t.Fatalf("contrast between selected row bg %+v and TextSecondary %+v = %.2f, want >= 4.5", dominant, darkTheme.TextSecondary, ratio)
+	}
+}
+
+func TestWakuFullWindowSettingsViewParity(t *testing.T) {
+	t.Setenv(utils.EnvSessionDir, t.TempDir())
+
+	fx := tgmNewFixture(t, nil)
+	mode := NewGuiMode(fx.runtime, &GuiModeOptions{
+		SkipWindow:          true,
+		InitialThemeSetting: tgmStrPtr("dark"),
+	})
+	t.Cleanup(func() { mode.Stop() })
+
+	mode.refreshSidebarSessionsSync(context.Background())
+
+	tt := ui.NewTester(mode.GUI().View, 1280, 820)
+	tt.SetTitleBar(ui.TitleBar{Height: 48, Left: 86})
+	tt.SetVibrancy(false)
+	tt.SetDark(true)
+	tt.Frame()
+
+	if err := tt.Click("Open Settings"); err != nil {
+		t.Fatalf("Click Open Settings: %v", err)
+	}
+	tt.Frame()
+
+	if !mode.SettingsOpen() || mode.GUI().HasOverlay() {
+		t.Fatalf("expected full-window Settings view (settingsOpen=%v hasOverlay=%v)", mode.SettingsOpen(), mode.GUI().HasOverlay())
+	}
+	for _, want := range []string{"Back", "Search Settings", "General", "Appearance", "Providers", "Behavior", "Local by default", "Auto-Compact"} {
+		if !tt.HasText(want) {
+			t.Fatalf("expected Waku Settings element %q, texts=%v", want, tt.Texts())
+		}
+	}
+
+	swR, ok := tt.Find("Toggle Auto-Compact")
+	if !ok {
+		t.Fatalf("expected Toggle Auto-Compact switch, texts=%v", tt.Texts())
+	}
+	if swR.W != 36 || swR.H != 20 {
+		t.Fatalf("Toggle Auto-Compact size = %.0fx%.0f, want 36x20", swR.W, swR.H)
+	}
+
+	img := tt.Image()
+	var sawMonochromeOn bool
+	for py := int(swR.Y) + 1; py < int(swR.Y+swR.H)-1; py++ {
+		for px := int(swR.X) + 1; px < int(swR.X+swR.W)-1; px++ {
+			col := wpPixelAt(t, img, px, py)
+			if col.R > 180 && int(col.R)-int(col.B) > 50 {
+				t.Fatalf("unexpected orange toggle switch pixel at (%d,%d): %+v", px, py, col)
+			}
+			if col.R > 200 && col.G > 200 && col.B > 200 {
+				sawMonochromeOn = true
+			}
+		}
+	}
+	if !sawMonochromeOn {
+		t.Fatal("expected light monochrome pixels on enabled WakuSwitch track")
+	}
+
+	if err := tt.Click("Toggle Auto-Compact"); err != nil {
+		t.Fatalf("Click Toggle Auto-Compact: %v", err)
+	}
+	tt.Frame()
+	if mode.Session().AutoCompactionEnabled() {
+		t.Fatal("expected Auto-Compact disabled after clicking WakuSwitch")
+	}
+
+	if err := tt.Click("Appearance"); err != nil {
+		t.Fatalf("Click Appearance tab: %v", err)
+	}
+	tt.Frame()
+	if !tt.HasText("Theme") || !tt.HasText("Hide Thinking Blocks") {
+		t.Fatalf("expected Appearance settings cards, texts=%v", tt.Texts())
+	}
+
+	if err := tt.Click("Back"); err != nil {
+		t.Fatalf("Click Back: %v", err)
+	}
+	tt.Frame()
+	if mode.SettingsOpen() || !tt.HasText("What should we build in cwd?") {
+		t.Fatalf("expected return to workspace after Back (open=%v, texts=%v)", mode.SettingsOpen(), tt.Texts())
 	}
 }

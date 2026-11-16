@@ -47,7 +47,6 @@ func NewSelectList(items []SelectItem) *SelectList {
 		placeholder:    "Filter...",
 		lastSelected:   -1,
 	}
-	sl.listState.Selected = &sl.selected
 	sl.listState.Key = func(row int) any {
 		if row >= 0 && row < len(sl.filtered) {
 			return sl.filtered[row].Value
@@ -180,7 +179,6 @@ func (s *SelectList) applyFilterLocked() {
 	}
 	if len(s.filtered) == 0 {
 		s.selected = -1
-		s.listState.Choose(-1)
 		return
 	}
 	s.selected = 0
@@ -190,7 +188,6 @@ func (s *SelectList) applyFilterLocked() {
 			break
 		}
 	}
-	s.listState.Choose(s.selected)
 	s.listState.ScrollIntoView(s.selected)
 }
 
@@ -218,7 +215,6 @@ func (s *SelectList) SetSelectedIndex(idx int) {
 	s.selected = idx
 	it := s.filtered[idx]
 	onHL := s.onHighlight
-	s.listState.Choose(idx)
 	s.listState.ScrollIntoView(idx)
 	s.mu.Unlock()
 
@@ -267,7 +263,6 @@ func (s *SelectList) moveStep(delta int) {
 	s.selected = cur
 	it := s.filtered[cur]
 	onHL := s.onHighlight
-	s.listState.Choose(cur)
 	s.listState.ScrollIntoView(cur)
 	s.mu.Unlock()
 
@@ -318,9 +313,21 @@ func (s *SelectList) View(c *ui.Context) ui.Element {
 		s.applyFilterLocked()
 	}
 	items := append([]SelectItem(nil), s.filtered...)
-	onHighlight := s.onHighlight
 	onCancel := s.onCancel
 	s.mu.Unlock()
+
+	selBg := theme.OverlayStrong
+	if selBg.A == 0 {
+		selBg = theme.SelectedBg
+	}
+	hovBg := theme.Overlay
+	if hovBg.A == 0 {
+		hovBg = theme.SurfaceHover
+	}
+	descCol := theme.TextSecondary
+	if descCol.A == 0 {
+		descCol = theme.Muted
+	}
 
 	var submitPending bool
 	var cancelPending bool
@@ -370,13 +377,14 @@ func (s *SelectList) View(c *ui.Context) ui.Element {
 
 		if len(items) == 0 {
 			ui.Box(c).FillWidth().Padding(14, 12).Children(func() {
-				ui.Text(c, "No matching items").TextColor(theme.Muted)
+				ui.Text(c, "No matching items").TextColor(descCol)
 			})
 			return
 		}
 
 		listBox := ui.Column(c).
 			FillWidth().
+			Clip().
 			Background(theme.Surface).
 			Border(1, theme.Border).
 			Radius(theme.Radius).
@@ -401,22 +409,33 @@ func (s *SelectList) View(c *ui.Context) ui.Element {
 			listEl := ui.List(c, &s.listState, len(items), func(i int) {
 				it := items[i]
 				isSel := i == s.selected
+				borderCol := ui.Transparent
+				if isSel {
+					if theme.Accent.A > 0 {
+						borderCol = theme.Accent.Alpha(0.45)
+					} else {
+						borderCol = theme.BorderStrong
+					}
+				}
 				row := ui.Row(c).
 					FillWidth().
+					MinWidth(0).
 					Padding(7, 10).
-					Radius(theme.Radius - 2).
+					Radius(theme.Radius-2).
+					Border(1, borderCol).
 					AlignItems(ui.Center).
 					Justify(ui.SpaceBetween).
-					Gap(10)
+					Gap(10).
+					Label(it.Label)
 				if !it.Disabled {
 					row.Cursor(ui.CursorPointer)
 				} else {
 					row.Opacity(0.5)
 				}
 				if isSel {
-					row.Background(theme.SelectedBg)
+					row.Background(selBg)
 				} else if !it.Disabled && row.Hovered() {
-					row.Background(theme.SurfaceHover)
+					row.Background(hovBg)
 				}
 				rowIdx := i
 				rowItem := it
@@ -427,7 +446,6 @@ func (s *SelectList) View(c *ui.Context) ui.Element {
 					s.mu.Lock()
 					prev := s.selected
 					s.selected = rowIdx
-					s.listState.Choose(rowIdx)
 					s.listState.ScrollIntoView(rowIdx)
 					hlCB := s.onHighlight
 					selCB := s.onSelect
@@ -441,35 +459,60 @@ func (s *SelectList) View(c *ui.Context) ui.Element {
 					}
 				})
 				row.Children(func() {
-					ui.Column(c).Shrink(1).Grow(1).Gap(2).Children(func() {
+					ui.Column(c).Shrink(1).Grow(1).MinWidth(0).Gap(2).Children(func() {
 						fg := theme.Text
-						if isSel {
+						if isSel && theme.SelectedText.A > 0 {
 							fg = theme.SelectedText
 						}
 						ui.Text(c, it.Label).TextColor(fg).FontWeight(500).SingleLine()
 						if it.Description != "" {
-							ui.Text(c, it.Description).TextColor(theme.Muted).FontSize(12).SingleLine()
+							ui.Text(c, it.Description).TextColor(descCol).FontSize(12).SingleLine()
 						}
 					})
 					if it.Badge != "" {
-						ui.Badge(c, it.Badge)
+						pill := ui.Row(c).
+							Shrink(0).
+							Padding(2, 8).
+							Radius(999).
+							AlignItems(ui.Center)
+						badgeFg := descCol
+						if strings.EqualFold(it.Badge, "active") {
+							pill.Background(theme.Accent.Alpha(0.14)).
+								Border(1, theme.Accent.Alpha(0.40))
+							badgeFg = theme.Accent
+						} else {
+							pill.Background(hovBg).
+								Border(1, theme.Border)
+						}
+						pill.Children(func() {
+							badgeTxt := ui.Text(c, it.Badge).FontSize(11).TextColor(badgeFg).SingleLine()
+							if strings.EqualFold(it.Badge, "active") {
+								badgeTxt.FontWeight(500)
+							}
+						})
 					}
 				})
 			}).FillWidth()
 			if maxH > 0 {
 				listEl.MaxHeight(maxH - 8)
 			}
-			if autoFocus && !searchable {
-				listEl.AutoFocus()
-			}
-			if listEl.Changed() && onHighlight != nil && s.selected >= 0 && s.selected < len(items) {
-				onHighlight(items[s.selected])
-			}
-			if listEl.Submitted() {
-				submitPending = true
+			if !searchable {
+				listEl.Focusable()
+				if autoFocus {
+					listEl.AutoFocus()
+				}
 			}
 			if !searchable && s.listState.Focused(c) {
-				if c.Shortcut(0, ui.KeyEscape) {
+				if listEl.Shortcut(0, ui.KeyUp) {
+					s.MoveUp()
+				}
+				if listEl.Shortcut(0, ui.KeyDown) {
+					s.MoveDown()
+				}
+				if listEl.Shortcut(0, ui.KeyEnter) || listEl.Shortcut(0, ui.KeySpace) {
+					submitPending = true
+				}
+				if listEl.Shortcut(0, ui.KeyEscape) {
 					cancelPending = true
 				}
 			}
@@ -483,6 +526,57 @@ func (s *SelectList) View(c *ui.Context) ui.Element {
 	}
 
 	return root
+}
+
+// WakuSwitch renders Waku's monochrome 36x20 pill toggle switch and reports
+// whether the user clicked it.
+func WakuSwitch(c *ui.Context, theme *GuiTheme, on bool, disabled bool, label string) bool {
+	theme = ResolveGuiTheme(c, theme)
+	trackBg := theme.Inset
+	if trackBg.A == 0 {
+		trackBg = theme.Surface
+	}
+	borderCol := theme.BorderStrong
+	if borderCol.A == 0 {
+		borderCol = theme.Border
+	}
+	thumbCol := theme.TextTertiary
+	if thumbCol.A == 0 {
+		thumbCol = theme.Muted
+	}
+	justify := ui.Start
+	if on {
+		inv := theme.Inverse
+		if inv.A == 0 {
+			inv = theme.Text
+		}
+		onInv := theme.OnInverse
+		if onInv.A == 0 {
+			onInv = theme.Background
+		}
+		trackBg = inv
+		borderCol = inv
+		thumbCol = onInv
+		justify = ui.End
+	}
+	btn := ui.ButtonBase(c).
+		Size(36, 20).
+		Padding(2).
+		Radius(999).
+		Background(trackBg).
+		Border(1, borderCol).
+		AlignItems(ui.Center).
+		Justify(justify).
+		Label(label)
+	if disabled {
+		btn.Opacity(0.55)
+	} else {
+		btn.Cursor(ui.CursorPointer)
+	}
+	btn.Children(func() {
+		ui.Box(c).Size(14, 14).Radius(999).Background(thumbCol)
+	})
+	return !disabled && btn.Clicked()
 }
 
 // SettingKind identifies how a SettingItem row renders and mutates values.
@@ -763,6 +857,19 @@ func (s *SettingsList) View(c *ui.Context) ui.Element {
 					return
 				}
 
+				selBg := theme.OverlayStrong
+				if selBg.A == 0 {
+					selBg = theme.SelectedBg
+				}
+				hovBg := theme.Overlay
+				if hovBg.A == 0 {
+					hovBg = theme.SurfaceHover
+				}
+				descCol := theme.TextSecondary
+				if descCol.A == 0 {
+					descCol = theme.Muted
+				}
+
 				for i, item := range rows {
 					rowIdx := i
 					it := item
@@ -771,33 +878,33 @@ func (s *SettingsList) View(c *ui.Context) ui.Element {
 					row := ui.Row(c).
 						Key(it.ID).
 						FillWidth().
+						MinWidth(0).
 						Padding(8, 12).
 						Radius(theme.Radius - 2).
 						AlignItems(ui.Center).
 						Justify(ui.SpaceBetween).
 						Gap(12)
 					if isSel {
-						row.Background(theme.SelectedBg.Alpha(0.45))
+						row.Background(selBg)
 					} else if row.Hovered() {
-						row.Background(theme.SurfaceHover)
+						row.Background(hovBg)
 					}
 
 					row.Children(func() {
-						ui.Column(c).Shrink(1).Grow(1).Gap(2).Children(func() {
+						ui.Column(c).Shrink(1).Grow(1).MinWidth(0).Gap(2).Children(func() {
 							ui.Text(c, it.Label).TextColor(theme.Text).FontWeight(500)
 							if it.Description != "" {
-								ui.Text(c, it.Description).TextColor(theme.Muted).FontSize(12)
+								ui.Text(c, it.Description).TextColor(descCol).FontSize(12)
 							}
 						})
 
 						switch it.Kind {
 						case SettingToggle:
 							on := strings.EqualFold(it.CurrentValue, "true") || strings.EqualFold(it.CurrentValue, "on")
-							sw := ui.Switch(c, &on).Label("Toggle " + it.Label)
-							if sw.Changed() {
-								next := "false"
+							if WakuSwitch(c, theme, on, false, "Toggle "+it.Label) {
+								next := "true"
 								if on {
-									next = "true"
+									next = "false"
 								}
 								ev.changedID = it.ID
 								ev.newValue = next

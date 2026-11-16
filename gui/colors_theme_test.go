@@ -97,6 +97,15 @@ func TestGuiThemePresetsAndContextResolution(t *testing.T) {
 	if !dark.Dark || light.Dark {
 		t.Fatal("theme dark flags incorrect")
 	}
+	if got := ContrastRatio(dark.Accent, dark.AccentText); got < 4.5 {
+		t.Fatalf("dark Accent/AccentText contrast = %.2f, want >= 4.5", got)
+	}
+	if got := ContrastRatio(light.Accent, light.AccentText); got < 4.0 {
+		t.Fatalf("light Accent/AccentText contrast = %.2f, want >= 4.0", got)
+	}
+	if got := ContrastRatio(dark.Background, dark.TextSecondary); got < 4.5 {
+		t.Fatalf("dark Background/TextSecondary contrast = %.2f, want >= 4.5", got)
+	}
 	if Luminance(dark.Background) >= Luminance(light.Background) {
 		t.Fatal("expected dark background luminance < light background luminance")
 	}

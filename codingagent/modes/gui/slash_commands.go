@@ -1157,51 +1157,12 @@ func (m *GuiMode) ShowTreeSelector() {
 	m.setActiveDialog(dlg.Show(m.host))
 }
 
-// ShowSettingsSelector opens the categorized settings overlay.
+// ShowSettingsSelector opens the full-window Waku Settings view.
 func (m *GuiMode) ShowSettingsSelector() {
-	sess := m.Session()
-	if m == nil || m.host == nil || sess == nil || sess.SettingsManager == nil {
+	if m == nil {
 		return
 	}
-	var themes []string
-	for _, ti := range theme.GetAvailableThemesWithPaths() {
-		themes = append(themes, ti.Name)
-	}
-	var models []*ai.Model
-	if sess.ModelRegistry() != nil {
-		models = sess.ModelRegistry().GetAvailable()
-	}
-
-	dlg := NewSettingsSelectorDialog(SettingsSelectorConfig{
-		SettingsManager: sess.SettingsManager,
-		Session:         sess,
-		AvailableThemes: themes,
-		AvailableModels: models,
-		Theme:           m.currentGuiTheme(),
-		OnChange: func(id, value string) {
-			ApplySettingsChange(sess.SettingsManager, sess, id, value)
-			if id == "hideThinkingBlock" {
-				m.mu.Lock()
-				hide := sess.SettingsManager.GetHideThinkingBlock()
-				m.hideThinking = hide
-				entries := append([]gmTranscriptEntry(nil), m.entries...)
-				m.mu.Unlock()
-				for _, e := range entries {
-					if ac, ok := e.card.(*AssistantMessageCard); ok {
-						ac.SetHideThinkingBlock(hide)
-					}
-				}
-			}
-			m.updateFooterAndTitle()
-		},
-		OnThemePreview: func(themeName string) {
-			_, ts := ApplyThemeToHost(m.host, themeName)
-			if ts != nil {
-				m.applyThemeSet(ts)
-			}
-		},
-	})
-	m.setActiveDialog(dlg.Show(m.host))
+	m.OpenSettingsPage("")
 }
 
 // ShowThemeSelector opens the theme selector overlay with live preview.
