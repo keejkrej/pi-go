@@ -1158,20 +1158,22 @@ func tvRenderLinesBody(c *ui.Context, text string, maxLines int, fromTail, expan
 	if hidden > 0 && fromTail {
 		ui.Textf(c, "... (%d earlier lines, click Expand to show all)", hidden).TextColor(th.Muted).FontSize(12)
 	}
-	box := ui.Column(c).
-		FillWidth().
-		MinWidth(0).
-		ClipX().
-		Background(th.Inset).
-		Border(1, th.Border).
-		Radius(7).
-		Padding(8, 10)
+	var box ui.Element
 	if expanded {
 		box = ui.Scroll(c).
 			FillWidth().
 			MinWidth(0).
 			ClipX().
 			MaxHeight(340).
+			Background(th.Inset).
+			Border(1, th.Border).
+			Radius(7).
+			Padding(8, 10)
+	} else {
+		box = ui.Column(c).
+			FillWidth().
+			MinWidth(0).
+			ClipX().
 			Background(th.Inset).
 			Border(1, th.Border).
 			Radius(7).

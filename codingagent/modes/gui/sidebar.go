@@ -767,13 +767,7 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 									toggleCollapseKey = collapseKey
 								}
 							} else {
-								hdrBox := ui.Row(c).
-									Grow(1).
-									Shrink(1).
-									FillHeight().
-									Padding(0, 8, 0, 8).
-									AlignItems(ui.Center).
-									Label(label)
+								var hdrBox ui.Element
 								if hasItems {
 									hdrBox = ui.ButtonBase(c).
 										Grow(1).
@@ -783,6 +777,15 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 										AlignItems(ui.Center).
 										Justify(ui.Start).
 										Cursor(ui.CursorPointer).
+										Label(label)
+								} else {
+									hdrBox = ui.Row(c).
+										Grow(1).
+										Shrink(1).
+										FillHeight().
+										Padding(0, 8, 0, 8).
+										AlignItems(ui.Center).
+										Justify(ui.Start).
 										Label(label)
 								}
 								lblCol := th.TextTertiary

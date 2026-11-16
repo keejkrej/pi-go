@@ -326,7 +326,11 @@ func TestWakuChromeAndSidebarGeometryParity(t *testing.T) {
 	tt.Frame()
 
 	// Before dispatching a prompt, sidebar must NOT list an undispatched "New task" card,
-	// while still showing Today / project group header + Sidebar options filter button.
+	// while still showing left-aligned Today / project group header + Sidebar options filter button.
+	todayEmptyR := mustFind("Today")
+	if todayEmptyR.X > 24 {
+		t.Fatalf("empty Today header X = %.1f, want left-aligned <= 24", todayEmptyR.X)
+	}
 	for _, info := range tt.AccessAll() {
 		if info.Name == "New task" && info.Bounds.X < wakuSidebarDefaultWidth {
 			t.Fatalf("unexpected undispatched 'New task' card inside sidebar: %+v", info.Bounds)
@@ -434,6 +438,10 @@ func TestWakuChromeAndSidebarGeometryParity(t *testing.T) {
 		t.Fatalf("Click Updated option (2): %v", err)
 	}
 	tt.Frame()
+	todayFullR := mustFind("Today")
+	if todayFullR.X > 24 {
+		t.Fatalf("populated Today header X = %.1f, want left-aligned <= 24", todayFullR.X)
+	}
 
 	for _, clutter := range []string{"⌘K", "Sessions", " msgs", "You", "↑", "↓"} {
 		if tt.HasText(clutter) {
@@ -645,6 +653,11 @@ func TestWakuSidebarMultiProjectSwitchInvariance(t *testing.T) {
 	tt.Frame()
 	if len(listed1) != 12 {
 		t.Fatalf("initial session count = %d, want 12", len(listed1))
+	}
+	for _, grpName := range []string{"Today", "Yesterday"} {
+		if grpR, ok := tt.Find(grpName); ok && grpR.X > 24 {
+			t.Fatalf("sidebar date header %q X = %.1f, want left-aligned <= 24", grpName, grpR.X)
+		}
 	}
 
 	// Switch to 2h-old projBeta session -> count must stay 12 and Modified age must stay "2h".

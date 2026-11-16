@@ -1540,20 +1540,22 @@ func (b *BashExecutionCard) View(c *ui.Context) ui.Element {
 				ui.Textf(c, "... (%d earlier lines hidden, click Expand to show)", hiddenCount).
 					TextColor(th.TextTertiary).FontSize(12)
 			}
-			outBox := ui.Column(c).
-				FillWidth().
-				MinWidth(0).
-				ClipX().
-				Background(th.Inset).
-				Border(1, th.Border).
-				Radius(7).
-				Padding(8, 10)
+			var outBox ui.Element
 			if expanded {
 				outBox = ui.Scroll(c).
 					FillWidth().
 					MinWidth(0).
 					ClipX().
 					MaxHeight(360).
+					Background(th.Inset).
+					Border(1, th.Border).
+					Radius(7).
+					Padding(8, 10)
+			} else {
+				outBox = ui.Column(c).
+					FillWidth().
+					MinWidth(0).
+					ClipX().
 					Background(th.Inset).
 					Border(1, th.Border).
 					Radius(7).
