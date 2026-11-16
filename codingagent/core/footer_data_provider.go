@@ -451,6 +451,18 @@ func (p *FooterDataProvider) SetCwd(cwd string) {
 	p.notifyBranchChange()
 }
 
+// RefreshGitBranch clears any cached branch name and notifies listeners so callers re-read HEAD immediately.
+func (p *FooterDataProvider) RefreshGitBranch() {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.cachedBranch = nil
+	p.cachedBranchSet = false
+	p.mu.Unlock()
+	p.notifyBranchChange()
+}
+
 // Dispose stops all file watchers, pollers, and timers and clears subscribers.
 func (p *FooterDataProvider) Dispose() {
 	p.mu.Lock()

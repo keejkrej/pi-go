@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -221,6 +222,11 @@ type GuiMode struct {
 	contextPopoverOpen  bool
 	branchPopoverOpen   bool
 	thinkingPopoverOpen bool
+	modelPopoverOpen    bool
+	projectPopoverOpen  bool
+	worktreePopoverOpen bool
+	modelPicker         *wakuModelPickerState
+	workspacePicker     *wakuWorkspacePickerState
 	settingsState       *wakuSettingsState
 
 	terminalInputHandlers []core.TerminalInputHandler
@@ -228,9 +234,10 @@ type GuiMode struct {
 	editorFactory         core.EditorFactory
 	shutdownHandlers      []func()
 
-	// Overridable only inside unit tests to exercise Run lifecycle without native OS loop.
-	appRunHook  func() error
-	appQuitHook func()
+	// Overridable only inside unit tests to exercise Run lifecycle or directory picking without native OS dialogs.
+	appRunHook        func() error
+	appQuitHook       func()
+	pickDirectoryHook func() (string, error)
 }
 
 func (m *GuiMode) ensureWakuState() {
@@ -257,6 +264,12 @@ func (m *GuiMode) ensureWakuState() {
 		}
 		if m.settingsState == nil {
 			m.settingsState = newWakuSettingsState()
+		}
+		if m.modelPicker == nil {
+			m.modelPicker = newWakuModelPickerState(prefs)
+		}
+		if m.workspacePicker == nil {
+			m.workspacePicker = newWakuWorkspacePickerState(prefs)
 		}
 		m.mu.Unlock()
 	})
@@ -723,11 +736,15 @@ func (m *GuiMode) View(c *ui.Context) ui.Element {
 				sessionTitle,
 			)
 
-			// Virtualized scrollable transcript stream
-			ui.Box(c).FillWidth().Grow(1).Shrink(1).MinWidth(0).Clip().Children(func() {
-				m.scrollView.View(c, 1, func(rc *ui.Context, _ int) {
-					m.renderWakuTranscript(rc, th)
-				})
+			// Empty state or virtualized scrollable transcript stream
+			ui.Box(c).FillWidth().Grow(1).Shrink(1).MinWidth(0).MinHeight(0).Clip().Children(func() {
+				if empty, emptyCwd := m.shouldRenderWakuEmptyState(); empty {
+					renderWakuEmptyState(c, th, emptyCwd)
+				} else {
+					m.scrollView.View(c, 1, func(rc *ui.Context, _ int) {
+						m.renderWakuTranscript(rc, th)
+					})
+				}
 			})
 
 			// Floating composer card & 28px workspace status footer
@@ -1067,11 +1084,11 @@ func (m *GuiMode) bindActiveSession(ctx context.Context) {
 	m.sessionUnsub = unsub
 	m.mu.Unlock()
 
-	if m.footerProvider != nil {
-		m.footerProvider.SetCwd(sess.Cwd())
+	if fp := m.footerProviderSnapshot(); fp != nil {
+		fp.SetCwd(sess.Cwd())
 		if reg := sess.ModelRegistry(); reg != nil {
 			if avail := reg.GetAvailable(); len(avail) >= 0 {
-				m.footerProvider.SetAvailableProviderCount(len(gmUniqueProviders(avail)))
+				fp.SetAvailableProviderCount(len(gmUniqueProviders(avail)))
 			}
 		}
 	}
@@ -1214,6 +1231,183 @@ func (m *GuiMode) handleSessionReplaced() {
 	m.refreshSidebarSessions()
 	m.refreshRightPanelChanges()
 	m.refreshGitBranchesAsync()
+}
+
+func (m *GuiMode) footerProviderSnapshot() *core.FooterDataProvider {
+	if m == nil {
+		return nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.footerProvider
+}
+
+func (m *GuiMode) effectiveProjectRoot(cwd string) string {
+	cwd = strings.TrimSpace(cwd)
+	if cwd == "" {
+		return ""
+	}
+	if m != nil && m.rightPanel != nil {
+		loaded, _, isLinked, mainRoot, _, _, _ := m.rightPanel.gitWorkspaceSnapshot(cwd)
+		if loaded && isLinked && mainRoot != "" {
+			return mainRoot
+		}
+	}
+	if isLinked, mainRoot, _ := wakuDetectLinkedWorktreeQuick(cwd); isLinked && mainRoot != "" {
+		return mainRoot
+	}
+	return cwd
+}
+
+func (m *GuiMode) switchProjectDirectory(targetDir string) {
+	if m == nil {
+		return
+	}
+	m.ensureWakuState()
+
+	targetDir = strings.TrimSpace(targetDir)
+	if targetDir == "" {
+		return
+	}
+	if abs, err := filepath.Abs(targetDir); err == nil {
+		targetDir = abs
+	}
+	targetDir = filepath.Clean(targetDir)
+	info, err := os.Stat(targetDir)
+	if err != nil {
+		m.ShowError("Project directory unavailable: " + err.Error())
+		return
+	}
+	if !info.IsDir() {
+		m.ShowError("Not a directory: " + targetDir)
+		return
+	}
+
+	sess := m.Session()
+	curCwd := gmRuntimeCwd(m.runtime)
+	if sess != nil && sess.Cwd() != "" {
+		curCwd = sess.Cwd()
+	}
+	if curCwd != "" && wakuResolvePath(curCwd) == wakuResolvePath(targetDir) {
+		return
+	}
+
+	var savedText string
+	var savedAtts []gui.EditorAttachment
+	if m.editor != nil {
+		savedText = m.editor.Text()
+		savedAtts = m.editor.Attachments()
+	}
+
+	prevRoot := m.effectiveProjectRoot(curCwd)
+	nextRoot := m.effectiveProjectRoot(targetDir)
+	if prevRoot != "" {
+		m.workspacePicker.recordProject(prevRoot)
+	}
+	if nextRoot != "" {
+		m.workspacePicker.recordProject(nextRoot)
+	}
+	m.saveLayoutPrefs()
+
+	if m.runtime == nil {
+		return
+	}
+
+	go func() {
+		ctx := m.currentCtx()
+		res, err := m.runtime.NewSessionInDir(ctx, targetDir)
+		if err != nil {
+			m.postUI(func() {
+				m.ShowError("Failed to switch project: " + err.Error())
+			})
+			return
+		}
+		if res != nil && res.Cancelled {
+			return
+		}
+		m.postUI(func() {
+			m.handleSessionReplaced()
+			if m.editor != nil {
+				if savedText != "" && m.editor.Text() == "" {
+					m.editor.SetText(savedText)
+				}
+				if len(savedAtts) > 0 && len(m.editor.Attachments()) == 0 {
+					for _, att := range savedAtts {
+						if att.Kind == gui.AttachmentImage && len(att.Data) > 0 {
+							m.editor.AddImageAttachment(att.Name, att.Data)
+						} else if att.Path != "" {
+							m.editor.AddFileAttachment(att.Path)
+						}
+					}
+				}
+			}
+			m.checkProjectTrustOnStartup(ctx, targetDir)
+		})
+	}()
+}
+
+func (m *GuiMode) promptAddNewProject() {
+	if m == nil {
+		return
+	}
+	m.ensureWakuState()
+
+	m.mu.Lock()
+	hook := m.pickDirectoryHook
+	skipWin := m.opts.SkipWindow
+	m.mu.Unlock()
+
+	var defaultPath string
+	if sess := m.Session(); sess != nil && sess.Cwd() != "" {
+		defaultPath = sess.Cwd()
+	} else {
+		defaultPath = gmRuntimeCwd(m.runtime)
+	}
+
+	var parentWin *mygo.Window
+	if m.host != nil {
+		parentWin = m.host.Window()
+	}
+
+	go func() {
+		var chosen string
+		if hook != nil {
+			dir, err := hook()
+			if err != nil {
+				m.postUI(func() {
+					m.ShowError("Failed to select folder: " + err.Error())
+				})
+				return
+			}
+			chosen = strings.TrimSpace(dir)
+		} else if skipWin {
+			return
+		} else {
+			paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+				Parent:            parentWin,
+				Title:             "Open Project Folder",
+				ButtonLabel:       "Open",
+				DefaultPath:       defaultPath,
+				Directory:         true,
+				CreateDirectories: true,
+			})
+			if err != nil {
+				m.postUI(func() {
+					m.ShowError("Failed to open folder dialog: " + err.Error())
+				})
+				return
+			}
+			if len(paths) > 0 {
+				chosen = strings.TrimSpace(paths[0])
+			}
+		}
+		if chosen == "" {
+			return
+		}
+		m.postUI(func() {
+			m.switchProjectDirectory(chosen)
+		})
+	}()
 }
 
 func (m *GuiMode) rebuildTranscript() {
@@ -1582,13 +1776,14 @@ func (m *GuiMode) buildSafeFooterState(sess *core.AgentSession) FooterState {
 	m.mu.Lock()
 	sessionName := m.sessionName
 	workingMsg := m.workingMessage
+	fp := m.footerProvider
 	m.mu.Unlock()
 
 	var st FooterState
 	st.SessionName = sessionName
 	st.WorkingMessage = workingMsg
 
-	if fp := m.footerProvider; fp != nil {
+	if fp != nil {
 		st.GitBranch = fp.GetGitBranch()
 		if raw := fp.GetExtensionStatuses(); len(raw) > 0 {
 			cp := make(map[string]string, len(raw))
@@ -1949,7 +2144,7 @@ func (m *GuiMode) handleAppShortcuts(c *ui.Context) {
 	if km == nil {
 		return
 	}
-	km.OnAppContext(c, gui.AppModelSelect, func() { m.ShowModelSelector() })
+	km.OnAppContext(c, gui.AppModelSelect, func() { m.ToggleModelPickerPopover() })
 	km.OnAppContext(c, gui.AppModelCycleForward, func() { m.cycleModel("forward") })
 	km.OnAppContext(c, gui.AppModelCycleBackward, func() { m.cycleModel("backward") })
 	km.OnAppContext(c, gui.AppThinkingCycle, func() { m.cycleThinkingLevel() })
@@ -2058,12 +2253,138 @@ func (m *GuiMode) handleDoubleCtrlC() {
 	}
 }
 
+func (m *GuiMode) shouldRenderWakuEmptyState() (bool, string) {
+	if m == nil {
+		return false, ""
+	}
+	sess := m.Session()
+	cwd := gmRuntimeCwd(m.runtime)
+	if sess != nil && sess.Cwd() != "" {
+		cwd = sess.Cwd()
+	}
+
+	m.mu.Lock()
+	hdrBanner := m.headerBanner
+	ftrBanner := m.footerBanner
+	bashRunning := m.bashRunning
+	hasConv := false
+	hasHdrAlerts := false
+	for _, e := range m.entries {
+		if e.kind == "header" {
+			if ha, ok := e.card.(*HeaderAnnouncement); ok && ha != nil && ha.HasActiveAlerts() {
+				hasHdrAlerts = true
+			}
+			continue
+		}
+		hasConv = true
+		break
+	}
+	m.mu.Unlock()
+
+	if hasConv || hasHdrAlerts || strings.TrimSpace(hdrBanner) != "" || strings.TrimSpace(ftrBanner) != "" {
+		return false, cwd
+	}
+	if sess != nil && (sess.IsStreaming() || sess.IsCompacting() || sess.IsRetrying()) {
+		return false, cwd
+	}
+	if bashRunning {
+		return false, cwd
+	}
+	if m.statusBanner != nil {
+		sbWorking, _, sbCompacting, sbRetrying, _, _, _, _, sbNotice, _ := m.statusBanner.StateSnapshot()
+		if sbWorking || sbCompacting || sbRetrying || strings.TrimSpace(sbNotice) != "" {
+			return false, cwd
+		}
+	}
+	if proj := m.effectiveProjectRoot(cwd); proj != "" {
+		return true, proj
+	}
+	return true, cwd
+}
+
+func (m *GuiMode) syncQueueStateFromSession(sess *core.AgentSession) {
+	if m == nil || sess == nil {
+		return
+	}
+	steering := sess.GetSteeringMessages()
+	followUp := sess.GetFollowUpMessages()
+	m.mu.Lock()
+	m.steeringQueue = append([]string(nil), steering...)
+	m.followUpQueue = append([]string(nil), followUp...)
+	m.mu.Unlock()
+	if m.queueBanner != nil {
+		m.queueBanner.SetQueues(steering, followUp)
+	}
+	m.updateFooterAndTitle()
+	if m.host != nil {
+		m.host.RequestRender()
+	}
+}
+
+func (m *GuiMode) mutateQueuedMessage(isSteering bool, index int, promoteToSteer, loadIntoEditor bool) {
+	sess := m.Session()
+	if m == nil || sess == nil || index < 0 {
+		return
+	}
+	cleared := sess.ClearQueue()
+	steering := cleared.Steering
+	followUp := cleared.FollowUp
+
+	var target string
+	if isSteering {
+		if index >= len(steering) {
+			return
+		}
+		target = steering[index]
+		steering = append(steering[:index], steering[index+1:]...)
+	} else {
+		if index >= len(followUp) {
+			return
+		}
+		target = followUp[index]
+		followUp = append(followUp[:index], followUp[index+1:]...)
+		if promoteToSteer && target != "" {
+			steering = append(steering, target)
+		}
+	}
+
+	ctx := m.currentCtx()
+	for _, msg := range steering {
+		_, _ = sess.Steer(ctx, msg, nil)
+	}
+	for _, msg := range followUp {
+		_, _ = sess.FollowUp(ctx, msg, nil)
+	}
+
+	if loadIntoEditor && m.editor != nil && target != "" {
+		restored := target
+		if cur := strings.TrimSpace(m.editor.Text()); cur != "" {
+			restored = target + "\n\n" + cur
+		}
+		m.editor.SetText(restored)
+	}
+	m.syncQueueStateFromSession(sess)
+}
+
+func (m *GuiMode) removeQueuedMessage(isSteering bool, index int) {
+	m.mutateQueuedMessage(isSteering, index, false, false)
+}
+
+func (m *GuiMode) editQueuedMessage(isSteering bool, index int) {
+	m.mutateQueuedMessage(isSteering, index, false, true)
+}
+
+func (m *GuiMode) steerQueuedFollowUp(index int) {
+	m.mutateQueuedMessage(false, index, true, false)
+}
+
 func (m *GuiMode) restoreQueuedMessages() {
 	sess := m.Session()
 	if sess == nil || m.editor == nil {
 		return
 	}
 	cleared := sess.ClearQueue()
+	m.syncQueueStateFromSession(sess)
 	var parts []string
 	parts = append(parts, cleared.Steering...)
 	parts = append(parts, cleared.FollowUp...)

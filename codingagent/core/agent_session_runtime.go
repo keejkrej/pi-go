@@ -193,9 +193,37 @@ func CreateAgentSessionRuntime(
 // NewSession starts a fresh session (persisted if the current session is persisted)
 // after running session_before_switch and settling the outgoing session.
 func (r *AgentSessionRuntime) NewSession(ctx context.Context, options ...*NewSessionRuntimeOptions) (*NewSessionResult, error) {
+	return r.newSessionWithCwd(ctx, "", false, options...)
+}
+
+// NewSessionInDir validates that cwd is an existing directory and starts a fresh
+// session anchored in that workspace directory.
+func (r *AgentSessionRuntime) NewSessionInDir(ctx context.Context, cwd string, options ...*NewSessionRuntimeOptions) (*NewSessionResult, error) {
+	return r.newSessionWithCwd(ctx, cwd, true, options...)
+}
+
+func (r *AgentSessionRuntime) newSessionWithCwd(ctx context.Context, targetCwd string, explicitDir bool, options ...*NewSessionRuntimeOptions) (*NewSessionResult, error) {
 	var opts NewSessionRuntimeOptions
 	if len(options) > 0 && options[0] != nil {
 		opts = *options[0]
+	}
+
+	if explicitDir {
+		targetCwd = strings.TrimSpace(targetCwd)
+		if targetCwd == "" {
+			return nil, fmt.Errorf("project directory cannot be empty")
+		}
+		if abs, err := filepath.Abs(targetCwd); err == nil {
+			targetCwd = abs
+		}
+		targetCwd = filepath.Clean(targetCwd)
+		info, err := os.Stat(targetCwd)
+		if err != nil {
+			return nil, fmt.Errorf("project directory unavailable: %w", err)
+		}
+		if !info.IsDir() {
+			return nil, fmt.Errorf("not a directory: %s", targetCwd)
+		}
 	}
 
 	r.mu.Lock()
@@ -205,6 +233,11 @@ func (r *AgentSessionRuntime) NewSession(ctx context.Context, options ...*NewSes
 	}
 	outgoingSession := r.Session
 	outgoingServices := r.Services
+	oldCwd := r.cwd
+	agentDir := r.agentDir
+	if !explicitDir {
+		targetCwd = oldCwd
+	}
 	r.mu.Unlock()
 
 	if cancelled, err := outgoingSession.emitBeforeSwitch(ctx, "new", nil); err != nil {
@@ -220,11 +253,17 @@ func (r *AgentSessionRuntime) NewSession(ctx context.Context, options ...*NewSes
 	var err error
 	if outgoingSession.SessionManager.IsPersisted() {
 		sessionDir := outgoingSession.SessionManager.GetSessionDir()
+		if explicitDir {
+			defaultOld := GetDefaultSessionDir(oldCwd, agentDir)
+			if sessionDir == "" || filepath.Clean(sessionDir) == filepath.Clean(defaultOld) {
+				sessionDir = GetDefaultSessionDir(targetCwd, agentDir)
+			}
+		}
 		var newOpts *NewSessionOptions
 		if opts.ParentSession != nil {
 			newOpts = &NewSessionOptions{ParentSession: opts.ParentSession}
 		}
-		nextSM, err = SessionManagerCreate(r.cwd, sessionDir, newOpts)
+		nextSM, err = SessionManagerCreate(targetCwd, sessionDir, newOpts)
 		if err != nil {
 			return nil, err
 		}
@@ -234,7 +273,7 @@ func (r *AgentSessionRuntime) NewSession(ctx context.Context, options ...*NewSes
 			newOpts = &NewSessionOptions{ParentSession: opts.ParentSession}
 		}
 		var inMemErr error
-		nextSM, inMemErr = SessionManagerInMemoryWith(r.cwd, newOpts, nil)
+		nextSM, inMemErr = SessionManagerInMemoryWith(targetCwd, newOpts, nil)
 		if inMemErr != nil {
 			return nil, inMemErr
 		}

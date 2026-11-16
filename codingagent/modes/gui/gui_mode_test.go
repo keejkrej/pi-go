@@ -459,7 +459,7 @@ func TestGuiModePromptStreamingAndToolExecution(t *testing.T) {
 	close(releaseTool)
 
 	tgmWaitUntil(t, mode, tt, 5*time.Second, "final assistant answer after tool completion", func() bool {
-		return !mode.Session().IsStreaming() && tt.HasText("final streamed answer") && tt.HasText("faux-1")
+		return !mode.Session().IsStreaming() && tt.HasText("final streamed answer") && (tt.HasText("Faux One") || tt.HasText("faux-1"))
 	})
 
 	// Toggle expanded tools (Ctrl+O) and thinking visibility (Ctrl+T).
@@ -537,12 +537,12 @@ func TestGuiModeQueuesSteeringFollowUpAndRestore(t *testing.T) {
 	tt.Key(ui.Alt, ui.KeyEnter)
 
 	tgmWaitUntil(t, mode, tt, 3*time.Second, "follow-up banner rendered", func() bool {
-		return mode.Session().PendingMessageCount() == 1 && tt.HasText("Follow-up (1)") && tt.HasText("queued follow")
+		return mode.Session().PendingMessageCount() == 1 && tt.HasText("queued follow") && tt.HasText("Steer queued message 1")
 	})
 
-	// Clear Queue restores queued text into editor, then refocus editor to re-submit.
-	if err := tt.Click("Clear Queue"); err != nil {
-		t.Fatalf("Click Clear Queue: %v", err)
+	// Clicking queued row restores queued text into editor, then refocus editor to re-submit.
+	if err := tt.Click("Edit queued message 1"); err != nil {
+		t.Fatalf("Click Edit queued message 1: %v", err)
 	}
 	tt.Frame()
 	if got := mode.editor.Text(); !strings.Contains(got, "queued follow") {

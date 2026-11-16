@@ -766,7 +766,7 @@ func (km *KeybindingsManager) OnAppContext(c *ui.Context, action AppAction, fn f
 	}
 	for _, sc := range km.AppBindings(action) {
 		if sc.Key != ui.KeyUnknown {
-			c.OnShortcut(sc.Mods, sc.Key, fn)
+			c.OnWindowShortcut(sc.Mods, sc.Key, fn)
 		}
 	}
 }

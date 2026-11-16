@@ -39,6 +39,8 @@ type wakuLayoutPrefs struct {
 	RightPanelWidth float32  `json:"rightPanelWidth"`
 	RightPanelTab   string   `json:"rightPanelTab,omitzero"`
 	PinnedSessions  []string `json:"pinnedSessions,omitzero"`
+	FavoriteModels  []string `json:"favoriteModels,omitzero"`
+	RecentProjects  []string `json:"recentProjects,omitzero"`
 }
 
 func wakuNormalizeGroupBy(v string) string {
@@ -81,6 +83,15 @@ type wakuSidebarState struct {
 	loadSeq     atomic.Uint64
 	persist     bool
 	initDone    bool
+}
+
+func (s *wakuSidebarState) sessionsSnapshot() []core.SessionInfo {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]core.SessionInfo(nil), s.sessions...)
 }
 
 func newWakuSidebarState(skipPersist bool) *wakuSidebarState {
@@ -164,6 +175,13 @@ func (m *GuiMode) saveLayoutPrefs() {
 	prefs.RightPanelWidth = rp.width
 	prefs.RightPanelTab = rp.activeTab
 	rp.mu.Unlock()
+
+	if m.modelPicker != nil {
+		prefs.FavoriteModels = m.modelPicker.favoriteKeys()
+	}
+	if m.workspacePicker != nil {
+		prefs.RecentProjects = m.workspacePicker.recentProjectsCopy()
+	}
 
 	raw, err := jsonx.MarshalIndent(prefs, "  ")
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/egoist/mygo/ui/editor"
 	"github.com/keejkrej/pi-go/ai"
 	"github.com/keejkrej/pi-go/codingagent/core"
+	"github.com/keejkrej/pi-go/codingagent/utils"
 	"github.com/keejkrej/pi-go/gui"
 )
 
@@ -33,25 +34,35 @@ type wakuChangedFile struct {
 	patch  string
 }
 
+type wakuGitWorktree struct {
+	Path   string
+	Branch string
+	IsMain bool
+}
+
 type wakuRightPanelState struct {
-	mu             sync.Mutex
-	open           bool
-	width          float32
-	activeTab      string // "changes" or "tree"
-	files          []wakuChangedFile
-	selectedPath   string
-	diffViewer     *gui.DiffViewer
-	diffSig        string
-	diffSideBySide bool
-	loading        bool
-	isGitRepo      bool
-	branches       []string
-	currentBranch  string
-	treeItems      []wakuTreeFlatItem
-	treeLeafID     string
-	hasTreeSession bool
-	split          wakuSplitDragTracker
-	refreshSeq     atomic.Uint64
+	mu               sync.Mutex
+	open             bool
+	width            float32
+	activeTab        string // "changes" or "tree"
+	files            []wakuChangedFile
+	selectedPath     string
+	diffViewer       *gui.DiffViewer
+	diffSig          string
+	diffSideBySide   bool
+	loading          bool
+	gitCwd           string
+	isGitRepo        bool
+	isLinkedWorktree bool
+	mainRepoRoot     string
+	worktrees        []wakuGitWorktree
+	branches         []string
+	currentBranch    string
+	treeItems        []wakuTreeFlatItem
+	treeLeafID       string
+	hasTreeSession   bool
+	split            wakuSplitDragTracker
+	refreshSeq       atomic.Uint64
 }
 
 func newWakuRightPanelState(prefs *wakuLayoutPrefs) *wakuRightPanelState {
@@ -88,6 +99,24 @@ func (r *wakuRightPanelState) gitBranchesSnapshot() ([]string, string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]string(nil), r.branches...), r.currentBranch
+}
+
+func (r *wakuRightPanelState) gitWorkspaceSnapshot(cwd string) (
+	loaded, isGitRepo, isLinkedWorktree bool,
+	mainRepoRoot, currentBranch string,
+	worktrees []wakuGitWorktree,
+	branches []string,
+) {
+	if r == nil {
+		return false, false, false, "", "", nil, nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if cwd == "" || r.gitCwd == "" || wakuResolvePath(r.gitCwd) != wakuResolvePath(cwd) {
+		return false, false, false, "", "", nil, nil
+	}
+	return true, r.isGitRepo, r.isLinkedWorktree, r.mainRepoRoot, r.currentBranch,
+		append([]wakuGitWorktree(nil), r.worktrees...), append([]string(nil), r.branches...)
 }
 
 func (m *GuiMode) refreshRightPanelTreeSnapshot() {
@@ -236,43 +265,192 @@ func (m *GuiMode) refreshRightPanelChanges() {
 	}()
 }
 
-func (m *GuiMode) refreshGitBranchesAsync() {
-	if m == nil {
-		return
+func wakuDetectLinkedWorktreeQuick(cwd string) (isLinked bool, mainRepoRoot, worktreeName string) {
+	dir := strings.TrimSpace(cwd)
+	if dir == "" {
+		return false, "", ""
 	}
-	m.ensureWakuState()
-	rp := m.rightPanel
+	dir = filepath.Clean(dir)
+	for depth := 0; depth < 6; depth++ {
+		dotGit := filepath.Join(dir, ".git")
+		info, err := os.Lstat(dotGit)
+		if err == nil {
+			if info.IsDir() {
+				return false, "", ""
+			}
+			if info.Mode().IsRegular() {
+				raw, rErr := os.ReadFile(dotGit)
+				if rErr == nil {
+					for _, ln := range strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n") {
+						ln = strings.TrimSpace(ln)
+						if strings.HasPrefix(strings.ToLower(ln), "gitdir:") {
+							gd := strings.TrimSpace(ln[len("gitdir:"):])
+							if gd == "" {
+								break
+							}
+							if !filepath.IsAbs(gd) {
+								gd = filepath.Join(dir, gd)
+							}
+							gd = filepath.Clean(gd)
+							if filepath.Base(filepath.Dir(gd)) == "worktrees" {
+								commonGit := filepath.Dir(filepath.Dir(gd))
+								root := filepath.Dir(commonGit)
+								if st, sErr := os.Stat(root); sErr == nil && st.IsDir() {
+									return true, root, filepath.Base(dir)
+								}
+							}
+							break
+						}
+					}
+				}
+			}
+			return false, "", ""
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return false, "", ""
+}
+
+func wakuParseGitWorktreeListPorcelain(raw string) []wakuGitWorktree {
+	var out []wakuGitWorktree
+	blocks := strings.Split(strings.ReplaceAll(raw, "\r\n", "\n"), "\n\n")
+	for _, blk := range blocks {
+		blk = strings.TrimSpace(blk)
+		if blk == "" {
+			continue
+		}
+		var wt wakuGitWorktree
+		for _, ln := range strings.Split(blk, "\n") {
+			ln = strings.TrimSpace(ln)
+			switch {
+			case strings.HasPrefix(ln, "worktree "):
+				wt.Path = filepath.Clean(strings.TrimSpace(strings.TrimPrefix(ln, "worktree ")))
+			case strings.HasPrefix(ln, "branch "):
+				br := strings.TrimSpace(strings.TrimPrefix(ln, "branch "))
+				br = strings.TrimPrefix(br, "refs/heads/")
+				wt.Branch = br
+			}
+		}
+		if wt.Path != "" {
+			wt.IsMain = len(out) == 0
+			out = append(out, wt)
+		}
+	}
+	return out
+}
+
+func wakuSanitizePathSegment(name string) string {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(name) {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
+	}
+	cleaned := strings.Trim(b.String(), "-")
+	if cleaned == "" {
+		return "workspace"
+	}
+	return cleaned
+}
+
+func (m *GuiMode) activeWorkspaceCwd() string {
+	if m == nil {
+		return ""
+	}
 	sess := m.Session()
 	cwd := gmRuntimeCwd(m.runtime)
 	if sess != nil && sess.Cwd() != "" {
 		cwd = sess.Cwd()
 	}
+	return cwd
+}
+
+func (m *GuiMode) refreshGitBranchesSync(cwd string) {
+	if m == nil || strings.TrimSpace(cwd) == "" {
+		return
+	}
+	m.ensureWakuState()
+	rp := m.rightPanel
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	topOut, topErr := exec.CommandContext(ctx, "git", "-C", cwd, "rev-parse", "--show-toplevel").Output()
+	if topErr != nil {
+		rp.mu.Lock()
+		rp.gitCwd = cwd
+		rp.isGitRepo = false
+		rp.isLinkedWorktree = false
+		rp.mainRepoRoot = ""
+		rp.worktrees = nil
+		rp.branches = nil
+		rp.currentBranch = ""
+		rp.mu.Unlock()
+		return
+	}
+	toplevel := filepath.Clean(strings.TrimSpace(string(topOut)))
+
+	curOut, _ := exec.CommandContext(ctx, "git", "-C", cwd, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	curBranch := strings.TrimSpace(string(curOut))
+
+	listOut, err := exec.CommandContext(ctx, "git", "-C", cwd, "branch", "--format=%(refname:short)").Output()
+	var branches []string
+	if err == nil {
+		for _, ln := range strings.Split(string(listOut), "\n") {
+			if trimmed := strings.TrimSpace(ln); trimmed != "" {
+				branches = append(branches, trimmed)
+			}
+		}
+	}
+
+	wtOut, wtErr := exec.CommandContext(ctx, "git", "-C", cwd, "worktree", "list", "--porcelain").Output()
+	var worktrees []wakuGitWorktree
+	if wtErr == nil {
+		worktrees = wakuParseGitWorktreeListPorcelain(string(wtOut))
+	}
+
+	mainRoot := toplevel
+	if len(worktrees) > 0 && worktrees[0].Path != "" {
+		mainRoot = worktrees[0].Path
+	}
+	isLinked := mainRoot != "" && wakuResolvePath(toplevel) != wakuResolvePath(mainRoot)
+	if !isLinked && wtErr != nil {
+		if qLinked, qMain, _ := wakuDetectLinkedWorktreeQuick(toplevel); qLinked && qMain != "" {
+			isLinked = true
+			mainRoot = qMain
+		}
+	}
+
+	rp.mu.Lock()
+	rp.gitCwd = cwd
+	rp.isGitRepo = true
+	rp.isLinkedWorktree = isLinked
+	rp.mainRepoRoot = mainRoot
+	rp.worktrees = worktrees
+	rp.branches = branches
+	rp.currentBranch = curBranch
+	rp.mu.Unlock()
+}
+
+func (m *GuiMode) refreshGitBranchesAsync() {
+	if m == nil {
+		return
+	}
+	m.ensureWakuState()
+	cwd := m.activeWorkspaceCwd()
 	if cwd == "" {
 		return
 	}
 
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-
-		curOut, _ := exec.CommandContext(ctx, "git", "-C", cwd, "rev-parse", "--abbrev-ref", "HEAD").Output()
-		curBranch := strings.TrimSpace(string(curOut))
-
-		listOut, err := exec.CommandContext(ctx, "git", "-C", cwd, "branch", "--format=%(refname:short)").Output()
-		var branches []string
-		if err == nil {
-			for _, ln := range strings.Split(string(listOut), "\n") {
-				if trimmed := strings.TrimSpace(ln); trimmed != "" {
-					branches = append(branches, trimmed)
-				}
-			}
-		}
-
-		rp.mu.Lock()
-		rp.branches = branches
-		rp.currentBranch = curBranch
-		rp.mu.Unlock()
-
+		m.refreshGitBranchesSync(cwd)
 		m.postUI(func() {
 			if m.host != nil {
 				m.host.RequestRender()
@@ -285,11 +463,7 @@ func (m *GuiMode) checkoutGitBranch(branch string) {
 	if m == nil || strings.TrimSpace(branch) == "" {
 		return
 	}
-	sess := m.Session()
-	cwd := gmRuntimeCwd(m.runtime)
-	if sess != nil && sess.Cwd() != "" {
-		cwd = sess.Cwd()
-	}
+	cwd := m.activeWorkspaceCwd()
 	if cwd == "" {
 		return
 	}
@@ -309,10 +483,131 @@ func (m *GuiMode) checkoutGitBranch(branch string) {
 			return
 		}
 		m.postUI(func() {
+			if fp := m.footerProviderSnapshot(); fp != nil {
+				fp.RefreshGitBranch()
+			}
 			m.ShowInfo("Branch", "Switched to "+branch)
 			m.updateFooterAndTitle()
 			m.refreshGitBranchesAsync()
 			m.refreshRightPanelChanges()
+		})
+	}()
+}
+
+func (m *GuiMode) createAndCheckoutGitBranch(branchName string) {
+	if m == nil {
+		return
+	}
+	branchName = strings.TrimSpace(branchName)
+	if branchName == "" || strings.ContainsAny(branchName, " \t\r\n") {
+		m.ShowError("Invalid branch name")
+		return
+	}
+	cwd := m.activeWorkspaceCwd()
+	if cwd == "" {
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(ctx, "git", "-C", cwd, "checkout", "-b", branchName).CombinedOutput()
+		if err != nil {
+			m.postUI(func() {
+				msg := strings.TrimSpace(string(out))
+				if msg == "" {
+					msg = err.Error()
+				}
+				m.ShowError("git checkout -b failed: " + msg)
+			})
+			return
+		}
+		m.postUI(func() {
+			if fp := m.footerProviderSnapshot(); fp != nil {
+				fp.RefreshGitBranch()
+			}
+			m.ShowInfo("Branch", "Created and switched to "+branchName)
+			m.updateFooterAndTitle()
+			m.refreshGitBranchesAsync()
+			m.refreshRightPanelChanges()
+		})
+	}()
+}
+
+func (m *GuiMode) createAndSwitchGitWorktree() {
+	if m == nil {
+		return
+	}
+	cwd := m.activeWorkspaceCwd()
+	if cwd == "" {
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		topOut, topErr := exec.CommandContext(ctx, "git", "-C", cwd, "rev-parse", "--show-toplevel").Output()
+		if topErr != nil {
+			m.postUI(func() {
+				m.ShowError("Cannot create worktree outside a git repository")
+			})
+			return
+		}
+		mainRoot := filepath.Clean(strings.TrimSpace(string(topOut)))
+		if wtOut, wtErr := exec.CommandContext(ctx, "git", "-C", cwd, "worktree", "list", "--porcelain").Output(); wtErr == nil {
+			if list := wakuParseGitWorktreeListPorcelain(string(wtOut)); len(list) > 0 && list[0].Path != "" {
+				mainRoot = list[0].Path
+			}
+		}
+
+		wtBaseDir := filepath.Join(utils.GetAgentDir(), "worktrees", wakuSanitizePathSegment(filepath.Base(mainRoot)))
+		if mkErr := os.MkdirAll(wtBaseDir, 0o755); mkErr != nil {
+			m.postUI(func() {
+				m.ShowError("Failed to prepare worktrees directory: " + mkErr.Error())
+			})
+			return
+		}
+
+		stamp := time.Now().Format("0102-150405")
+		var wtName, wtPath string
+		for idx := 0; idx < 100; idx++ {
+			candidate := "wt-" + stamp
+			if idx > 0 {
+				candidate = fmt.Sprintf("wt-%s-%d", stamp, idx)
+			}
+			candPath := filepath.Join(wtBaseDir, candidate)
+			if _, statErr := os.Stat(candPath); statErr == nil {
+				continue
+			}
+			if exec.CommandContext(ctx, "git", "-C", mainRoot, "show-ref", "--verify", "--quiet", "refs/heads/"+candidate).Run() == nil {
+				continue
+			}
+			wtName = candidate
+			wtPath = candPath
+			break
+		}
+		if wtName == "" {
+			m.postUI(func() {
+				m.ShowError("Failed to allocate unique worktree name")
+			})
+			return
+		}
+
+		out, err := exec.CommandContext(ctx, "git", "-C", mainRoot, "worktree", "add", "-b", wtName, wtPath).CombinedOutput()
+		if err != nil {
+			m.postUI(func() {
+				msg := strings.TrimSpace(string(out))
+				if msg == "" {
+					msg = err.Error()
+				}
+				m.ShowError("git worktree add failed: " + msg)
+			})
+			return
+		}
+		m.postUI(func() {
+			m.ShowInfo("Worktree", "Created worktree "+wtName)
+			m.switchProjectDirectory(wtPath)
 		})
 	}()
 }

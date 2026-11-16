@@ -412,7 +412,7 @@ func (m *GuiMode) runModelCommand(ctx context.Context, args string) {
 		return
 	}
 	if strings.TrimSpace(args) == "" {
-		m.postUI(func() { m.ShowModelSelector() })
+		m.postUI(func() { m.ToggleModelPickerPopover() })
 		return
 	}
 	reg := sess.ModelRegistry()
@@ -983,6 +983,42 @@ func (m *GuiMode) gscOAuthProviders(ctx context.Context, rt *core.ModelRuntime) 
 // Modal Selector Dialog Openers
 // ============================================================================
 
+// applySelectedModel updates the active session model and optional thinking level,
+// running asynchronously when extension hooks are registered or a turn is active.
+func (m *GuiMode) applySelectedModel(model *ai.Model, thinkingOverride *agent.ThinkingLevel) {
+	sess := m.Session()
+	if m == nil || sess == nil || model == nil {
+		return
+	}
+	apply := func() error {
+		if err := sess.SetModel(m.currentCtx(), model); err != nil {
+			return err
+		}
+		if thinkingOverride != nil {
+			sess.SetThinkingLevel(*thinkingOverride)
+		}
+		return nil
+	}
+	hasExtHook := sess.ExtensionRunner() != nil && sess.ExtensionRunner().HasHandlers("model_select")
+	if !hasExtHook && !sess.IsStreaming() && !sess.IsCompacting() {
+		if err := apply(); err != nil {
+			m.ShowError(err.Error())
+			return
+		}
+		m.updateFooterAndTitle()
+		return
+	}
+	m.sessionMutationDepth.Add(1)
+	go func() {
+		defer m.sessionMutationDepth.Add(-1)
+		if err := apply(); err != nil {
+			m.postUI(func() { m.ShowError(err.Error()) })
+			return
+		}
+		m.postUI(func() { m.updateFooterAndTitle() })
+	}()
+}
+
 // ShowModelSelector opens the searchable model selector overlay.
 func (m *GuiMode) ShowModelSelector() {
 	sess := m.Session()
@@ -997,36 +1033,7 @@ func (m *GuiMode) ShowModelSelector() {
 		ModelRegistry:   sess.ModelRegistry(),
 		Theme:           m.currentGuiTheme(),
 		OnSelect: func(model *ai.Model, thinkingOverride *agent.ThinkingLevel) {
-			if model == nil {
-				return
-			}
-			apply := func() error {
-				if err := sess.SetModel(m.currentCtx(), model); err != nil {
-					return err
-				}
-				if thinkingOverride != nil {
-					sess.SetThinkingLevel(*thinkingOverride)
-				}
-				return nil
-			}
-			hasExtHook := sess.ExtensionRunner() != nil && sess.ExtensionRunner().HasHandlers("model_select")
-			if !hasExtHook && !sess.IsStreaming() && !sess.IsCompacting() {
-				if err := apply(); err != nil {
-					m.ShowError(err.Error())
-					return
-				}
-				m.updateFooterAndTitle()
-				return
-			}
-			m.sessionMutationDepth.Add(1)
-			go func() {
-				defer m.sessionMutationDepth.Add(-1)
-				if err := apply(); err != nil {
-					m.postUI(func() { m.ShowError(err.Error()) })
-					return
-				}
-				m.postUI(func() { m.updateFooterAndTitle() })
-			}()
+			m.applySelectedModel(model, thinkingOverride)
 		},
 	})
 	m.setActiveDialog(dlg.Show(m.host))
