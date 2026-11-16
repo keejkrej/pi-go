@@ -5322,7 +5322,7 @@ func (m *GuiMode) ShowCommandPalette() {
 			Label:       "Select Model…",
 			Description: "Switch the active provider and model",
 			Badge:       "/model",
-			OnRun:       func() { m.ShowModelSelector() },
+			OnRun:       func() { m.ToggleModelPickerPopover() },
 		},
 		{
 			ID:          "action:select-thinking",

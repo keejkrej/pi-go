@@ -53,14 +53,14 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 	var toggleTurnKey string
 	var openReviewFile string
 
-	wrap := ui.Column(c).FillWidth().MinWidth(0).ClipX().AlignItems(ui.Center)
+	wrap := ui.Column(c).FillWidth().MinWidth(0).ClipX().Padding(0, 20, 0, 20).AlignItems(ui.Center)
 	wrap.Children(func() {
 		col := ui.Column(c).
 			FillWidth().
 			MinWidth(0).
 			ClipX().
 			MaxWidth(wakuContentMaxWidth).
-			Padding(22, 20, 22, 20).
+			Padding(22, 0, 22, 0).
 			Gap(14)
 
 		col.Children(func() {
@@ -81,9 +81,9 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 				convEntries = append(convEntries, e)
 			}
 
-			// Show Waku Empty State when conversation has no turns yet and nothing is running.
+			// Fallback empty state when transcript banners exist without conversation entries.
 			if len(convEntries) == 0 && !isBusy {
-				renderWakuEmptyState(c, th, cwd)
+				renderWakuEmptyStateContent(c, th, cwd)
 			}
 
 			// Partition conversation entries into user/standalone cards and assistant+tool turn clusters.
@@ -348,28 +348,46 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 	}
 }
 
-func renderWakuEmptyState(c *ui.Context, th *gui.GuiTheme, cwd string) {
+func wakuEmptyStateHeading(cwd string) string {
 	projName := filepath.Base(cwd)
-	heading := "What should we build?"
 	if projName != "" && projName != "." && projName != "/" {
-		heading = "What should we build in " + projName + "?"
+		return "What should we build in " + projName + "?"
 	}
+	return "What should we build?"
+}
 
+func renderWakuEmptyStateContent(c *ui.Context, th *gui.GuiTheme, cwd string) {
+	heading := wakuEmptyStateHeading(cwd)
 	ui.Column(c).
-		Key("waku-empty-state").
 		FillWidth().
-		Padding(80, 20, 40, 20).
+		Padding(24, 32, 24, 32).
 		AlignItems(ui.Center).
 		Justify(ui.Center).
+		Gap(14).
 		Children(func() {
-			ui.Row(c).
-				AlignItems(ui.Center).
-				Justify(ui.Center).
-				Gap(10).
-				Children(func() {
-					gui.IconView(c, gui.IconSparkle, 20, th.Accent)
-					ui.Text(c, heading).TextColor(th.Text).FontSize(20).FontWeight(500).SingleLine()
-				})
+			ui.Box(c).Size(20, 20).Shrink(0).Role(ui.RoleImage).Label("Empty State Sparkle").Children(func() {
+				gui.IconView(c, gui.IconSparkle, 20, th.Accent)
+			})
+			ui.Text(c, heading).TextColor(th.Text).FontSize(20).FontWeight(500).SingleLine()
+		})
+}
+
+func renderWakuEmptyState(c *ui.Context, th *gui.GuiTheme, cwd string) {
+	heading := wakuEmptyStateHeading(cwd)
+	ui.Column(c).
+		Key("waku-empty-state").
+		Fill().
+		Padding(0, 32, 52, 32).
+		AlignItems(ui.Center).
+		Justify(ui.Center).
+		Gap(14).
+		Role(ui.RoleRegion).
+		Label("Empty State").
+		Children(func() {
+			ui.Box(c).Size(20, 20).Shrink(0).Role(ui.RoleImage).Label("Empty State Sparkle").Children(func() {
+				gui.IconView(c, gui.IconSparkle, 20, th.Accent)
+			})
+			ui.Text(c, heading).TextColor(th.Text).FontSize(20).FontWeight(500).SingleLine()
 		})
 }
 
