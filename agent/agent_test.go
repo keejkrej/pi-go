@@ -515,7 +515,7 @@ func TestAgent_FinishTurnAndPrepareNextTurnSyncState(t *testing.T) {
 	}
 }
 
-// Tests PORTING.md §7.3: mutexes never held across listener callbacks, tool execution,
+// Tests docs/porting.md §7.3: mutexes never held across listener callbacks, tool execution,
 // or stream consumption; concurrent state reads and listener re-entrancy must not deadlock or race.
 func TestAgent_ThreadSafetyUnlockedListenersAndConcurrentReaders(t *testing.T) {
 	toolStarted := make(chan struct{})

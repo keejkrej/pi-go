@@ -1,5 +1,5 @@
 // Package providers is the Go port of these pi v1.0.0 TypeScript files
-// (authoritative mapping: porting/filemap.tsv):
+// (authoritative mapping: docs/filemap.tsv):
 //
 //   - packages/ai/src/providers/all.ts -> all.go
 //   - packages/ai/src/providers/amazon-bedrock.ts -> amazon_bedrock.go

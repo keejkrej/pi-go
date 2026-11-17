@@ -1,4 +1,4 @@
-// Unit tests for interactive_mode_helpers.go (PORTING.md §4.2 timh stem).
+// Unit tests for interactive_mode_helpers.go (docs/porting.md §4.2 timh stem).
 
 package interactive
 

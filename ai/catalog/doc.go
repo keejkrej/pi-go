@@ -1,5 +1,5 @@
 // Package catalog is the Go port of these pi v1.0.0 TypeScript files
-// (authoritative mapping: porting/filemap.tsv):
+// (authoritative mapping: docs/filemap.tsv):
 //
 //   - packages/ai/src/models.generated.ts -> models_generated.go
 //   - packages/ai/src/providers/amazon-bedrock.models.ts -> amazon_bedrock_models.go

@@ -1,2 +1,24 @@
+# Built CLI binaries
 /pi
+/pi-ai
+/pi-evals
+/pi-evals-entrypoint
+/check-model-data
+/generate-models
+/generate-test-image
+*.exe
+
+# Build & eval outputs
+dist/
+bin/
+.eval/
+
+# Test & coverage artifacts
+*.test
+*.out
+coverage.*
+
+# Local environment & OS metadata
+.env
+.env.*
 .DS_Store

@@ -221,10 +221,10 @@ func TestPlanMatchesNodeParse(t *testing.T) {
 	}
 	parseJS := ""
 	{
-		home, _ := os.UserHomeDir()
 		var cands []string
 		for _, env := range []struct{ key, sub string }{
 			{"CROSS_SPAWN_PARSE_JS", ""},
+			{"NODE_MODULES", filepath.Join("cross-spawn", "lib", "parse.js")},
 			{"PI_REPO_DIR", filepath.Join("node_modules", "cross-spawn", "lib", "parse.js")},
 			{"PI_DIR", filepath.Join("node_modules", "cross-spawn", "lib", "parse.js")},
 		} {
@@ -236,10 +236,6 @@ func TestPlanMatchesNodeParse(t *testing.T) {
 				}
 			}
 		}
-		if home != "" {
-			cands = append(cands, filepath.Join(home, "workspace", "pi", "node_modules", "cross-spawn", "lib", "parse.js"))
-		}
-		cands = append(cands, filepath.Join("/Users/jack", "workspace", "pi", "node_modules", "cross-spawn", "lib", "parse.js"))
 		for _, c := range cands {
 			if _, err := os.Stat(c); err == nil {
 				parseJS = c
@@ -247,8 +243,8 @@ func TestPlanMatchesNodeParse(t *testing.T) {
 			}
 		}
 	}
-	if _, err := os.Stat(parseJS); err != nil {
-		t.Skip(err)
+	if parseJS == "" {
+		t.Skip("set CROSS_SPAWN_PARSE_JS or PI_REPO_DIR to run differential node test")
 	}
 	dir := t.TempDir()
 	bat := filepath.Join(dir, "echo.bat")

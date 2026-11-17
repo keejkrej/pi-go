@@ -1,6 +1,23 @@
 const fs = require("fs");
 const path = require("path");
-const semver = require("C:/Users/ctyja/workspace/pi/node_modules/semver");
+
+function loadSemver() {
+  const candidates = [
+    process.env.SEMVER_PKG_PATH,
+    process.env.NODE_MODULES && path.join(process.env.NODE_MODULES, "semver"),
+    process.env.PI_REPO_DIR && path.join(process.env.PI_REPO_DIR, "node_modules/semver"),
+    process.env.PI_DIR && path.join(process.env.PI_DIR, "node_modules/semver"),
+    "semver",
+  ].filter(Boolean);
+  for (const c of candidates) {
+    try {
+      return require(c);
+    } catch {}
+  }
+  throw new Error("unable to locate npm semver package; set NODE_MODULES or PI_REPO_DIR");
+}
+
+const semver = loadSemver();
 
 const versions = [
   "0.0.0", "0.0.1", "0.0.2", "0.1.0", "0.1.2", "0.1.3", "0.2.0",

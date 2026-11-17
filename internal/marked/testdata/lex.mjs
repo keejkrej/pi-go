@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
-import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -10,8 +9,6 @@ function resolveMarkedESM() {
     process.env.PI_REPO_DIR && path.join(process.env.PI_REPO_DIR, "node_modules/marked/lib/marked.esm.js"),
     process.env.PI_DIR && path.join(process.env.PI_DIR, "node_modules/marked/lib/marked.esm.js"),
     process.env.NODE_MODULES && path.join(process.env.NODE_MODULES, "marked/lib/marked.esm.js"),
-    path.join(os.homedir(), "workspace/pi/node_modules/marked/lib/marked.esm.js"),
-    "/Users/jack/workspace/pi/node_modules/marked/lib/marked.esm.js",
   ].filter(Boolean);
   for (const p of candidates) {
     if (existsSync(p)) return p;

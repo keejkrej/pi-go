@@ -4,7 +4,9 @@ import {writeFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import path from 'node:path';
 
-const root = path.resolve(process.argv[2] ?? '../../../../../../pi');
+const rootArg = process.argv[2] ?? process.env.PI_REPO_DIR;
+if (!rootArg) throw new Error('Usage: node gen_golden.mjs <path-to-pi-repo> (or set PI_REPO_DIR)');
+const root = path.resolve(rootArg);
 const dist = path.join(root, 'node_modules/grok-mermaid/dist/index.js');
 const {render, sourceBox, diagramKind, toAnsi} = await import(pathToFileURL(dist).href);
 

@@ -1,11 +1,14 @@
 # pi-go porting conventions (binding)
 
+> [!NOTE]
+> Historical porting specification: this document records the v1.0.0 TypeScript-to-Go porting rules and runtime contracts (`§1`–`§16`) cited by comments across the codebase, alongside the file mapping in `docs/filemap.tsv`. One-time bootstrap scaffolding mentioned in `§1`/`§14` was removed once the port completed; see [`docs/architecture.md`](architecture.md) for the current repository architecture (including the native GPU GUI mode and QuickJS user extension support).
+
 This document is the single source of truth for porting the pi TypeScript monorepo v1.0.0 to Go. TS source
-of truth: `/Users/jack/.t3/worktrees/pi/t3code-ef43beb3` (commit `7fbbd5f4a`, release v1.0.0). Every porting
+of truth: `earendil-works/pi` (commit `7fbbd5f4a`, release v1.0.0). Every porting
 agent must follow it. "Must" means there is no alternative. For an uncovered case, pick the option closest
 to these rules, do not invent conventions, and record the case in your NEEDS file (section 14).
 
-Companion file: `porting/filemap.tsv` (columns `ts_path go_file go_import_path kind stem`). It maps every TS
+Companion file: `docs/filemap.tsv` (columns `ts_path go_file go_import_path kind stem`). It maps every TS
 file (src, tests, test helpers, fixtures, examples) to its Go file, package, kind, and unexported-identifier
 stem. It is authoritative; sections 2-4 explain how it was derived.
 

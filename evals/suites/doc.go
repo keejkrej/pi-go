@@ -1,5 +1,5 @@
 // Package suites is the Go port of these pi v1.0.0 TypeScript files
-// (authoritative mapping: porting/filemap.tsv):
+// (authoritative mapping: docs/filemap.tsv):
 //
 //   - packages/evals/evals/acme-server.ts -> acme_server.go
 //   - packages/evals/evals/configured-runtime.ts -> configured_runtime.go

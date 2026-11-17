@@ -151,12 +151,11 @@ func TestWakuRustSourceSpecParity(t *testing.T) {
 		}
 	}
 
-	// 3. When ~/workspace/waku is present locally, verify live source-to-source parity.
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
+	// 3. When WAKU_REPO_DIR is set, verify live source-to-source parity.
+	wakuRoot := strings.TrimSpace(os.Getenv("WAKU_REPO_DIR"))
+	if wakuRoot == "" {
 		return
 	}
-	wakuRoot := filepath.Join(homeDir, "workspace", "waku")
 	if _, err := os.Stat(wakuRoot); err != nil {
 		return
 	}
@@ -719,7 +718,7 @@ func TestWakuTerminalAndActivityWidthClampedTo720(t *testing.T) {
 		Description: "Runs a shell command",
 		Parameters:  typebox.Object(nil),
 		Execute: func(ctx context.Context, toolCallId string, params any, onUpdate agent.AgentToolUpdateCallback) (agent.AgentToolResult, error) {
-			out := "drwx------@ 53 jack staff 1696 Nov 15 22:48 Ambient\nAmbient.app\n"
+			out := "drwx------@ 53 user staff 1696 Nov 15 22:48 Ambient\nAmbient.app\n"
 			if obj, ok := params.(*jsonx.Object); ok {
 				if cmd := tvArgStr(obj, "command"); strings.Contains(cmd, "long-policy") {
 					out = "header-before\n" + unbrokenPolicy + "\nfooter-after\n"

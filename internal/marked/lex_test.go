@@ -3,6 +3,7 @@ package marked
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -22,9 +23,9 @@ type lexCase struct {
 	Ext       bool   `json:"ext,omitempty"`
 }
 
-func TestLexerMatchesMarked(t *testing.T) {
+func markedLexCases() []lexCase {
 	gfmOff := false
-	cases := []lexCase{
+	return []lexCase{
 		{Name: "paragraph", Src: "Hello world.\n"},
 		{Name: "heading", Src: "# Title\n\n## Sub #"},
 		{Name: "setext", Src: "Title\n====\n"},
@@ -66,15 +67,35 @@ func TestLexerMatchesMarked(t *testing.T) {
 		{Name: "nested-paren", Src: "[a](https://ex.com/a_(b) \"t\")\n"},
 		{Name: "codespan-space", Src: "`` `code` ``\n"},
 	}
+}
 
+func TestLexerVectors(t *testing.T) {
+	raw, err := os.ReadFile("testdata/vectors.json")
+	if err != nil {
+		t.Fatalf("read vectors: %v", err)
+	}
+	var want []nodeResult
+	if err := json.Unmarshal(raw, &want); err != nil {
+		t.Fatalf("unmarshal vectors: %v", err)
+	}
+	compareLexCases(t, markedLexCases(), want)
+}
+
+func TestLexerMatchesMarked(t *testing.T) {
+	cases := markedLexCases()
 	want := nodeLex(t, cases)
+	compareLexCases(t, cases, want)
+}
+
+func compareLexCases(t *testing.T, cases []lexCase, want []nodeResult) {
+	t.Helper()
 	if len(want) != len(cases) {
-		t.Fatalf("node returned %d cases, want %d", len(want), len(cases))
+		t.Fatalf("returned %d cases, want %d", len(want), len(cases))
 	}
 	for i, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
 			if want[i].Error != "" {
-				t.Fatalf("node: %s", want[i].Error)
+				t.Fatalf("vector error: %s", want[i].Error)
 			}
 			tokens, links := goLex(c)
 			gotBody, err := json.Marshal(map[string]any{
@@ -114,6 +135,9 @@ type nodeResult struct {
 
 func nodeLex(t *testing.T, cases []lexCase) []nodeResult {
 	t.Helper()
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
 	payload, err := json.Marshal(map[string]any{"cases": cases})
 	if err != nil {
 		t.Fatal(err)
@@ -122,6 +146,11 @@ func nodeLex(t *testing.T, cases []lexCase) []nodeResult {
 	cmd.Stdin = bytes.NewReader(payload)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		if bytes.Contains(out, []byte("MODULE_NOT_FOUND")) ||
+			bytes.Contains(out, []byte("Cannot find module")) ||
+			bytes.Contains(out, []byte("ERR_MODULE_NOT_FOUND")) {
+			t.Skip("skipping live marked differential test; set MARKED_ESM_PATH, NODE_MODULES, or PI_REPO_DIR")
+		}
 		t.Fatalf("node lex: %v\n%s", err, out)
 	}
 	var got []nodeResult

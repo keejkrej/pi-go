@@ -1,5 +1,5 @@
 // Package js reproduces JavaScript (V8/Node 24) semantics that pi's TS code
-// relies on (PORTING.md sections 6.1 and 6.2): UTF-16 string indices and
+// relies on (docs/porting.md sections 6.1 and 6.2): UTF-16 string indices and
 // lengths, Unicode string operations, Number formatting and parsing, Date
 // formatting and parsing, process.platform/arch values, URI encoding, error
 // stringification, TextDecoder, and an abortable sleep.

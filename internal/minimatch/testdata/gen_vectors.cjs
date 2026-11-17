@@ -1,6 +1,23 @@
 const fs = require("fs");
 const path = require("path");
-const { minimatch, Minimatch } = require("C:/Users/ctyja/workspace/pi/node_modules/minimatch");
+
+function loadMinimatch() {
+  const candidates = [
+    process.env.MINIMATCH_PKG_PATH,
+    process.env.NODE_MODULES && path.join(process.env.NODE_MODULES, "minimatch"),
+    process.env.PI_REPO_DIR && path.join(process.env.PI_REPO_DIR, "node_modules/minimatch"),
+    process.env.PI_DIR && path.join(process.env.PI_DIR, "node_modules/minimatch"),
+    "minimatch",
+  ].filter(Boolean);
+  for (const c of candidates) {
+    try {
+      return require(c);
+    } catch {}
+  }
+  throw new Error("unable to locate npm minimatch package; set NODE_MODULES or PI_REPO_DIR");
+}
+
+const { minimatch, Minimatch } = loadMinimatch();
 
 function encode(part) {
   if (part === minimatch.GLOBSTAR) return "**";

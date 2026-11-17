@@ -45,7 +45,7 @@ func unhpNewTransport(idleTimeout time.Duration) *http.Transport {
 	return base
 }
 
-// NodeHttpProxyDefaultClient returns the shared process-wide HTTP client with env proxy resolution (PORTING.md §10).
+// NodeHttpProxyDefaultClient returns the shared process-wide HTTP client with env proxy resolution (docs/porting.md §10).
 func NodeHttpProxyDefaultClient() *http.Client {
 	unhpClientMu.Lock()
 	c := unhpHTTPClient
@@ -53,7 +53,7 @@ func NodeHttpProxyDefaultClient() *http.Client {
 	return c
 }
 
-// NodeHttpProxyConfigure updates the process-wide HTTP client's idle connection timeout in milliseconds (PORTING.md §10).
+// NodeHttpProxyConfigure updates the process-wide HTTP client's idle connection timeout in milliseconds (docs/porting.md §10).
 func NodeHttpProxyConfigure(idleTimeoutMs int64) {
 	d := time.Duration(idleTimeoutMs) * time.Millisecond
 	if d < 0 {

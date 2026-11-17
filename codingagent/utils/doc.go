@@ -1,5 +1,5 @@
 // Package utils is the Go port of these pi v1.0.0 TypeScript files
-// (authoritative mapping: porting/filemap.tsv):
+// (authoritative mapping: docs/filemap.tsv):
 //
 //   - packages/coding-agent/src/config.ts -> config.go
 //   - packages/coding-agent/src/core/source-info.ts -> source_info.go

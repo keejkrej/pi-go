@@ -1,5 +1,5 @@
 // Package tui is the Go port of these pi v1.0.0 TypeScript files
-// (authoritative mapping: porting/filemap.tsv):
+// (authoritative mapping: docs/filemap.tsv):
 //
 //   - packages/tui/src/alt-screen-search.ts -> alt_screen_search.go
 //   - packages/tui/src/autocomplete.ts -> autocomplete.go

@@ -1,5 +1,5 @@
 // Package interactive is the Go port of these pi v1.0.0 TypeScript files
-// (authoritative mapping: porting/filemap.tsv):
+// (authoritative mapping: docs/filemap.tsv):
 //
 //   - packages/coding-agent/src/modes/interactive/bug-report.ts -> bug_report.go
 //   - packages/coding-agent/src/modes/interactive/chat-viewport.ts -> chat_viewport.go

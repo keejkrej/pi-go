@@ -13,7 +13,7 @@ func (e *uaAbortError) Name() string  { return "AbortError" }
 func (e *uaAbortError) Unwrap() error { return context.Canceled }
 
 // AbortNewError creates an error whose message is msg, whose JS error name is "AbortError",
-// and which matches errors.Is(err, context.Canceled) (PORTING.md §7.1 & §8).
+// and which matches errors.Is(err, context.Canceled) (docs/porting.md §7.1 & §8).
 func AbortNewError(msg string) error {
 	if msg == "" {
 		msg = "The operation was aborted"

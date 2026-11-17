@@ -1,6 +1,28 @@
-import { writeFileSync } from "node:fs";
-import { Type } from "file:///C:/Users/ctyja/workspace/pi/node_modules/typebox/build/index.mjs";
-import { Value } from "file:///C:/Users/ctyja/workspace/pi/node_modules/typebox/build/value/index.mjs";
+import { existsSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+function resolveTypeboxSubpath(subpath) {
+  const candidates = [
+    process.env.TYPEBOX_DIR && path.join(process.env.TYPEBOX_DIR, subpath),
+    process.env.NODE_MODULES && path.join(process.env.NODE_MODULES, "typebox", subpath),
+    process.env.PI_REPO_DIR && path.join(process.env.PI_REPO_DIR, "node_modules", "typebox", subpath),
+    process.env.PI_DIR && path.join(process.env.PI_DIR, "node_modules", "typebox", subpath),
+  ].filter(Boolean);
+  for (const p of candidates) {
+    if (existsSync(p)) return pathToFileURL(p).href;
+  }
+  const req = createRequire(import.meta.url);
+  try {
+    return pathToFileURL(req.resolve(path.posix.join("typebox", subpath))).href;
+  } catch {
+    throw new Error("unable to locate typebox package; set TYPEBOX_DIR, NODE_MODULES, or PI_REPO_DIR");
+  }
+}
+
+const { Type } = await import(resolveTypeboxSubpath("build/index.mjs"));
+const { Value } = await import(resolveTypeboxSubpath("build/value/index.mjs"));
 
 function optsOf(d) {
   if (!d.opts || d.opts.length === 0) return undefined;
