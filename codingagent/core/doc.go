@@ -1,5 +1,5 @@
 // Package core is the Go port of these pi v1.0.0 TypeScript files
-// (authoritative mapping: porting/filemap.tsv):
+// (authoritative mapping: docs/filemap.tsv):
 //
 //   - packages/coding-agent/src/cli/args.ts -> args.go
 //   - packages/coding-agent/src/core/agent-session-runtime.ts -> agent_session_runtime.go

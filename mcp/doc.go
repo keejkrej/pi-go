@@ -1,5 +1,5 @@
 // Package mcp is the Go port of these pi v1.0.0 TypeScript files
-// (authoritative mapping: porting/filemap.tsv):
+// (authoritative mapping: docs/filemap.tsv):
 //
 //   - packages/mcp/src/auth-provider.ts -> auth_provider.go
 //   - packages/mcp/src/client.ts -> client.go

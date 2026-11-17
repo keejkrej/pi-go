@@ -3086,7 +3086,7 @@
      "kind": "JSException",
      "name": "Error",
      "message": "host fail",
-     "stack": "Error: host fail\n    at JSValueHandle.<anonymous> (file:///private/tmp/pi-port/wt/go-fparity-go-quickjs/internal/quickjs/testdata/gen_vectors.mjs:363:9)\n    at QuickJS.handleHostCall (file:///Users/jack/.t3/worktrees/pi/t3code-ef43beb3/node_modules/quickjs-wasi/dist/index.js:714:37)\n    at hostCall (file:///Users/jack/.t3/worktrees/pi/t3code-ef43beb3/node_modules/quickjs-wasi/dist/index.js:571:23)\n    at wasm://wasm/0026e776:wasm-function[1607]:0x732f0\n    at wasm://wasm/0026e776:wasm-function[555]:0x2c4ac\n    at wasm://wasm/0026e776:wasm-function[92]:0x7779\n    at wasm://wasm/0026e776:wasm-function[92]:0xfb79\n    at wasm://wasm/0026e776:wasm-function[161]:0x15dee\n    at wasm://wasm/0026e776:wasm-function[413]:0x236f3\n    at wasm://wasm/0026e776:wasm-function[644]:0x30070"
+     "stack": "Error: host fail\n    at JSValueHandle.<anonymous> (file:///workspace/pi-go/internal/quickjs/testdata/gen_vectors.mjs:363:9)\n    at QuickJS.handleHostCall (file:///workspace/pi/node_modules/quickjs-wasi/dist/index.js:714:37)\n    at hostCall (file:///workspace/pi/node_modules/quickjs-wasi/dist/index.js:571:23)\n    at wasm://wasm/0026e776:wasm-function[1607]:0x732f0\n    at wasm://wasm/0026e776:wasm-function[555]:0x2c4ac\n    at wasm://wasm/0026e776:wasm-function[92]:0x7779\n    at wasm://wasm/0026e776:wasm-function[92]:0xfb79\n    at wasm://wasm/0026e776:wasm-function[161]:0x15dee\n    at wasm://wasm/0026e776:wasm-function[413]:0x236f3\n    at wasm://wasm/0026e776:wasm-function[644]:0x30070"
     }
    }
   },

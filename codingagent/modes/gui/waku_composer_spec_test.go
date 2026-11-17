@@ -57,7 +57,7 @@ type wakuLayoutNodeSpec struct {
 }
 
 // wakuReferenceComposerSpec encodes the canonical Waku composer & workspace geometry
-// derived from /Users/jack/workspace/waku (src/app/composer.rs, sidebar.rs, render.rs).
+// derived from Waku (src/app/composer.rs, sidebar.rs, render.rs).
 func wakuReferenceComposerSpec() wakuLayoutNodeSpec {
 	return wakuLayoutNodeSpec{
 		ID:        "center-workspace",

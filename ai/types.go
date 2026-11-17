@@ -597,7 +597,7 @@ type SimpleStreamOptions struct {
 	ThinkingBudgets *ThinkingBudgets          `json:"thinkingBudgets,omitzero"`
 }
 
-// StreamFunction is the uniform chat stream contract from PORTING.md.
+// StreamFunction is the uniform chat stream contract from docs/porting.md.
 // Direct calls may still fail before a stream exists; once returned, failures
 // are events on the stream. ProviderStreams.Stream takes *TranscriptContext.
 type StreamFunction func(ctx context.Context, model *Model, c *Context, opts ProviderStreamOptions) *AssistantMessageEventStream

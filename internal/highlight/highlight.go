@@ -5,7 +5,7 @@
 // those highlight.js 10.7.3 grammars declare. chroma v2.27.0 has a lexer for
 // every one of them, so UnsupportedLanguages is empty. The full catalogue
 // loadAllHighlightLanguages pulls in is not supported. Token boundaries follow
-// chroma, not highlight.js (PORTING.md §16).
+// chroma, not highlight.js (docs/porting.md §16).
 package highlight
 
 import (

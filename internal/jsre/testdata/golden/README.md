@@ -1,7 +1,7 @@
 # jsre golden data
 
 Generated with Node v24.21.0 (V8 13.6.233.17-node.53, Unicode 17). The
-generator scripts were run from /tmp and deleted afterwards (PORTING.md 15).
+generator scripts were run from /tmp and deleted afterwards (docs/porting.md 15).
 
 - `regexp.json`: written by `gen.mjs`. It compiles hand-written patterns
   (syntax errors, Annex B syntax, named groups, modifiers, case folding,

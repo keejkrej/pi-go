@@ -1,5 +1,5 @@
 // Package ai is the Go port of these pi v1.0.0 TypeScript files
-// (authoritative mapping: porting/filemap.tsv):
+// (authoritative mapping: docs/filemap.tsv):
 //
 //   - packages/ai/src/api/lazy.ts -> api_lazy.go
 //   - packages/ai/src/auth/context.ts -> auth_context.go

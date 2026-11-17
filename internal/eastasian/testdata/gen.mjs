@@ -4,7 +4,9 @@ import {writeFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import path from 'node:path';
 
-const root = path.resolve(process.argv[2] ?? '../../../../pi');
+const rootArg = process.argv[2] ?? process.env.PI_REPO_DIR;
+if (!rootArg) throw new Error('Usage: node gen.mjs <path-to-pi-repo> (or set PI_REPO_DIR)');
+const root = path.resolve(rootArg);
 const pkg = path.join(root, 'node_modules/get-east-asian-width');
 const data = await import(pathToFileURL(path.join(pkg, 'lookup-data.js')).href);
 const api = await import(pathToFileURL(path.join(pkg, 'index.js')).href);

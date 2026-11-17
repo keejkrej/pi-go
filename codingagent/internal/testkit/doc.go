@@ -1,5 +1,5 @@
 // Package testkit is the Go port of these pi v1.0.0 TypeScript files
-// (authoritative mapping: porting/filemap.tsv):
+// (authoritative mapping: docs/filemap.tsv):
 //
 //   - packages/coding-agent/test/experimental-durable-support.ts -> experimental_durable_support.go
 //   - packages/coding-agent/test/experimental-service-binding.ts -> experimental_service_binding.go

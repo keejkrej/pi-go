@@ -1,5 +1,5 @@
 // Package durable is the Go port of these pi v1.0.0 TypeScript files
-// (authoritative mapping: porting/filemap.tsv):
+// (authoritative mapping: docs/filemap.tsv):
 //
 //   - packages/durable/src/documents.ts -> documents.go
 //   - packages/durable/src/entries.ts -> entries.go

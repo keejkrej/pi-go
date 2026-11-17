@@ -1,5 +1,5 @@
 // Package runtime is the Go port of these pi v1.0.0 TypeScript files
-// (authoritative mapping: porting/filemap.tsv):
+// (authoritative mapping: docs/filemap.tsv):
 //
 //   - packages/codemode/src/runtime/host.ts -> host.go
 //   - packages/codemode/src/runtime/prelude-source.ts -> prelude_source.go

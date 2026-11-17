@@ -1,5 +1,5 @@
 // Package testkit is the Go port of these pi v1.0.0 TypeScript files
-// (authoritative mapping: porting/filemap.tsv):
+// (authoritative mapping: docs/filemap.tsv):
 //
 //   - packages/durable/test/chat-support.ts -> chat_support.go
 //   - packages/durable/test/examples/00-conversation.ts -> examples_00_conversation.go

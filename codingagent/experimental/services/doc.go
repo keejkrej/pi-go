@@ -1,5 +1,5 @@
 // Package services is the Go port of these pi v1.0.0 TypeScript files
-// (authoritative mapping: porting/filemap.tsv):
+// (authoritative mapping: docs/filemap.tsv):
 //
 //   - packages/coding-agent/src/experimental/services/agent-controller-provider.ts -> agent_controller_provider.go
 //   - packages/coding-agent/src/experimental/services/agent-controller.ts -> agent_controller.go

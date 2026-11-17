@@ -33,5 +33,5 @@ func TestBedrockModels_CatalogAndInferenceProfiles(t *testing.T) {
 	if hasDirectOpus5 {
 		t.Fatal("did not expect non-inference-profile anthropic.claude-opus-5")
 	}
-	// Live credential BEDROCK_EXTENSIVE_MODEL_TEST skipped per PORTING.md §3.4.
+	// Live credential BEDROCK_EXTENSIVE_MODEL_TEST skipped per docs/porting.md §3.4.
 }

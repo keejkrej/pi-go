@@ -1,15 +1,13 @@
 import { existsSync, writeFileSync } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 function resolveIgnoreEntry() {
   const candidates = [
     process.env.IGNORE_PKG_PATH && path.join(process.env.IGNORE_PKG_PATH, "index.js"),
+    process.env.NODE_MODULES && path.join(process.env.NODE_MODULES, "ignore/index.js"),
     process.env.PI_REPO_DIR && path.join(process.env.PI_REPO_DIR, "node_modules/ignore/index.js"),
     process.env.PI_DIR && path.join(process.env.PI_DIR, "node_modules/ignore/index.js"),
-    path.join(os.homedir(), "workspace/pi/node_modules/ignore/index.js"),
-    "/Users/jack/workspace/pi/node_modules/ignore/index.js",
   ].filter(Boolean);
   for (const p of candidates) {
     if (existsSync(p)) return pathToFileURL(p).href;

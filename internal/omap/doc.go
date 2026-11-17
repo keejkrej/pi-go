@@ -1,5 +1,5 @@
 // Package omap provides insertion-ordered Map and Set types with JavaScript
-// Map/Set iteration semantics (PORTING.md section 6.4).
+// Map/Set iteration semantics (docs/porting.md section 6.4).
 //
 // Iteration visits entries in insertion order. Deleting an entry during
 // iteration skips it if it has not been visited yet, and entries added during

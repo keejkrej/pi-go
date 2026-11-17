@@ -26,7 +26,7 @@ const (
 )
 
 // PathMetadata records package/source attribution for a discovered resource path.
-// Owned by codingagent/utils/source_info.go per PORTING.md §2.2.
+// Owned by codingagent/utils/source_info.go per docs/porting.md §2.2.
 type PathMetadata struct {
 	Source        string       `json:"source"`
 	Scope         SourceScope  `json:"scope"`

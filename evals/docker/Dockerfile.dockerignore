@@ -1,4 +1,7 @@
 .git
+/pi
+/pi-*
+/*.exe
 **/.eval
 **/node_modules
 **/dist

@@ -149,7 +149,7 @@ func TestPathsAndNormalization(t *testing.T) {
 		t.Fatalf("ResolvePath mismatch: resolved=%q err=%v", resolved, err)
 	}
 
-	if got := NormalizeWindowsShellPath("/cygdrive/c/Users/jack"); got == "" {
+	if got := NormalizeWindowsShellPath("/cygdrive/c/Users/alice"); got == "" {
 		t.Fatal("expected non-empty NormalizeWindowsShellPath")
 	}
 	if !IsLocalPath("./relative/file.go") {

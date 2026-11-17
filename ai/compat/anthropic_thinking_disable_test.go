@@ -58,7 +58,7 @@ func tatdCapturePayload(t *testing.T, modelId string, options *ai.SimpleStreamOp
 }
 
 func TestAnthropicThinkingDisable_Payloads(t *testing.T) {
-	// Note: live E2E test with ANTHROPIC_API_KEY is skipped in offline unit suite per PORTING.md §3.4.
+	// Note: live E2E test with ANTHROPIC_API_KEY is skipped in offline unit suite per docs/porting.md §3.4.
 
 	t.Run("budget-based reasoning off sends disabled", func(t *testing.T) {
 		payload := tatdCapturePayload(t, "claude-sonnet-4-5", nil)

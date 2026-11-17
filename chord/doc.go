@@ -1,5 +1,5 @@
 // Package chord is the Go port of these pi v1.0.0 TypeScript files
-// (authoritative mapping: porting/filemap.tsv):
+// (authoritative mapping: docs/filemap.tsv):
 //
 //   - packages/chord/src/api.ts -> api.go
 //   - packages/chord/src/bundler.ts -> bundler.go
