@@ -854,6 +854,9 @@ func (e *Editor) View(c *ui.Context) ui.Element {
 			Placeholder(placeholder).
 			Label(label).
 			Disabled(disabled)
+		if chromeless && minL == 1 {
+			inputEl.MinHeight(28).Padding(5, 0, 5, 0)
+		}
 		if autoFocus {
 			inputEl.AutoFocus()
 		}

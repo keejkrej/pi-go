@@ -1007,7 +1007,7 @@ func TestWakuFullWindowSettingsViewParity(t *testing.T) {
 	if !mode.SettingsOpen() || mode.GUI().HasOverlay() {
 		t.Fatalf("expected full-window Settings view (settingsOpen=%v hasOverlay=%v)", mode.SettingsOpen(), mode.GUI().HasOverlay())
 	}
-	for _, want := range []string{"Back", "Search Settings", "General", "Appearance", "Providers", "Behavior", "Local by default", "Auto-Compact"} {
+	for _, want := range []string{"Back", "Search Settings", "General", "Appearance", "Providers", "Skills", "Usage", "Local by default", "Auto-Compact"} {
 		if !tt.HasText(want) {
 			t.Fatalf("expected Waku Settings element %q, texts=%v", want, tt.Texts())
 		}
@@ -1060,5 +1060,199 @@ func TestWakuFullWindowSettingsViewParity(t *testing.T) {
 	tt.Frame()
 	if mode.SettingsOpen() || !tt.HasText("What should we build in cwd?") {
 		t.Fatalf("expected return to workspace after Back (open=%v, texts=%v)", mode.SettingsOpen(), tt.Texts())
+	}
+}
+
+func TestWakuCommitDialogSkillsAndRightPanelSingleTabParity(t *testing.T) {
+	isoHome := t.TempDir()
+	t.Setenv("HOME", isoHome)
+	t.Setenv("PI_CODING_AGENT_DIR", filepath.Join(isoHome, ".pi", "agent"))
+	t.Setenv(utils.EnvSessionDir, filepath.Join(isoHome, ".pi", "agent", "sessions"))
+
+	userSkillDir := filepath.Join(isoHome, ".pi", "agent", "skills", "alpha-skill")
+	if err := os.MkdirAll(userSkillDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll userSkillDir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(userSkillDir, "SKILL.md"), []byte("---\nname: alpha-skill\ndescription: User skill alpha description\n---\n# Alpha Skill\n\nBody details.\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile user SKILL.md: %v", err)
+	}
+
+	var copiedText string
+	fx := tgmNewFixture(t, &tgmFixtureOpts{
+		withResources: true,
+		agentDir:      filepath.Join(isoHome, ".pi", "agent"),
+	})
+	projSkillDir := filepath.Join(fx.cwd, ".pi", "skills", "proj-skill")
+	if err := os.MkdirAll(projSkillDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll projSkillDir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(projSkillDir, "SKILL.md"), []byte("---\nname: proj-skill\ndescription: Project skill description\n---\n# Proj Skill\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile proj SKILL.md: %v", err)
+	}
+
+	mode := NewGuiMode(fx.runtime, &GuiModeOptions{
+		SkipWindow:          true,
+		InitialThemeSetting: tgmStrPtr("dark"),
+		Desktop: &gui.DesktopHooks{
+			WriteClipboardText: func(text string) error {
+				copiedText = text
+				return nil
+			},
+		},
+	})
+	t.Cleanup(func() { mode.Stop() })
+
+	tt := ui.NewTester(mode.GUI().View, 1280, 820)
+	tt.SetTitleBar(ui.TitleBar{Height: 48, Left: 86})
+	tt.SetVibrancy(false)
+	tt.SetDark(true)
+	tt.Frame()
+
+	// 1. CommitDialog parity: no "Commit on " or close button, neutral checkbox + transparent Commit row + "⌘↩" pill.
+	var gotMsg string
+	var gotUnstaged bool
+	dlg := NewCommitDialog(CommitDialogConfig{
+		Branch:          "feat/test",
+		Additions:       3,
+		IncludeUnstaged: true,
+		Theme:           gui.DarkGuiTheme(),
+		OnCommit: func(msg string, includeUnstaged bool) error {
+			gotMsg = msg
+			gotUnstaged = includeUnstaged
+			return nil
+		},
+	})
+	dlg.Show(mode.host)
+	tt.Frame()
+
+	if tt.HasText("Commit on feat/test") {
+		t.Fatal("expected CommitDialog header without 'Commit on ' prefix")
+	}
+	if _, ok := tt.Access("Close commit dialog"); ok {
+		t.Fatal("expected CommitDialog header without close button")
+	}
+	if !tt.HasText("feat/test") || !tt.HasText("⌘↩") {
+		t.Fatalf("expected branch name 'feat/test' and '⌘↩' pill, texts=%v", tt.Texts())
+	}
+
+	dlgR, ok := tt.Access("Commit Dialog")
+	if !ok || dlgR.Bounds.W < 300 {
+		t.Fatalf("expected Commit Dialog access node, ok=%v bounds=%+v texts=%v", ok, dlgR.Bounds, tt.Texts())
+	}
+	imgDlg := tt.Image()
+	// Verify no solid inverse (#E7E9EC) fill on primary Commit button and no orange (#E2795B) on checked checkbox.
+	for _, info := range tt.AccessAll() {
+		if info.Name == "Commit" && info.Role == ui.RoleButton && info.Bounds.H >= 34 {
+			midX := int(info.Bounds.X + info.Bounds.W*0.5)
+			midY := int(info.Bounds.Y + info.Bounds.H*0.5)
+			c := wpPixelAt(t, imgDlg, midX, midY)
+			if c.R > 200 && c.G > 200 && c.B > 200 {
+				t.Fatalf("expected transparent Commit row background, got bright inverse pixel %+v at (%d,%d)", c, midX, midY)
+			}
+		}
+	}
+	cbR, ok := tt.Access("Include unstaged")
+	if !ok {
+		t.Fatalf("expected Include unstaged checkbox access node, texts=%v", tt.Texts())
+	}
+	// Inspect the 15x15 checkbox square on the left edge of the row (avoiding the focused text input caret).
+	for py := int(cbR.Bounds.Y) + 1; py < int(cbR.Bounds.Y+cbR.Bounds.H)-1; py++ {
+		for px := int(cbR.Bounds.X) + 1; px < int(cbR.Bounds.X)+16; px++ {
+			c := wpPixelAt(t, imgDlg, px, py)
+			if c.R > 190 && int(c.R)-int(c.B) > 60 {
+				t.Fatalf("unexpected orange accent fill on checked Include unstaged checkbox at (%d,%d): %+v", px, py, c)
+			}
+		}
+	}
+
+	if err := tt.Click("Include unstaged"); err != nil {
+		t.Fatalf("Click Include unstaged: %v", err)
+	}
+	tt.Frame()
+	if err := tt.Click("Commit message"); err != nil {
+		t.Fatalf("Click Commit message: %v", err)
+	}
+	tt.Frame()
+	tt.Type("chore: verify commit")
+	tt.Frame()
+	if err := tt.Click("Commit"); err != nil {
+		t.Fatalf("Click Commit: %v", err)
+	}
+	tt.Frame()
+	if gotMsg != "chore: verify commit" || gotUnstaged {
+		t.Fatalf("Commit callback got msg=%q includeUnstaged=%v, want msg='chore: verify commit' includeUnstaged=false", gotMsg, gotUnstaged)
+	}
+
+	// 2. Settings Skills 2-pane filter, copy path, and toggle switch parity.
+	mode.OpenSettingsPage("skills")
+	tt.Frame()
+	for _, want := range []string{"alpha-skill", "proj-skill", "Search skills", "All", "User", "Project", "Open SKILL.md", "Reveal", "Copy Path"} {
+		if !tt.HasText(want) {
+			t.Fatalf("expected Skills page element %q, texts=%v", want, tt.Texts())
+		}
+	}
+	if err := tt.Click("Project"); err != nil {
+		t.Fatalf("Click Project filter chip: %v", err)
+	}
+	tt.Frame()
+	if tt.HasText("alpha-skill") || !tt.HasText("proj-skill") {
+		t.Fatalf("expected Project chip to filter to proj-skill only, texts=%v", tt.Texts())
+	}
+	if err := tt.Click("Copy Path"); err != nil {
+		t.Fatalf("Click Copy Path: %v", err)
+	}
+	tt.Frame()
+	if copiedText != projSkillDir {
+		t.Fatalf("Copy Path copied %q, want %q", copiedText, projSkillDir)
+	}
+	if err := tt.Click("Dismiss notification"); err != nil {
+		t.Fatalf("Click Dismiss notification: %v", err)
+	}
+	tt.Frame()
+	if err := tt.Click("Toggle proj-skill"); err != nil {
+		t.Fatalf("Click Toggle proj-skill: %v", err)
+	}
+	tt.Frame()
+	if !tt.HasText("Disabled") {
+		t.Fatalf("expected Disabled badge after toggling proj-skill off, texts=%v", tt.Texts())
+	}
+	if _, err := os.Stat(filepath.Join(projSkillDir, "SKILL.md.disabled")); err != nil {
+		t.Fatalf("expected SKILL.md.disabled after toggle off: %v", err)
+	}
+	if err := tt.Click("Toggle proj-skill"); err != nil {
+		t.Fatalf("Click Toggle proj-skill (re-enable): %v", err)
+	}
+	tt.Frame()
+	if _, err := os.Stat(filepath.Join(projSkillDir, "SKILL.md")); err != nil {
+		t.Fatalf("expected SKILL.md restored after toggle on: %v", err)
+	}
+	if err := tt.Click("Back"); err != nil {
+		t.Fatalf("Click Back: %v", err)
+	}
+	tt.Frame()
+
+	// 3. Right panel single-tab 'x' close button closes the panel when clicked.
+	mode.rightPanel.mu.Lock()
+	mode.rightPanel.openTabs = []string{"changes"}
+	mode.rightPanel.activeTab = "changes"
+	mode.rightPanel.open = true
+	mode.rightPanel.mu.Unlock()
+	tt.Frame()
+
+	rpTab, ok := tt.AccessByRole(ui.RoleTab, "Changes")
+	if !ok {
+		t.Fatalf("expected single Changes tab in right panel, texts=%v", tt.Texts())
+	}
+	closeX := rpTab.Bounds.X + rpTab.Bounds.W - 14
+	closeY := rpTab.Bounds.Y + rpTab.Bounds.H*0.5
+	tt.Move(closeX, closeY)
+	tt.Frame()
+	tt.ClickAt(closeX, closeY)
+	tt.Frame()
+	mode.rightPanel.mu.Lock()
+	rpOpen := mode.rightPanel.open
+	mode.rightPanel.mu.Unlock()
+	if rpOpen {
+		t.Fatalf("expected clicking single-tab close button at (%.1f,%.1f) to close right panel", closeX, closeY)
 	}
 }

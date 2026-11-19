@@ -15,6 +15,7 @@ type wakuToastKind string
 
 const (
 	wakuToastInfo    wakuToastKind = "info"
+	wakuToastSuccess wakuToastKind = "success"
 	wakuToastWarning wakuToastKind = "warning"
 	wakuToastError   wakuToastKind = "error"
 )
@@ -92,19 +93,30 @@ func renderWakuFloatingToast(c *ui.Context, m *GuiMode, th *gui.GuiTheme) {
 
 	accent := th.Accent
 	svg := gui.IconInfo
-	if kind == wakuToastWarning {
+	switch kind {
+	case wakuToastSuccess:
+		accent = th.Success
+		svg = gui.IconCheck
+	case wakuToastWarning:
 		accent = th.Warning
 		svg = gui.IconAlert
-	} else if kind == wakuToastError {
+	case wakuToastError:
 		accent = th.Error
 		svg = gui.IconAlert
+	}
+
+	displayText := message
+	if title != "" && message != "" {
+		displayText = title + ": " + message
+	} else if title != "" {
+		displayText = title
 	}
 
 	var dismissClicked bool
 	wrap := ui.Row(c).
 		Key("waku-toast").
 		Absolute().
-		Top(54).
+		Top(56).
 		Left(16).
 		Right(16).
 		Justify(ui.Center)
@@ -116,22 +128,21 @@ func renderWakuFloatingToast(c *ui.Context, m *GuiMode, th *gui.GuiTheme) {
 			Border(1, th.BorderStrong).
 			Radius(10).
 			Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.28)).
-			Padding(7, 10, 7, 12).
+			Padding(6, 10, 6, 10).
 			AlignItems(ui.Center).
-			Gap(8)
+			Gap(8).
+			Role(ui.RoleStatus).
+			Label("Toast Notification")
 		if kind == wakuToastError {
 			pill.Border(1, th.Error.Alpha(0.65))
 		}
 		pill.Children(func() {
 			gui.IconView(c, svg, 14, accent)
-			if title != "" {
-				ui.Text(c, title).TextColor(th.Text).FontSize(12).FontWeight(600).SingleLine()
-			}
-			if message != "" {
-				ui.Text(c, message).TextColor(th.TextSecondary).FontSize(12).Wrap()
+			if displayText != "" {
+				ui.Text(c, displayText).Grow(1).Shrink(1).MinWidth(0).TextColor(th.Text).FontSize(12.5).Wrap()
 			}
 			closeBtn := ui.ButtonBase(c).
-				Size(20, 20).
+				Size(26, 26).
 				Radius(5).
 				AlignItems(ui.Center).
 				Justify(ui.Center).
@@ -251,16 +262,22 @@ func renderWakuCenterHeader(
 			leftPad += inset - sidebarWidth
 		}
 	} else if inset > 8 {
-		leftPad = 8
+		leftPad = 0
 	}
 
+	rightPad := float32(14)
+	if !sidebarOpen && rightOpen {
+		rightPad = 12
+	}
 	bar := ui.Row(c).
 		Key("waku-center-header").
 		FillWidth().
 		Height(h).
 		AlignItems(ui.Center).
-		Padding(0, 12, 0, leftPad).
-		Gap(8)
+		Padding(0, rightPad, 0, leftPad).
+		Gap(8).
+		Role(ui.RoleRegion).
+		Label("Workspace Header")
 
 	var toggleSidebar, goBack, goForward, toggleRight bool
 
@@ -283,7 +300,7 @@ func renderWakuCenterHeader(
 		if title == "" {
 			title = "New task"
 		}
-		ui.Text(c, title).TextColor(th.Text).FontSize(13).FontWeight(500).SingleLine().Shrink(1)
+		ui.Text(c, title).TextColor(th.Text).FontSize(13).FontWeight(500).SingleLine().Shrink(1).Role(ui.RoleHeading)
 
 		// Non-interactive window drag spacer
 		ui.Box(c).Grow(1).FillHeight().DragWindow()
@@ -328,11 +345,16 @@ func (s *wakuSplitDragTracker) view(
 ) {
 	strip := ui.Row(c).
 		Key(key).
+		Absolute().
+		Top(0).
+		Bottom(0).
 		Width(5).
-		FillHeight().
-		AlignItems(ui.Center).
-		Justify(ui.Center).
 		Cursor(ui.CursorResizeEW)
+	if invert {
+		strip.Left(0).Justify(ui.Start)
+	} else {
+		strip.Right(0).Justify(ui.End)
+	}
 
 	dx, _, held := strip.Dragged()
 	col := lineColor

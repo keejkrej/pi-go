@@ -388,8 +388,8 @@ const (
 	wakuFooterBranchChipMaxWidth    float32 = 210
 	wakuProjectPickerPopoverWidth   float32 = 300
 	wakuProjectPickerRowHeight      float32 = 26
-	wakuWorkspacePickerPopoverWidth float32 = 236
-	wakuBranchPickerPopoverWidth    float32 = 360
+	wakuWorkspacePickerPopoverWidth float32 = 190
+	wakuBranchPickerPopoverWidth    float32 = 300
 )
 
 type wakuWorkspacePickerState struct {
@@ -653,9 +653,10 @@ func (m *GuiMode) ToggleModelPickerPopover() {
 }
 
 type wakuQueueRowAction struct {
-	kind       string // "edit", "steer", "remove"
-	isSteering bool
-	index      int
+	kind        string // "edit", "steer", "remove"
+	isSteering  bool
+	index       int
+	nextMenuKey string
 }
 
 type wakuComposerFrameActions struct {
@@ -672,7 +673,6 @@ type wakuComposerFrameActions struct {
 	addNewProject  bool
 	createWorktree bool
 	switchBranch   string
-	createBranch   string
 }
 
 // renderWakuComposerZone renders the centered MaxWidth(720) bottom composer zone:
@@ -700,6 +700,7 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 	branchPopoverOpen := m.branchPopoverOpen
 	thinkingPopoverOpen := m.thinkingPopoverOpen
 	modelPopoverOpen := m.modelPopoverOpen
+	queueMoreMenuKey := m.queueMoreMenuKey
 	m.mu.Unlock()
 
 	if m.editor != nil && !m.editor.Chromeless() {
@@ -732,7 +733,7 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 			}
 
 			if hasQueue {
-				act.queueAct = m.renderWakuQueueTray(c, th, steering, followUp)
+				act.queueAct = m.renderWakuQueueTray(c, th, steering, followUp, queueMoreMenuKey)
 			}
 
 			// Floating 13px Waku Composer Card (all 4 corners stay 13px rounded, zero drop shadow)
@@ -746,24 +747,27 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 				Background(th.ComposerBg).
 				Border(1, borderCol).
 				Radius(wakuComposerRadius).
-				Padding(10, 10, 10, 10).
+				Padding(10, 9, 10, 9).
 				Gap(8).
 				Role(ui.RoleRegion).
 				Label("Composer Card")
 
 			card.Children(func() {
 				if m.editor != nil {
-					ui.Box(c).FillWidth().Padding(0, 4, 0, 4).Children(func() {
+					ui.Box(c).FillWidth().Padding(0, 2, 0, 2).Children(func() {
 						m.editor.View(c)
 					})
 				}
 
 				ui.Row(c).
+					Key("composer-toolbar").
 					FillWidth().
 					Height(26).
 					AlignItems(ui.Center).
 					Justify(ui.SpaceBetween).
 					Gap(8).
+					Role(ui.RoleToolbar).
+					Label("Composer Toolbar").
 					Children(func() {
 						// Left controls: Model Picker chip, Reasoning chip, Clipboard Attach, Bash indicator
 						ui.Row(c).Shrink(1).AlignItems(ui.Center).Gap(4).Children(func() {
@@ -790,6 +794,7 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 							modelBtn.Children(func() {
 								gui.IconView(c, provSvg, 13, provCol)
 								ui.Text(c, modelLbl).TextColor(modelFg).FontSize(12.5).SingleLine()
+								gui.IconView(c, gui.IconChevronDown, 10, th.TextTertiary)
 							})
 							if modelBtn.Clicked() {
 								modelPopoverOpen = !modelPopoverOpen
@@ -808,6 +813,7 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 								Padding(0, 7, 0, 7).
 								Radius(6).
 								AlignItems(ui.Center).
+								Gap(4).
 								Cursor(ui.CursorPointer).
 								Label("Select Thinking Chip")
 							thinkFg := th.TextSecondary
@@ -820,6 +826,7 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 							}
 							thinkBtn.Children(func() {
 								ui.Text(c, thinkLbl).TextColor(thinkFg).FontSize(12.5).SingleLine()
+								gui.IconView(c, gui.IconChevronDown, 10, th.TextTertiary)
 							})
 							if thinkBtn.Clicked() {
 								thinkingPopoverOpen = !thinkingPopoverOpen
@@ -957,6 +964,13 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 	m.branchPopoverOpen = branchPopoverOpen
 	m.thinkingPopoverOpen = thinkingPopoverOpen
 	m.modelPopoverOpen = modelPopoverOpen
+	if !hasQueue || act.queueAct.kind != "" ||
+		ctxPopoverOpen || projectPopoverOpen || worktreePopoverOpen ||
+		branchPopoverOpen || thinkingPopoverOpen || modelPopoverOpen {
+		m.queueMoreMenuKey = ""
+	} else {
+		m.queueMoreMenuKey = act.queueAct.nextMenuKey
+	}
 	m.mu.Unlock()
 
 	if act.pickedModel != nil {
@@ -1011,22 +1025,46 @@ func (m *GuiMode) renderWakuComposerZone(c *ui.Context, th *gui.GuiTheme) {
 	if act.switchProject != "" {
 		m.switchProjectDirectory(act.switchProject)
 	}
-	if act.createBranch != "" {
-		m.createAndCheckoutGitBranch(act.createBranch)
-	} else if act.switchBranch != "" {
+	if act.switchBranch != "" {
 		m.checkoutGitBranch(act.switchBranch)
 	}
 }
 
-func (m *GuiMode) renderWakuQueueTray(c *ui.Context, th *gui.GuiTheme, steering, followUp []string) wakuQueueRowAction {
+func wakuQueueMenuOptionRow(c *ui.Context, th *gui.GuiTheme, icon *ui.SVG, label string) bool {
+	btn := ui.ButtonBase(c).
+		FillWidth().
+		Height(26).
+		Padding(0, 8, 0, 8).
+		Radius(5).
+		AlignItems(ui.Center).
+		Justify(ui.Start).
+		Gap(8).
+		Cursor(ui.CursorPointer).
+		Role(ui.RoleMenuItem).
+		Label(label)
+	if btn.Hovered() {
+		btn.Background(th.Overlay)
+	}
+	btn.Children(func() {
+		gui.IconView(c, icon, 12, th.TextSecondary)
+		ui.Text(c, label).TextColor(th.Text).FontSize(12).SingleLine()
+	})
+	return btn.Clicked()
+}
+
+func (m *GuiMode) renderWakuQueueTray(c *ui.Context, th *gui.GuiTheme, steering, followUp []string, openMenuKey string) wakuQueueRowAction {
 	var action wakuQueueRowAction
+	nextMenuKey := openMenuKey
+	matchedOpen := false
 	ui.Box(c).FillWidth().Padding(0, 14, 0, 14).Children(func() {
 		tray := ui.Column(c).
 			Key("waku-queue-tray").
 			FillWidth().
 			Background(th.ComposerBg).
-			Border(1, th.Border).
+			BorderWidth(1, 1, 0, 1).
+			BorderColor(th.Border).
 			Radius(12, 12, 0, 0).
+			Padding(3.5, 0, 3.5, 0).
 			Clip().
 			Gap(0).
 			Role(ui.RoleRegion).
@@ -1037,6 +1075,12 @@ func (m *GuiMode) renderWakuQueueTray(c *ui.Context, th *gui.GuiTheme, steering,
 			renderItem := func(isSteering bool, idx int, text string) {
 				rowNum++
 				n := rowNum
+				rowKey := fmt.Sprintf("%t:%d", isSteering, idx)
+				menuOpen := openMenuKey == rowKey
+				wasMenuOpen := menuOpen
+				if menuOpen {
+					matchedOpen = true
+				}
 				row := ui.Row(c).
 					Key(fmt.Sprintf("queue-row-%t-%d", isSteering, idx)).
 					FillWidth().
@@ -1045,7 +1089,7 @@ func (m *GuiMode) renderWakuQueueTray(c *ui.Context, th *gui.GuiTheme, steering,
 					AlignItems(ui.Center).
 					Gap(9)
 
-				var editBtn, steerBtn, remBtn ui.Element
+				var editBtn, steerBtn, remBtn, moreBtn ui.Element
 				row.Children(func() {
 					gui.IconView(c, gui.IconQueue, 12, th.TextTertiary)
 
@@ -1067,7 +1111,9 @@ func (m *GuiMode) renderWakuQueueTray(c *ui.Context, th *gui.GuiTheme, steering,
 							SingleLine()
 					})
 					if editBtn.Clicked() {
-						action = wakuQueueRowAction{kind: "edit", isSteering: isSteering, index: idx}
+						action.kind = "edit"
+						action.isSteering = isSteering
+						action.index = idx
 					}
 
 					ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(2).Children(func() {
@@ -1089,7 +1135,9 @@ func (m *GuiMode) renderWakuQueueTray(c *ui.Context, th *gui.GuiTheme, steering,
 								ui.Text(c, "Steer").TextColor(th.TextSecondary).FontSize(12).SingleLine()
 							})
 							if steerBtn.Clicked() {
-								action = wakuQueueRowAction{kind: "steer", isSteering: false, index: idx}
+								action.kind = "steer"
+								action.isSteering = false
+								action.index = idx
 							}
 						} else {
 							ui.Box(c).Padding(0, 6, 0, 6).Children(func() {
@@ -1112,12 +1160,77 @@ func (m *GuiMode) renderWakuQueueTray(c *ui.Context, th *gui.GuiTheme, steering,
 							gui.IconView(c, gui.IconTrash, 12, th.TextSecondary)
 						})
 						if remBtn.Clicked() {
-							action = wakuQueueRowAction{kind: "remove", isSteering: isSteering, index: idx}
+							action.kind = "remove"
+							action.isSteering = isSteering
+							action.index = idx
+						}
+
+						moreBtn = ui.ButtonBase(c).
+							Key(fmt.Sprintf("queue-more-%d", n)).
+							Size(24, 24).
+							Radius(6).
+							AlignItems(ui.Center).
+							Justify(ui.Center).
+							Cursor(ui.CursorPointer).
+							Label(fmt.Sprintf("More actions for queued message %d", n))
+						if menuOpen || moreBtn.Hovered() {
+							moreBtn.Background(th.OverlayStrong)
+						}
+						moreBtn.Children(func() {
+							gui.IconView(c, gui.IconDots, 13, th.TextSecondary)
+						})
+						if moreBtn.Clicked() {
+							menuOpen = !menuOpen
+							if menuOpen {
+								nextMenuKey = rowKey
+							} else if nextMenuKey == rowKey {
+								nextMenuKey = ""
+							}
+						}
+
+						ui.PopoverBase(c, moreBtn, &menuOpen, func(panel ui.Element) {
+							panel.AttachTo(moreBtn, ui.AnchorTopEnd, ui.AnchorBottomEnd).
+								Margin(0, 0, 6, 0).
+								MinWidth(176).
+								Background(th.Raised).
+								Border(1, th.BorderStrong).
+								Radius(8).
+								Padding(4).
+								Shadow(0, 6, 20, 0, ui.RGBA(0, 0, 0, 0.28)).
+								Role(ui.RoleMenu).
+								Label(fmt.Sprintf("Queued message %d actions", n)).
+								Children(func() {
+									ui.Column(c).FillWidth().Gap(2).Children(func() {
+										if wakuQueueMenuOptionRow(c, th, gui.IconPencil, "Edit in composer") {
+											action.kind = "edit"
+											action.isSteering = isSteering
+											action.index = idx
+											menuOpen = false
+										}
+										if !isSteering {
+											if wakuQueueMenuOptionRow(c, th, gui.IconCornerDownRight, "Steer") {
+												action.kind = "steer"
+												action.isSteering = false
+												action.index = idx
+												menuOpen = false
+											}
+										}
+										if wakuQueueMenuOptionRow(c, th, gui.IconTrash, "Remove") {
+											action.kind = "remove"
+											action.isSteering = isSteering
+											action.index = idx
+											menuOpen = false
+										}
+									})
+								})
+						})
+						if wasMenuOpen && !menuOpen && nextMenuKey == rowKey {
+							nextMenuKey = ""
 						}
 					})
 				})
 
-				if editBtn.Hovered() || steerBtn.Hovered() || remBtn.Hovered() {
+				if editBtn.Hovered() || steerBtn.Hovered() || remBtn.Hovered() || moreBtn.Hovered() || menuOpen {
 					row.Background(th.Overlay)
 				}
 			}
@@ -1130,6 +1243,10 @@ func (m *GuiMode) renderWakuQueueTray(c *ui.Context, th *gui.GuiTheme, steering,
 			}
 		})
 	})
+	if openMenuKey != "" && !matchedOpen && nextMenuKey == openMenuKey {
+		nextMenuKey = ""
+	}
+	action.nextMenuKey = nextMenuKey
 	return action
 }
 
@@ -1150,10 +1267,10 @@ func (m *GuiMode) renderWakuModelPickerPopover(
 			Margin(0, 0, 4, 0).
 			Width(460).
 			Height(390).
-			Radius(13).
+			Radius(12).
 			Clip().
 			Border(1, th.BorderStrong).
-			Background(th.Raised).
+			Background(th.Background).
 			Shadow(0, 12, 32, 0, ui.RGBA(0, 0, 0, 0.38)).
 			Role(ui.RoleDialog).
 			Label("Model Picker Popover")
@@ -1284,6 +1401,8 @@ func (m *GuiMode) renderWakuModelPickerPopover(
 									Background(th.Raised).
 									AlignItems(ui.Center).
 									Gap(8).
+									Role(ui.RoleRegion).
+									Label("Model Search Field").
 									Children(func() {
 										gui.IconView(c, gui.IconSearch, 15, th.TextSecondary)
 										searchIn = ui.TextInputBase(c, &mp.searchDraft).
@@ -1376,6 +1495,8 @@ func (m *GuiMode) renderWakuModelPickerPopover(
 							Grow(1).
 							MinHeight(0).
 							Padding(9).
+							Role(ui.RoleList).
+							Label("Model List").
 							Children(func() {
 								if len(visible) == 0 {
 									emptyTxt := "No models available for this provider"
@@ -1478,7 +1599,7 @@ func (m *GuiMode) renderWakuModelPickerPopover(
 											if isCurrent {
 												bg = th.OverlayStrong
 											}
-											row.Background(bg).Border(1, th.Accent)
+											row.Background(bg).Border(1, ui.Color{})
 										} else if isCurrent {
 											row.Background(th.OverlayStrong).Border(1, ui.Color{})
 										} else if selBtn.Hovered() || favBtn.Hovered() {
@@ -1509,12 +1630,14 @@ func (m *GuiMode) renderWakuThinkingPopover(
 	ui.PopoverBase(c, thinkBtn, open, func(panel ui.Element) {
 		panel.AttachTo(thinkBtn, ui.AnchorTopStart, ui.AnchorBottomStart).
 			Margin(0, 0, 4, 0).
-			MinWidth(212).
+			MinWidth(200).
 			Background(th.Raised).
 			Border(1, th.BorderStrong).
 			Radius(10).
 			Padding(6).
-			Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.34))
+			Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.34)).
+			Role(ui.RoleMenu).
+			Label("Thinking Picker Popover")
 		panel.Children(func() {
 			levels := core.ThinkingLevelOptions
 			if sess != nil {
@@ -1539,8 +1662,9 @@ func (m *GuiMode) renderWakuThinkingPopover(
 				defaultLvl = levels[0]
 			}
 
+			levels = wakuOrderThinkingLevelsForPopover(levels)
 			ui.Column(c).FillWidth().Gap(2).Children(func() {
-				ui.Box(c).Padding(4, 8, 4, 8).Children(func() {
+				ui.Row(c).FillWidth().Height(24).Padding(0, 8, 0, 8).AlignItems(ui.Center).Role(ui.RoleHeading).Label("Reasoning").Children(func() {
 					ui.Text(c, "Reasoning").TextColor(th.TextTertiary).FontSize(11.5).FontWeight(500).SingleLine()
 				})
 				for _, lvl := range levels {
@@ -1550,13 +1674,14 @@ func (m *GuiMode) renderWakuThinkingPopover(
 					isDefault := lvlCopy == defaultLvl
 					itemBtn := ui.ButtonBase(c).
 						FillWidth().
-						Height(28).
+						Height(26).
 						Padding(0, 8, 0, 8).
 						Radius(6).
 						AlignItems(ui.Center).
 						Justify(ui.SpaceBetween).
 						Gap(10).
 						Cursor(ui.CursorPointer).
+						Role(ui.RoleMenuItem).
 						Label(dispLbl)
 					if itemBtn.Hovered() {
 						itemBtn.Background(th.Overlay)
@@ -1627,6 +1752,7 @@ func renderWakuFooterMenuChip(
 			gui.IconView(c, icon, 12, th.TextTertiary)
 		})
 		ui.Text(c, text).TextColor(fg).FontSize(13).SingleLine().Shrink(1).MinWidth(0)
+		gui.IconView(c, gui.IconChevronDown, 10, th.TextTertiary)
 	})
 	return btn
 }
@@ -1649,7 +1775,7 @@ func (m *GuiMode) renderWakuProjectPickerPopover(
 			Border(1, th.BorderStrong).
 			Radius(10).
 			Shadow(0, 12, 32, 0, ui.RGBA(0, 0, 0, 0.36)).
-			Padding(6).
+			Padding(0, 0, 4, 0).
 			Role(ui.RoleDialog).
 			Label("Project Picker Popover")
 
@@ -1660,29 +1786,33 @@ func (m *GuiMode) renderWakuProjectPickerPopover(
 			hlIdx := wp.projectHighlightIdx
 			wp.mu.Unlock()
 
-			ui.Column(c).FillWidth().Gap(4).Children(func() {
+			ui.Column(c).FillWidth().Gap(0).Children(func() {
 				var searchIn ui.Element
-				ui.Row(c).
-					Key("proj-picker-search-pill").
-					FillWidth().
-					Height(32).
-					Padding(0, 10, 0, 10).
-					Radius(8).
-					Background(th.Surface).
-					AlignItems(ui.Center).
-					Gap(8).
-					Children(func() {
-						gui.IconView(c, gui.IconSearch, 14, th.TextSecondary)
-						searchIn = ui.TextInputBase(c, &wp.projectSearch).
-							Grow(1).
-							Shrink(1).
-							MinWidth(0).
-							FontSize(12.5).
-							TextColor(th.Text).
-							Placeholder("Search projects…").
-							Label("Search Projects").
-							AutoFocus()
-					})
+				ui.Box(c).FillWidth().Padding(10, 12, 8, 12).Children(func() {
+					ui.Row(c).
+						Key("proj-picker-search-pill").
+						FillWidth().
+						Height(28).
+						Padding(0, 10, 0, 10).
+						Radius(8).
+						Background(th.Surface).
+						AlignItems(ui.Center).
+						Gap(8).
+						Role(ui.RoleRegion).
+						Label("Project Search Bar").
+						Children(func() {
+							gui.IconView(c, gui.IconSearch, 14, th.TextSecondary)
+							searchIn = ui.TextInputBase(c, &wp.projectSearch).
+								Grow(1).
+								Shrink(1).
+								MinWidth(0).
+								FontSize(12.5).
+								TextColor(th.Text).
+								Placeholder("Search projects…").
+								Label("Search Projects").
+								AutoFocus()
+						})
+				})
 
 				if wp.projectSearch != lastQ {
 					hlIdx = 0
@@ -1763,7 +1893,7 @@ func (m *GuiMode) renderWakuProjectPickerPopover(
 
 				activeNorm := wakuResolvePath(activeProject)
 				ui.Scroll(c).Key("proj-picker-scroll").FillWidth().MaxHeight(220).Children(func() {
-					ui.Column(c).FillWidth().Gap(2).Children(func() {
+					ui.Column(c).FillWidth().Padding(0, 4, 0, 4).Gap(2).Children(func() {
 						if len(filtered) == 0 {
 							ui.Box(c).FillWidth().Padding(14, 8, 14, 8).Center().Children(func() {
 								ui.Text(c, "No matching projects").TextColor(th.TextGhost).FontSize(12).SingleLine()
@@ -1793,7 +1923,7 @@ func (m *GuiMode) renderWakuProjectPickerPopover(
 								if isCur {
 									bg = th.OverlayStrong
 								}
-								rowBtn.Background(bg).Border(1, th.Accent)
+								rowBtn.Background(bg).Border(1, ui.Color{})
 							} else if isCur {
 								rowBtn.Background(th.OverlayStrong).Border(1, ui.Color{})
 							} else if rowBtn.Hovered() {
@@ -1803,9 +1933,6 @@ func (m *GuiMode) renderWakuProjectPickerPopover(
 							}
 							rowBtn.Children(func() {
 								ui.Row(c).Grow(1).Shrink(1).MinWidth(0).AlignItems(ui.Center).Gap(7).Children(func() {
-									ui.Box(c).Size(12, 12).Shrink(0).Center().Children(func() {
-										gui.IconView(c, gui.IconFolder, 12, th.TextSecondary)
-									})
 									ui.Text(c, name).TextColor(th.Text).FontSize(12.5).SingleLine().Shrink(1).MinWidth(0)
 									if showParent {
 										ui.Text(c, utils.ShortenHomePath(filepath.Dir(dirCopy))).
@@ -1814,7 +1941,7 @@ func (m *GuiMode) renderWakuProjectPickerPopover(
 								})
 								if isCur {
 									ui.Box(c).Size(12, 12).Shrink(0).Center().Children(func() {
-										gui.IconView(c, gui.IconCheck, 12, th.Accent)
+										gui.IconView(c, gui.IconCheck, 11, th.TextSecondary)
 									})
 								}
 							})
@@ -1826,31 +1953,58 @@ func (m *GuiMode) renderWakuProjectPickerPopover(
 					})
 				})
 
-				ui.Box(c).FillWidth().Height(1).Background(th.Border).Margin(2, 0, 2, 0)
+				ui.Box(c).FillWidth().Height(1).Background(th.Border).Margin(4, 6, 4, 6)
 
-				newProjBtn := ui.ButtonBase(c).
-					Key("proj-picker-new-project").
-					FillWidth().
-					Height(28).
-					Padding(0, 8, 0, 8).
-					Radius(6).
-					AlignItems(ui.Center).
-					Gap(7).
-					Cursor(ui.CursorPointer).
-					Label("New project…")
-				if newProjBtn.Hovered() {
-					newProjBtn.Background(th.Overlay)
-				}
-				newProjBtn.Children(func() {
-					ui.Box(c).Size(13, 13).Shrink(0).Center().Children(func() {
-						gui.IconView(c, gui.IconFolderNew, 13, th.TextSecondary)
+				ui.Column(c).FillWidth().Padding(0, 4, 0, 4).Gap(0).Children(func() {
+					newProjBtn := ui.ButtonBase(c).
+						Key("proj-picker-new-project").
+						FillWidth().
+						Height(26).
+						Padding(0, 8, 0, 8).
+						Radius(6).
+						AlignItems(ui.Center).
+						Justify(ui.Start).
+						Gap(8).
+						Cursor(ui.CursorPointer).
+						Label("New Project…")
+					if newProjBtn.Hovered() {
+						newProjBtn.Background(th.Overlay)
+					}
+					newProjBtn.Children(func() {
+						ui.Box(c).Size(13, 13).Shrink(0).Center().Children(func() {
+							gui.IconView(c, gui.IconFolderNew, 13, th.TextSecondary)
+						})
+						ui.Text(c, "New Project…").TextColor(th.Text).FontSize(12.5).SingleLine()
 					})
-					ui.Text(c, "New project…").TextColor(th.Text).FontSize(12.5).SingleLine()
+					if newProjBtn.Clicked() {
+						act.addNewProject = true
+						*open = false
+					}
+
+					noProjBtn := ui.ButtonBase(c).
+						Key("proj-picker-no-project").
+						FillWidth().
+						Height(26).
+						Padding(0, 8, 0, 8).
+						Radius(6).
+						AlignItems(ui.Center).
+						Justify(ui.Start).
+						Gap(8).
+						Cursor(ui.CursorPointer).
+						Label("No Project")
+					if noProjBtn.Hovered() {
+						noProjBtn.Background(th.Overlay)
+					}
+					noProjBtn.Children(func() {
+						ui.Box(c).Size(13, 13).Shrink(0).Center().Children(func() {
+							gui.IconView(c, gui.IconClose, 13, th.TextTertiary)
+						})
+						ui.Text(c, "No Project").TextColor(th.TextSecondary).FontSize(12.5).SingleLine()
+					})
+					if noProjBtn.Clicked() {
+						*open = false
+					}
 				})
-				if newProjBtn.Clicked() {
-					act.addNewProject = true
-					*open = false
-				}
 			})
 		})
 	})
@@ -1870,32 +2024,33 @@ func (m *GuiMode) renderWakuWorkspacePickerPopover(
 		panel.AttachTo(anchor, ui.AnchorTopStart, ui.AnchorBottomStart).
 			Key("workspace-picker-popover").
 			Margin(0, 0, 6, 0).
-			Width(wakuWorkspacePickerPopoverWidth).
+			MinWidth(wakuWorkspacePickerPopoverWidth).
 			Background(th.Raised).
 			Border(1, th.BorderStrong).
 			Radius(10).
 			Shadow(0, 12, 32, 0, ui.RGBA(0, 0, 0, 0.36)).
 			Padding(6).
-			Role(ui.RoleDialog).
+			Role(ui.RoleMenu).
 			Label("Workspace Picker Popover")
 
 		panel.Children(func() {
 			curNorm := wakuResolvePath(cwd)
 			ui.Column(c).FillWidth().Gap(2).Children(func() {
-				ui.Box(c).Padding(2, 8, 4, 8).Children(func() {
+				ui.Row(c).FillWidth().Height(22).Padding(0, 8, 0, 8).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, "Work in").TextColor(th.TextTertiary).FontSize(11.5).FontWeight(600).SingleLine()
 				})
 
 				localBtn := ui.ButtonBase(c).
 					Key("ws-picker-local").
 					FillWidth().
-					Height(28).
+					Height(26).
 					Padding(0, 8, 0, 8).
 					Radius(6).
 					AlignItems(ui.Center).
 					Justify(ui.SpaceBetween).
 					Gap(8).
 					Cursor(ui.CursorPointer).
+					Role(ui.RoleMenuItem).
 					Label("Local workspace")
 				if !isLinkedWT {
 					localBtn.Background(th.OverlayStrong)
@@ -1911,7 +2066,7 @@ func (m *GuiMode) renderWakuWorkspacePickerPopover(
 					})
 					if !isLinkedWT {
 						ui.Box(c).Size(12, 12).Shrink(0).Center().Children(func() {
-							gui.IconView(c, gui.IconCheck, 12, th.Accent)
+							gui.IconView(c, gui.IconCheck, 11, th.TextTertiary)
 						})
 					}
 				})
@@ -1932,13 +2087,14 @@ func (m *GuiMode) renderWakuWorkspacePickerPopover(
 					wtBtn := ui.ButtonBase(c).
 						Key(fmt.Sprintf("ws-picker-wt-%d-%s", idx, wakuResolvePath(wtCopy.Path))).
 						FillWidth().
-						Height(28).
+						Height(26).
 						Padding(0, 8, 0, 8).
 						Radius(6).
 						AlignItems(ui.Center).
 						Justify(ui.SpaceBetween).
 						Gap(8).
 						Cursor(ui.CursorPointer).
+						Role(ui.RoleMenuItem).
 						Label("Worktree " + label)
 					if isCurWT {
 						wtBtn.Background(th.OverlayStrong)
@@ -1954,7 +2110,7 @@ func (m *GuiMode) renderWakuWorkspacePickerPopover(
 						})
 						if isCurWT {
 							ui.Box(c).Size(12, 12).Shrink(0).Center().Children(func() {
-								gui.IconView(c, gui.IconCheck, 12, th.Accent)
+								gui.IconView(c, gui.IconCheck, 11, th.TextTertiary)
 							})
 						}
 					})
@@ -1971,19 +2127,21 @@ func (m *GuiMode) renderWakuWorkspacePickerPopover(
 					newWTBtn := ui.ButtonBase(c).
 						Key("ws-picker-new-worktree").
 						FillWidth().
-						Height(28).
+						Height(26).
 						Padding(0, 8, 0, 8).
 						Radius(6).
 						AlignItems(ui.Center).
-						Gap(7).
+						Justify(ui.Start).
+						Gap(8).
 						Cursor(ui.CursorPointer).
+						Role(ui.RoleMenuItem).
 						Label("New worktree")
 					if newWTBtn.Hovered() {
 						newWTBtn.Background(th.Overlay)
 					}
 					newWTBtn.Children(func() {
 						ui.Box(c).Size(12, 12).Shrink(0).Center().Children(func() {
-							gui.IconView(c, gui.IconFork, 12, th.Accent)
+							gui.IconView(c, gui.IconFork, 12, th.TextSecondary)
 						})
 						ui.Text(c, "New worktree").TextColor(th.Text).FontSize(12.5).SingleLine()
 					})
@@ -2007,6 +2165,10 @@ func (m *GuiMode) renderWakuBranchPickerPopover(
 ) {
 	wp := m.workspacePicker
 	ui.PopoverBase(c, anchor, open, func(panel ui.Element) {
+		wp.mu.Lock()
+		creatingNow := wp.branchCreating
+		wp.mu.Unlock()
+
 		panel.AttachTo(anchor, ui.AnchorTopStart, ui.AnchorBottomStart).
 			Key("branch-picker-popover").
 			Margin(0, 0, 6, 0).
@@ -2015,9 +2177,13 @@ func (m *GuiMode) renderWakuBranchPickerPopover(
 			Border(1, th.BorderStrong).
 			Radius(10).
 			Shadow(0, 12, 32, 0, ui.RGBA(0, 0, 0, 0.36)).
-			Padding(8).
 			Role(ui.RoleDialog).
 			Label("Branch Picker Popover")
+		if creatingNow {
+			panel.Padding(14)
+		} else {
+			panel.Padding(0, 0, 4, 0)
+		}
 
 		panel.Children(func() {
 			branches, curBr := m.rightPanel.gitBranchesSnapshot()
@@ -2028,38 +2194,29 @@ func (m *GuiMode) renderWakuBranchPickerPopover(
 			wp.mu.Unlock()
 
 			if creating {
-				ui.Column(c).FillWidth().Gap(8).Children(func() {
-					ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(6).Children(func() {
-						backBtn := ui.ButtonBase(c).
-							Key("br-create-back").
-							Height(24).
-							Padding(0, 7, 0, 7).
-							Radius(6).
-							AlignItems(ui.Center).
-							Cursor(ui.CursorPointer).
-							Label("Back to branches")
-						if backBtn.Hovered() {
-							backBtn.Background(th.Overlay)
-						}
-						backBtn.Children(func() {
-							ui.Text(c, "← Back").TextColor(th.TextSecondary).FontSize(12).SingleLine()
-						})
-						if backBtn.Clicked() {
-							wp.exitBranchCreateMode()
-						}
-						ui.Text(c, "Create & checkout branch").TextColor(th.Text).FontSize(12.5).FontWeight(600).SingleLine()
+				ui.Column(c).FillWidth().Gap(0).Children(func() {
+					ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(8).Children(func() {
+						gui.IconView(c, gui.IconPlus, 14, th.TextSecondary)
+						ui.Text(c, "Create and checkout new branch").
+							TextColor(th.Text).
+							FontSize(13).
+							FontWeight(500).
+							SingleLine()
 					})
 
 					var nameIn ui.Element
 					ui.Row(c).
 						Key("br-create-input-pill").
 						FillWidth().
-						Height(34).
+						Height(36).
+						Margin(12, 0, 0, 0).
 						Padding(0, 10, 0, 10).
-						Radius(8).
+						Radius(9).
 						Background(th.Surface).
-						Border(1, th.Accent).
+						Border(1, th.BorderStrong).
 						AlignItems(ui.Center).
+						Role(ui.RoleRegion).
+						Label("Branch Create Input Bar").
 						Children(func() {
 							nameIn = ui.TextInputBase(c, &wp.newBranchName).
 								Grow(1).
@@ -2067,7 +2224,7 @@ func (m *GuiMode) renderWakuBranchPickerPopover(
 								MinWidth(0).
 								FontSize(12.5).
 								TextColor(th.Text).
-								Placeholder("feature/new-branch").
+								Placeholder("New branch name").
 								Label("New Branch Name").
 								AutoFocus()
 						})
@@ -2101,83 +2258,43 @@ func (m *GuiMode) renderWakuBranchPickerPopover(
 						return false
 					})
 
-					trimmed := strings.TrimSpace(wp.newBranchName)
-					valid := trimmed != "" && !strings.ContainsAny(trimmed, " \t\r\n")
-					ui.Row(c).FillWidth().Justify(ui.End).AlignItems(ui.Center).Gap(6).Children(func() {
-						cancelBtn := ui.ButtonBase(c).
-							Key("br-create-cancel").
-							Height(28).
-							Padding(0, 10, 0, 10).
-							Radius(6).
-							AlignItems(ui.Center).
-							Cursor(ui.CursorPointer).
-							Label("Cancel branch creation")
-						if cancelBtn.Hovered() {
-							cancelBtn.Background(th.Overlay)
-						}
-						cancelBtn.Children(func() {
-							ui.Text(c, "Cancel").TextColor(th.TextSecondary).FontSize(12.5).SingleLine()
-						})
-						if cancelBtn.Clicked() {
-							wp.exitBranchCreateMode()
-						}
-
-						submitBtn := ui.ButtonBase(c).
-							Key("br-create-submit").
-							Height(28).
-							Padding(0, 12, 0, 12).
-							Radius(6).
-							AlignItems(ui.Center).
-							Cursor(ui.CursorPointer).
-							Label("Create and checkout branch")
-						if valid {
-							submitBtn.Background(th.Accent)
-						} else {
-							submitBtn.Background(th.OverlayStrong).Disabled(true)
-						}
-						submitBtn.Children(func() {
-							fg := th.Text
-							if !valid {
-								fg = th.TextTertiary
-							}
-							ui.Text(c, "Create & Checkout").TextColor(fg).FontSize(12.5).FontWeight(500).SingleLine()
-						})
-						if submitBtn.Clicked() && valid {
-							act.createBranch = trimmed
-							wp.mu.Lock()
-							wp.branchCreating = false
-							wp.newBranchName = ""
-							wp.mu.Unlock()
-							*open = false
-						}
+					ui.Box(c).FillWidth().Margin(9, 0, 0, 0).Children(func() {
+						ui.Text(c, "Press Return to create · Esc to cancel").
+							TextColor(th.TextTertiary).
+							FontSize(12.5).
+							SingleLine()
 					})
 				})
 				return
 			}
 
-			ui.Column(c).FillWidth().Gap(6).Children(func() {
+			ui.Column(c).FillWidth().Padding(0, 4, 0, 4).Gap(2).Children(func() {
 				var searchIn ui.Element
-				ui.Row(c).
-					Key("br-picker-search-pill").
-					FillWidth().
-					Height(34).
-					Padding(0, 10, 0, 10).
-					Radius(8).
-					Background(th.Surface).
-					AlignItems(ui.Center).
-					Gap(8).
-					Children(func() {
-						gui.IconView(c, gui.IconSearch, 14, th.TextSecondary)
-						searchIn = ui.TextInputBase(c, &wp.branchSearch).
-							Grow(1).
-							Shrink(1).
-							MinWidth(0).
-							FontSize(12.5).
-							TextColor(th.Text).
-							Placeholder("Search branches…").
-							Label("Search Git Branches").
-							AutoFocus()
-					})
+				ui.Box(c).FillWidth().Padding(6, 8, 2, 8).Children(func() {
+					ui.Row(c).
+						Key("br-picker-search-pill").
+						FillWidth().
+						Height(28).
+						Padding(0, 10, 0, 10).
+						Radius(8).
+						Background(th.Surface).
+						AlignItems(ui.Center).
+						Gap(8).
+						Role(ui.RoleRegion).
+						Label("Branch Search Bar").
+						Children(func() {
+							gui.IconView(c, gui.IconSearch, 14, th.TextSecondary)
+							searchIn = ui.TextInputBase(c, &wp.branchSearch).
+								Grow(1).
+								Shrink(1).
+								MinWidth(0).
+								FontSize(12.5).
+								TextColor(th.Text).
+								Placeholder("Search branches…").
+								Label("Search Git Branches").
+								AutoFocus()
+						})
+				})
 
 				if wp.branchSearch != lastQ {
 					hlIdx = 0
@@ -2285,7 +2402,7 @@ func (m *GuiMode) renderWakuBranchPickerPopover(
 								if isCur {
 									bg = th.OverlayStrong
 								}
-								bBtn.Background(bg).Border(1, th.Accent)
+								bBtn.Background(bg).Border(1, ui.Color{})
 							} else if isCur {
 								bBtn.Background(th.OverlayStrong).Border(1, ui.Color{})
 							} else if bBtn.Hovered() {
@@ -2302,7 +2419,7 @@ func (m *GuiMode) renderWakuBranchPickerPopover(
 								})
 								if isCur {
 									ui.Box(c).Size(12, 12).Shrink(0).Center().Children(func() {
-										gui.IconView(c, gui.IconCheck, 12, th.Accent)
+										gui.IconView(c, gui.IconCheck, 11, th.TextSecondary)
 									})
 								}
 							})
@@ -2325,7 +2442,8 @@ func (m *GuiMode) renderWakuBranchPickerPopover(
 					Padding(0, 8, 0, 8).
 					Radius(6).
 					AlignItems(ui.Center).
-					Gap(6).
+					Justify(ui.Start).
+					Gap(8).
 					Cursor(ui.CursorPointer).
 					Label("Create and checkout new branch…")
 				if createBtn.Hovered() {
@@ -2333,7 +2451,7 @@ func (m *GuiMode) renderWakuBranchPickerPopover(
 				}
 				createBtn.Children(func() {
 					ui.Box(c).Size(12, 12).Shrink(0).Center().Children(func() {
-						gui.IconView(c, gui.IconPlus, 12, th.Accent)
+						gui.IconView(c, gui.IconPlus, 12, th.TextSecondary)
 					})
 					ui.Text(c, "Create and checkout new branch…").TextColor(th.Text).FontSize(12.5).SingleLine()
 				})
@@ -2395,7 +2513,7 @@ func (m *GuiMode) renderWakuWorkspaceFooter(
 		Key("waku-workspace-footer").
 		FillWidth().
 		Height(wakuWorkspaceFooterHeight).
-		Margin(2, 0, 6, 0).
+		Margin(4, 0, 8, 0).
 		Padding(0, 10, 0, 10).
 		AlignItems(ui.Center).
 		Justify(ui.SpaceBetween).
@@ -2476,11 +2594,10 @@ func (m *GuiMode) renderWakuWorkspaceFooter(
 
 				ctxAnchor := ui.ButtonBase(c).
 					Key("footer-context-gauge").
-					Height(24).
-					Padding(0, 7, 0, 7).
+					Size(24, 24).
 					Radius(6).
 					AlignItems(ui.Center).
-					Gap(5).
+					Justify(ui.Center).
 					Cursor(ui.CursorPointer).
 					Label("Context Window Usage")
 				if *ctxPopoverOpen {
@@ -2490,9 +2607,6 @@ func (m *GuiMode) renderWakuWorkspaceFooter(
 				}
 				ctxAnchor.Children(func() {
 					gui.RenderContextGauge(c, st.ContextPercent, st.HasContextPercent, 14, 2.0, th)
-					if st.HasContextPercent {
-						ui.Textf(c, "%.0f%%", st.ContextPercent).TextColor(th.TextSecondary).FontSize(11).SingleLine()
-					}
 				})
 				if ctxAnchor.Clicked() {
 					*ctxPopoverOpen = !*ctxPopoverOpen
@@ -2507,13 +2621,15 @@ func (m *GuiMode) renderWakuWorkspaceFooter(
 						Width(320).
 						Background(th.Raised).
 						Border(1, th.BorderStrong).
-						Radius(12).
+						Radius(10).
 						Shadow(0, 12, 32, 0, ui.RGBA(0, 0, 0, 0.36)).
-						Padding(12, 14)
+						Padding(14).
+						Role(ui.RoleDialog).
+						Label("Context Window Popover")
 					panel.Children(func() {
-						ui.Column(c).FillWidth().Gap(10).Children(func() {
+						ui.Column(c).FillWidth().Gap(12).Children(func() {
 							ui.Row(c).FillWidth().AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
-								ui.Text(c, "Context Window").TextColor(th.Text).FontSize(13).FontWeight(600)
+								ui.Text(c, "Context Window").TextColor(th.Text).FontSize(13).FontWeight(600).Role(ui.RoleHeading)
 								if st.ContextWindow > 0 && st.HasContextTokens {
 									ui.Textf(c, "%.1f%% of %s", st.ContextPercent, FormatTokens(st.ContextWindow)).
 										TextColor(th.TextSecondary).FontSize(12)
@@ -2523,7 +2639,7 @@ func (m *GuiMode) renderWakuWorkspaceFooter(
 								}
 							})
 
-							const trackW float32 = 290
+							const trackW float32 = 292
 							pct := st.ContextPercent
 							if pct < 0 {
 								pct = 0
@@ -2538,9 +2654,9 @@ func (m *GuiMode) renderWakuWorkspaceFooter(
 							} else if pct >= 70 {
 								barCol = th.Warning
 							}
-							ui.Row(c).Width(trackW).Height(6).Radius(999).Background(th.Inset).Children(func() {
+							ui.Row(c).Width(trackW).Height(3).Radius(999).Background(th.Inset).Role(ui.RoleRegion).Label("Context Gauge Bar").Children(func() {
 								if fillW > 0 {
-									ui.Box(c).Width(fillW).Height(6).Radius(999).Background(barCol)
+									ui.Box(c).Width(fillW).Height(3).Radius(999).Background(barCol)
 								}
 							})
 
@@ -2604,6 +2720,21 @@ func wakuOptTokens(has bool, n int) string {
 		return "—"
 	}
 	return FormatTokens(n)
+}
+
+func wakuOrderThinkingLevelsForPopover(levels []agent.ThinkingLevel) []agent.ThinkingLevel {
+	if len(levels) <= 1 {
+		return levels
+	}
+	var out, deferred []agent.ThinkingLevel
+	for _, l := range levels {
+		if l == agent.ThinkingLevelMinimal {
+			deferred = append(deferred, l)
+			continue
+		}
+		out = append(out, l)
+	}
+	return append(out, deferred...)
 }
 
 func wakuPopoverStatRow(c *ui.Context, th *gui.GuiTheme, label, value string) {

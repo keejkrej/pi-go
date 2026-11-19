@@ -354,7 +354,8 @@ func (u *UserMessageCard) View(c *ui.Context) ui.Element {
 	var root ui.Element
 	if wakuStyle {
 		tsClock := msgFormatShortClock(rawTs)
-		col := ui.Column(c).FillWidth().AlignItems(ui.End).Gap(3)
+		col := ui.Column(c).Key(fmt.Sprintf("waku-user-card-%p", u)).FillWidth().AlignItems(ui.End).Gap(3)
+		hovered := col.Hovered()
 		col.Children(func() {
 			if len(images) > 0 {
 				u.mu.Lock()
@@ -370,12 +371,14 @@ func (u *UserMessageCard) View(c *ui.Context) ui.Element {
 					Border(1, th.Raised).
 					Radius(wakuUserBubbleRadius).
 					Padding(7, 11).
+					Role(ui.RoleRegion).
+					Label("User Bubble").
 					Children(func() {
 						md.View(c)
 					})
 			}
 			if tsClock != "" || text != "" {
-				ui.Row(c).
+				footerRow := ui.Row(c).
 					FillWidth().
 					Height(27).
 					AlignItems(ui.Center).
@@ -389,6 +392,9 @@ func (u *UserMessageCard) View(c *ui.Context) ui.Element {
 							copyClicked = true
 						}
 					})
+				if !hovered {
+					footerRow.Opacity(0)
+				}
 			}
 		})
 		root = col
@@ -863,10 +869,14 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 	}
 
 	root := ui.Column(c).
+		Key(fmt.Sprintf("waku-asst-card-%p", a)).
 		FillWidth().
 		MinWidth(0).
-		Padding(2, 0).
 		Gap(8)
+	if !wakuStyle {
+		root.Padding(2, 0)
+	}
+	asstHovered := root.Hovered()
 
 	root.Children(func() {
 		// Retry banner if retrying
@@ -1047,14 +1057,24 @@ func (a *AssistantMessageCard) View(c *ui.Context) ui.Element {
 					FillWidth().
 					MinHeight(27).
 					AlignItems(ui.Center).
-					Gap(4).
+					Gap(6).
 					Margin(2, 0, 0, 0).
 					Children(func() {
-						if showCopy && msgRenderWakuCopyIconButton(c, th) {
-							copyClicked = true
-						}
-						if tsClock != "" {
-							ui.Text(c, tsClock).TextColor(th.TextGhost).FontSize(12).SingleLine()
+						if showCopy || tsClock != "" {
+							hoverActions := ui.Row(c).
+								AlignItems(ui.Center).
+								Gap(4).
+								Children(func() {
+									if showCopy && msgRenderWakuCopyIconButton(c, th) {
+										copyClicked = true
+									}
+									if tsClock != "" {
+										ui.Text(c, tsClock).TextColor(th.TextGhost).FontSize(12).SingleLine()
+									}
+								})
+							if !asstHovered {
+								hoverActions.Opacity(0)
+							}
 						}
 						if hasNonNormalStop {
 							ui.Box(c).Background(th.Raised).Border(1, th.Border).Radius(4).Padding(1, 5).Children(func() {
