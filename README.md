@@ -101,3 +101,13 @@ CGO_ENABLED=0 go test ./...
 ```
 
 See [`AGENTS.md`](AGENTS.md), [`docs/README.md`](docs/README.md), and [`docs/development.md`](docs/development.md) for detailed developer workflows, cross-compilation notes, and testing guidelines.
+
+## License
+
+Original `pi-go` code is licensed under the MIT License; see [`LICENSE`](LICENSE)
+at the repository root. Copyright (c) 2026 keejkrej and contributors.
+
+`pi-go` is a Go port of the Pi coding agent. Upstream Pi material, bundled
+package assets, and other third-party components keep their own upstream
+licenses and are not relicensed by the root `LICENSE`; their notices and
+copyright headers remain in effect.
