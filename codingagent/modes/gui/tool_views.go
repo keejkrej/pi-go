@@ -585,7 +585,6 @@ func (tc *ToolExecutionCard) View(c *ui.Context) ui.Element {
 	border := th.Border
 	iconCol := th.TextSecondary
 	if snap.Pending {
-		border = th.BorderAccent
 		iconCol = th.Accent
 	} else if snap.IsError {
 		bg = th.ToolErrorBg

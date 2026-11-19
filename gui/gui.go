@@ -80,6 +80,11 @@ type OverlayOptions struct {
 	MaxHeight            float32
 	MaxWidthPercent      float32
 	MaxHeightPercent     float32
+	Radius               float32
+	AlignTop             float32
+	ZeroPadding          bool
+	Role                 ui.Role
+	Label                string
 	BackdropColor        ui.Color
 	PanelBackground      ui.Color
 	NoBackdrop           bool
@@ -698,7 +703,12 @@ func (g *GUI) View(c *ui.Context) {
 		entry := ov
 		ui.Overlay(c, func() {
 			back := ui.Box(c).Absolute().Left(0).Top(0).Right(0).Bottom(0).
-				Justify(ui.Center).AlignItems(ui.Center).Modal()
+				AlignItems(ui.Center).Modal()
+			if entry.opts.AlignTop > 0 {
+				back.Justify(ui.Start).Padding(entry.opts.AlignTop, 0, 0, 0)
+			} else {
+				back.Justify(ui.Center)
+			}
 			if !entry.opts.NoBackdrop {
 				bg := entry.opts.BackdropColor
 				if bg.A == 0 {
@@ -715,13 +725,24 @@ func (g *GUI) View(c *ui.Context) {
 				if panelBorder.A == 0 {
 					panelBorder = resolved.Border
 				}
+				rad := entry.opts.Radius
+				if rad <= 0 {
+					rad = 13
+				}
 				panel := ui.Column(c).
 					Background(panelBg).
 					Border(1, panelBorder).
-					Radius(13).
-					Shadow(0, 14, 36, 0, ui.RGBA(0, 0, 0, 0.34)).
-					Padding(16).
-					Gap(10)
+					Radius(rad).
+					Shadow(0, 14, 36, 0, ui.RGBA(0, 0, 0, 0.34))
+				if !entry.opts.ZeroPadding {
+					panel.Padding(16).Gap(10)
+				}
+				if entry.opts.Role != 0 {
+					panel.Role(entry.opts.Role)
+				}
+				if entry.opts.Label != "" {
+					panel.Label(entry.opts.Label)
+				}
 				if entry.opts.Width > 0 {
 					panel.Width(entry.opts.Width)
 				}

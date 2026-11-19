@@ -225,6 +225,7 @@ type GuiMode struct {
 	modelPopoverOpen    bool
 	projectPopoverOpen  bool
 	worktreePopoverOpen bool
+	queueMoreMenuKey    string
 	modelPicker         *wakuModelPickerState
 	workspacePicker     *wakuWorkspacePickerState
 	settingsState       *wakuSettingsState
@@ -357,7 +358,7 @@ func NewGuiMode(runtime *core.AgentSessionRuntime, opts *GuiModeOptions) *GuiMod
 
 	m.editor = gui.NewEditor(gui.EditorOptions{
 		Placeholder: "Do anything…",
-		MinLines:    2,
+		MinLines:    1,
 		MaxLines:    8,
 		Theme:       guiTheme,
 		Keybindings: km,
@@ -713,7 +714,9 @@ func (m *GuiMode) View(c *ui.Context) ui.Element {
 		Key("waku-shell-root").
 		Fill().
 		Clip().
-		Background(th.Background)
+		Background(th.Background).
+		Role(ui.RoleMain).
+		Label("Workspace")
 
 	root.Children(func() {
 		if sidebarOpen {
@@ -727,7 +730,9 @@ func (m *GuiMode) View(c *ui.Context) ui.Element {
 			MinWidth(0).
 			FillHeight().
 			Clip().
-			Background(th.Background)
+			Background(th.Background).
+			Role(ui.RoleRegion).
+			Label("Workspace Main")
 		center.Children(func() {
 			renderWakuCenterHeader(
 				c, m, th,
@@ -737,7 +742,7 @@ func (m *GuiMode) View(c *ui.Context) ui.Element {
 			)
 
 			// Empty state or virtualized scrollable transcript stream
-			ui.Box(c).FillWidth().Grow(1).Shrink(1).MinWidth(0).MinHeight(0).Clip().Children(func() {
+			ui.Box(c).FillWidth().Grow(1).Shrink(1).MinWidth(0).MinHeight(0).Clip().Role(ui.RoleRegion).Label("Workspace Transcript").Children(func() {
 				if empty, emptyCwd := m.shouldRenderWakuEmptyState(); empty {
 					renderWakuEmptyState(c, th, emptyCwd)
 				} else {

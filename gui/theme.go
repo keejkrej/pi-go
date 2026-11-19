@@ -43,6 +43,8 @@ type GuiTheme struct {
 	AccentHover   ui.Color
 	AccentPressed ui.Color
 	AccentText    ui.Color
+	Favorite      ui.Color
+	TerminalBg    ui.Color
 	Text          ui.Color
 	TextSecondary ui.Color
 	TextTertiary  ui.Color
@@ -198,6 +200,8 @@ func DarkGuiTheme() *GuiTheme {
 		AccentHover:   accent.MixOklab(text, 0.12),
 		AccentPressed: accent.MixOklab(bg, 0.15),
 		AccentText:    ContrastingText(accent, ui.RGB(255, 255, 255), ui.Hex("#17181C")),
+		Favorite:      ui.Hex("#EAB308"),
+		TerminalBg:    inset,
 		Text:          text,
 		TextSecondary: textSecondary,
 		TextTertiary:  textTertiary,
@@ -313,8 +317,8 @@ func LightGuiTheme() *GuiTheme {
 
 	border := ui.RGBA(28, 30, 34, 0.08)
 	borderStrong := ui.RGBA(28, 30, 34, 0.15)
-	overlay := ui.RGBA(28, 30, 34, 0.04)
-	overlayStrong := ui.RGBA(28, 30, 34, 0.08)
+	overlay := ui.RGBA(28, 30, 34, 0.05)
+	overlayStrong := ui.RGBA(28, 30, 34, 0.09)
 
 	return &GuiTheme{
 		Name: "light",
@@ -345,6 +349,8 @@ func LightGuiTheme() *GuiTheme {
 		AccentHover:   accent.MixOklab(text, 0.10),
 		AccentPressed: accent.MixOklab(text, 0.20),
 		AccentText:    ContrastingText(accent, ui.RGB(255, 255, 255), ui.Hex("#17181C")),
+		Favorite:      ui.Hex("#CA8A04"),
+		TerminalBg:    ui.Hex("#FFFFFF"),
 		Text:          text,
 		TextSecondary: textSecondary,
 		TextTertiary:  textTertiary,

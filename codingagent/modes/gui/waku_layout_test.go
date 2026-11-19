@@ -302,8 +302,8 @@ func TestWakuWorkedForClusterFoldAndComposerControls(t *testing.T) {
 	mode.ShowCommandPalette()
 	tt.Frame()
 	if !mode.GUI().HasOverlay() ||
-		!tt.HasText("Command Palette") ||
-		!tt.HasText("Quick actions & slash commands") ||
+		!tt.HasText("Search tasks or run a command…") ||
+		!tt.HasText("Commands") ||
 		!tt.HasText("New Task") ||
 		!tt.HasText("/model") {
 		t.Fatalf("expected Command Palette items visible, texts=%v", tt.Texts())

@@ -983,8 +983,8 @@ func TestWakuFooterPickersInteractiveParity(t *testing.T) {
 	mode.pickDirectoryHook = func() (string, error) { return projTwo, nil }
 	mode.mu.Unlock()
 
-	if err := tt.Click("New project…"); err != nil {
-		t.Fatalf("Click New project…: %v", err)
+	if err := tt.Click("New Project…"); err != nil {
+		t.Fatalf("Click New Project…: %v", err)
 	}
 	tgmWaitUntil(t, mode, tt, 5*time.Second, "switched project to beta-service", func() bool {
 		return wakuResolvePath(mode.Session().Cwd()) == wakuResolvePath(projTwo) &&
@@ -1059,7 +1059,7 @@ func TestWakuFooterPickersInteractiveParity(t *testing.T) {
 			tt.HasText("Local")
 	})
 
-	// 4. Branch Picker (360px wide): search + checkout existing branch + create & checkout new branch.
+	// 4. Branch Picker (300px wide): search + checkout existing branch + create & checkout new branch.
 	mode.refreshGitBranchesSync(fx.cwd)
 	tt.Frame()
 	if err := tt.Click("Switch Git Branch"); err != nil {
@@ -1071,8 +1071,8 @@ func TestWakuFooterPickersInteractiveParity(t *testing.T) {
 		t.Fatalf("expected Branch Picker Popover, texts=%v", tt.Texts())
 	}
 	footerNow, _ := lookupSpecBox(tt, "Workspace Footer")
-	if math.Abs(float64(brPop.Bounds.W-360)) > 1.0 || brPop.Bounds.Y >= footerNow.Bounds.Y {
-		t.Fatalf("Branch Picker Popover bounds = %+v, want 360px wide above footer Y=%.1f", brPop.Bounds, footerNow.Bounds.Y)
+	if math.Abs(float64(brPop.Bounds.W-300)) > 1.0 || brPop.Bounds.Y >= footerNow.Bounds.Y {
+		t.Fatalf("Branch Picker Popover bounds = %+v, want 300px wide above footer Y=%.1f", brPop.Bounds, footerNow.Bounds.Y)
 	}
 	saveWakuSnapshotPNG(t, tt, "07_footer_branch_picker.png")
 
@@ -1096,14 +1096,25 @@ func TestWakuFooterPickersInteractiveParity(t *testing.T) {
 		t.Fatalf("Click Create and checkout new branch…: %v", err)
 	}
 	tt.Frame()
+	if !tt.HasText("Create and checkout new branch") || !tt.HasText("Press Return to create · Esc to cancel") {
+		t.Fatalf("expected Waku branch create prompt and hint, texts=%v", tt.Texts())
+	}
+	// Escape exits create mode cleanly back to branch list.
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if !tt.HasText("Create and checkout new branch…") {
+		t.Fatalf("expected Escape to exit branch create mode back to browse list, texts=%v", tt.Texts())
+	}
+	if err := tt.Click("Create and checkout new branch…"); err != nil {
+		t.Fatalf("Re-open Create and checkout new branch…: %v", err)
+	}
+	tt.Frame()
 	if err := tt.Click("New Branch Name"); err != nil {
 		t.Fatalf("Click New Branch Name: %v", err)
 	}
 	tt.Type("feat/agent-created")
 	tt.Frame()
-	if err := tt.Click("Create and checkout branch"); err != nil {
-		t.Fatalf("Click Create and checkout branch: %v", err)
-	}
+	tt.Key(0, ui.KeyEnter)
 	tgmWaitUntil(t, mode, tt, 5*time.Second, "created and checked out feat/agent-created", func() bool {
 		return tt.HasText("feat/agent-created")
 	})

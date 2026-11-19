@@ -60,8 +60,8 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 			MinWidth(0).
 			ClipX().
 			MaxWidth(wakuContentMaxWidth).
-			Padding(22, 0, 22, 0).
-			Gap(14)
+			Padding(16, 0, 16, 0).
+			Gap(12)
 
 		col.Children(func() {
 			// Compact header / extension warnings (if any)
@@ -194,7 +194,8 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 							FillWidth().
 							Height(24).
 							AlignItems(ui.Center).
-							Gap(8).
+							Justify(ui.Center).
+							Gap(10).
 							Cursor(ui.CursorPointer).
 							Label(headerLbl)
 						hdrBtn.Children(func() {
@@ -237,7 +238,7 @@ func (m *GuiMode) renderWakuTranscript(c *ui.Context, th *gui.GuiTheme) {
 
 					if finalAsstIdx >= 0 && turnEntries[finalAsstIdx].card != nil {
 						finalEntry := turnEntries[finalAsstIdx]
-						ui.Box(c).Key("final-" + finalEntry.id).FillWidth().MinWidth(0).Children(func() {
+						ui.Box(c).Key("final-" + finalEntry.id).FillWidth().MinWidth(0).Role(ui.RoleRegion).Label("Assistant Message").Children(func() {
 							finalEntry.card.View(c)
 						})
 					}
@@ -368,7 +369,7 @@ func renderWakuEmptyStateContent(c *ui.Context, th *gui.GuiTheme, cwd string) {
 			ui.Box(c).Size(20, 20).Shrink(0).Role(ui.RoleImage).Label("Empty State Sparkle").Children(func() {
 				gui.IconView(c, gui.IconSparkle, 20, th.Accent)
 			})
-			ui.Text(c, heading).TextColor(th.Text).FontSize(20).FontWeight(500).SingleLine()
+			ui.Text(c, heading).TextColor(th.Text).FontSize(20).FontWeight(500).SingleLine().Role(ui.RoleHeading)
 		})
 }
 
@@ -377,7 +378,7 @@ func renderWakuEmptyState(c *ui.Context, th *gui.GuiTheme, cwd string) {
 	ui.Column(c).
 		Key("waku-empty-state").
 		Fill().
-		Padding(0, 32, 52, 32).
+		Padding(0, 32, 28, 32).
 		AlignItems(ui.Center).
 		Justify(ui.Center).
 		Gap(14).
@@ -387,7 +388,7 @@ func renderWakuEmptyState(c *ui.Context, th *gui.GuiTheme, cwd string) {
 			ui.Box(c).Size(20, 20).Shrink(0).Role(ui.RoleImage).Label("Empty State Sparkle").Children(func() {
 				gui.IconView(c, gui.IconSparkle, 20, th.Accent)
 			})
-			ui.Text(c, heading).TextColor(th.Text).FontSize(20).FontWeight(500).SingleLine()
+			ui.Text(c, heading).TextColor(th.Text).FontSize(20).FontWeight(500).SingleLine().Role(ui.RoleHeading)
 		})
 }
 

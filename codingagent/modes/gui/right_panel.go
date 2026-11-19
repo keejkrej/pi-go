@@ -41,42 +41,54 @@ type wakuGitWorktree struct {
 }
 
 type wakuRightPanelState struct {
-	mu               sync.Mutex
-	open             bool
-	width            float32
-	activeTab        string // "changes" or "tree"
-	files            []wakuChangedFile
-	selectedPath     string
-	diffViewer       *gui.DiffViewer
-	diffSig          string
-	diffSideBySide   bool
-	loading          bool
-	gitCwd           string
-	isGitRepo        bool
-	isLinkedWorktree bool
-	mainRepoRoot     string
-	worktrees        []wakuGitWorktree
-	branches         []string
-	currentBranch    string
-	treeItems        []wakuTreeFlatItem
-	treeLeafID       string
-	hasTreeSession   bool
-	split            wakuSplitDragTracker
-	refreshSeq       atomic.Uint64
+	mu                 sync.Mutex
+	open               bool
+	width              float32
+	activeTab          string // "changes", "files", "terminal", "tree"
+	openTabs           []string
+	addSurfaceOpen     bool
+	files              []wakuChangedFile
+	selectedPath       string
+	diffViewer         *gui.DiffViewer
+	diffSig            string
+	diffSideBySide     bool
+	loading            bool
+	gitCwd             string
+	isGitRepo          bool
+	isLinkedWorktree   bool
+	mainRepoRoot       string
+	worktrees          []wakuGitWorktree
+	branches           []string
+	currentBranch      string
+	browseCwd          string
+	browseFiles        []string
+	selectedBrowseFile string
+	previewPath        string
+	previewContent     string
+	termOutput         string
+	termCmd            string
+	treeItems          []wakuTreeFlatItem
+	treeLeafID         string
+	hasTreeSession     bool
+	split              wakuSplitDragTracker
+	refreshSeq         atomic.Uint64
 }
 
 func newWakuRightPanelState(prefs *wakuLayoutPrefs) *wakuRightPanelState {
 	rp := &wakuRightPanelState{
-		open:      false,
-		width:     wakuRightPanelDefaultWidth,
-		activeTab: "changes",
+		open:       false,
+		width:      wakuRightPanelDefaultWidth,
+		activeTab:  "changes",
+		openTabs:   []string{"changes", "files", "terminal", "tree"},
+		termOutput: "$ pwd\nworkspace ready\n",
 	}
 	if prefs != nil {
 		rp.open = prefs.RightPanelOpen
 		if prefs.RightPanelWidth >= wakuRightPanelMinWidth && prefs.RightPanelWidth <= wakuRightPanelMaxWidth {
 			rp.width = prefs.RightPanelWidth
 		}
-		if prefs.RightPanelTab == "changes" || prefs.RightPanelTab == "tree" {
+		switch prefs.RightPanelTab {
+		case "changes", "files", "terminal", "tree":
 			rp.activeTab = prefs.RightPanelTab
 		}
 	}
@@ -99,6 +111,21 @@ func (r *wakuRightPanelState) gitBranchesSnapshot() ([]string, string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]string(nil), r.branches...), r.currentBranch
+}
+
+func (r *wakuRightPanelState) snapshotChangedTotals() (cwd string, adds, dels, count int) {
+	if r == nil {
+		return "", 0, 0, 0
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cwd = r.gitCwd
+	count = len(r.files)
+	for _, f := range r.files {
+		adds += f.adds
+		dels += f.dels
+	}
+	return cwd, adds, dels, count
 }
 
 func (r *wakuRightPanelState) gitWorkspaceSnapshot(cwd string) (
@@ -762,36 +789,65 @@ func (m *GuiMode) renderWakuRightPanel(c *ui.Context, th *gui.GuiTheme) {
 	rp.mu.Lock()
 	width := rp.width
 	tab := rp.activeTab
+	openTabs := append([]string(nil), rp.openTabs...)
+	if len(openTabs) == 0 {
+		openTabs = []string{"changes", "files", "terminal", "tree"}
+		rp.openTabs = append([]string(nil), openTabs...)
+	}
+	addSurfaceOpen := rp.addSurfaceOpen
 	files := append([]wakuChangedFile(nil), rp.files...)
 	selected := rp.selectedPath
 	sideBySide := rp.diffSideBySide
+	browseFiles := append([]string(nil), rp.browseFiles...)
+	browseCwd := rp.browseCwd
+	selectedBrowse := rp.selectedBrowseFile
+	previewPath := rp.previewPath
+	previewContent := rp.previewContent
+	termOut := rp.termOutput
 	rp.mu.Unlock()
+
+	wsCwd := gmRuntimeCwd(m.runtime)
+	if sess := m.Session(); sess != nil && sess.Cwd() != "" {
+		wsCwd = sess.Cwd()
+	}
+	if tab == "files" && wsCwd != "" && (wakuResolvePath(browseCwd) != wakuResolvePath(wsCwd) || len(browseFiles) == 0) {
+		listed := rpListWorkspaceFiles(wsCwd)
+		firstPath := selectedBrowse
+		if firstPath == "" && len(listed) > 0 {
+			firstPath = listed[0]
+		}
+		prevTxt := ""
+		if firstPath != "" {
+			prevTxt = rpReadFilePreview(wsCwd, firstPath)
+		}
+		rp.mu.Lock()
+		rp.browseCwd = wsCwd
+		rp.browseFiles = listed
+		if rp.selectedBrowseFile == "" {
+			rp.selectedBrowseFile = firstPath
+		}
+		rp.previewPath = firstPath
+		rp.previewContent = prevTxt
+		browseFiles = listed
+		selectedBrowse = rp.selectedBrowseFile
+		previewPath = firstPath
+		previewContent = prevTxt
+		rp.mu.Unlock()
+	}
 
 	var (
 		closeClicked   bool
+		openCommitDlg  bool
 		refreshClicked bool
 		toggleLayout   bool
 		setTab         string
+		closeTab       string
+		addTab         string
 		selectFilePath string
+		selectBrowse   string
+		runTermCmd     string
 		navigateTreeId string
 		openFullTree   bool
-	)
-
-	rp.split.view(
-		c,
-		"waku-right-split",
-		th,
-		th.BorderStrong,
-		width,
-		wakuRightPanelMinWidth,
-		wakuRightPanelMaxWidth,
-		true,
-		func(next float32) {
-			rp.mu.Lock()
-			rp.width = next
-			rp.mu.Unlock()
-		},
-		func() { m.saveLayoutPrefs() },
 	)
 
 	panel := ui.Column(c).
@@ -799,236 +855,514 @@ func (m *GuiMode) renderWakuRightPanel(c *ui.Context, th *gui.GuiTheme) {
 		Width(width).
 		Shrink(0).
 		FillHeight().
-		Background(th.Background)
+		Background(th.Background).
+		Role(ui.RoleRegion).
+		Label("Right Panel")
 
 	panel.Children(func() {
-		// Top 48px tab & action header
+		rp.split.view(
+			c,
+			"waku-right-split",
+			th,
+			th.BorderStrong,
+			width,
+			wakuRightPanelMinWidth,
+			wakuRightPanelMaxWidth,
+			true,
+			func(next float32) {
+				rp.mu.Lock()
+				rp.width = next
+				rp.mu.Unlock()
+			},
+			func() { m.saveLayoutPrefs() },
+		)
+		// Top 48px tab & action header (exact Waku right_panel.rs padding [0, 14, 0, 10])
 		h := wakuHeaderHeight(c)
 		ui.Row(c).
 			FillWidth().
 			Height(h).
-			Padding(0, 10, 0, 10).
+			Padding(0, 14, 0, 10).
 			AlignItems(ui.Center).
 			Justify(ui.SpaceBetween).
 			Gap(6).
+			Role(ui.RoleRegion).
+			Label("Right Panel Header").
 			Children(func() {
-				// Segmented Changes | Tree pills
+				// 28px closable surface tabs row
+				compactTabs := len(openTabs) >= 4
+				tabListGap := float32(4)
+				if compactTabs {
+					tabListGap = 2
+				}
 				ui.Row(c).
-					Background(th.Inset).
-					Border(1, th.Border).
-					Radius(8).
-					Padding(2).
-					Gap(2).
+					Grow(1).
+					Shrink(1).
+					MinWidth(0).
+					Height(28).
+					AlignItems(ui.Center).
+					Gap(tabListGap).
+					Clip().
+					Role(ui.RoleTabList).
+					Label("Right Panel Tabs").
 					Children(func() {
-						changesLbl := "Changes"
-						if len(files) > 0 {
-							changesLbl = fmt.Sprintf("Changes (%d)", len(files))
-						}
-						if wakuSegmentTab(c, th, changesLbl, tab == "changes") {
-							setTab = "changes"
-						}
-						if wakuSegmentTab(c, th, "Tree", tab == "tree") {
-							setTab = "tree"
+						for _, tName := range openTabs {
+							tID := tName
+							tLabel := rpTabDisplayName(tID)
+							clicked, closed := rpRenderSurfaceTabWithCompact(c, th, tID, tLabel, tab == tID, true, compactTabs)
+							if closed {
+								closeTab = tID
+							} else if clicked {
+								setTab = tID
+							}
 						}
 					})
 
-				ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(4).Children(func() {
-					if tab == "changes" {
-						layoutLbl := "Inline Diff"
-						if sideBySide {
-							layoutLbl = "Split Diff"
-						}
-						if tvGhostActionButton(c, th, layoutLbl) {
-							toggleLayout = true
-						}
-						if wakuIconButton(c, th, gui.IconChanges, "Refresh Changes", false, th.TextSecondary) {
-							refreshClicked = true
-						}
+				ui.Row(c).Shrink(0).Padding(0, 0, 0, 12).AlignItems(ui.Center).Gap(6).Children(func() {
+					addBtn := ui.ButtonBase(c).
+						Key("rp-add-surface-btn").
+						Size(26, 26).
+						Radius(6).
+						AlignItems(ui.Center).
+						Justify(ui.Center).
+						Cursor(ui.CursorPointer).
+						Label("Add Right Panel Surface")
+					if addSurfaceOpen || addBtn.Hovered() {
+						addBtn.Background(th.Overlay)
 					}
+					addBtn.Children(func() {
+						gui.IconView(c, gui.IconPlus, 14, th.TextSecondary)
+					})
+					if addBtn.Clicked() {
+						addSurfaceOpen = !addSurfaceOpen
+					}
+
+					ui.PopoverBase(c, addBtn, &addSurfaceOpen, func(popPanel ui.Element) {
+						popPanel.AttachTo(addBtn, ui.AnchorBottomEnd, ui.AnchorTopEnd).
+							Margin(4, 0, 0, 0).
+							MinWidth(160).
+							Background(th.Raised).
+							Border(1, th.BorderStrong).
+							Radius(9).
+							Padding(4).
+							Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.34)).
+							Role(ui.RoleMenu).
+							Label("Add Right Panel Surface Menu").
+							Children(func() {
+								ui.Column(c).FillWidth().Gap(2).Children(func() {
+									for _, tID := range []string{"changes", "files", "terminal", "tree"} {
+										idCopy := tID
+										lbl := rpTabDisplayName(idCopy)
+										if wakuSidebarOptionRow(c, th, lbl, tab == idCopy) {
+											addTab = idCopy
+											addSurfaceOpen = false
+										}
+									}
+								})
+							})
+					})
+
 					if wakuIconButton(c, th, gui.IconPanelRight, "Toggle Right Panel", false, th.TextSecondary) {
 						closeClicked = true
 					}
 				})
 			})
-		ui.Box(c).FillWidth().Height(1).Background(th.Border)
 
-		if tab == "changes" {
-			ui.Column(c).Fill().Children(func() {
-				if len(files) == 0 {
-					ui.Column(c).
-						Fill().
+		ui.Column(c).
+			Fill().
+			MinWidth(0).
+			MinHeight(0).
+			Role(ui.RoleRegion).
+			Label("Right Panel Body").
+			Children(func() {
+				switch tab {
+				case "changes":
+					// Top changes toolbar with 26px Commit action button
+					ui.Row(c).
+						FillWidth().
+						Padding(8, 16, 4, 16).
 						AlignItems(ui.Center).
-						Justify(ui.Center).
+						Justify(ui.SpaceBetween).
 						Gap(8).
-						Padding(24).
 						Children(func() {
-							gui.IconView(c, gui.IconCheck, 22, th.Success)
-							ui.Text(c, "Working tree clean").TextColor(th.TextSecondary).FontSize(13).FontWeight(500)
-							ui.Text(c, "Edited or unstaged workspace files will appear here.").
-								TextColor(th.TextTertiary).FontSize(12).Wrap()
-						})
-					return
-				}
-
-				// File selector list
-				listScroll := ui.Scroll(c).FillWidth().MaxHeight(200).Padding(6, 8)
-				listScroll.Children(func() {
-					ui.Column(c).FillWidth().Gap(2).Children(func() {
-						for idx, f := range files {
-							file := f
-							isSel := file.path == selected
-							row := ui.ButtonBase(c).
-								Key(fmt.Sprintf("rp-file-%d-%s", idx, file.path)).
-								FillWidth().
-								Height(28).
-								Padding(0, 8, 0, 8).
-								Radius(6).
-								AlignItems(ui.Center).
-								Justify(ui.SpaceBetween).
-								Gap(8).
-								Cursor(ui.CursorPointer).
-								Label(file.path)
-							if isSel {
-								row.Background(th.SidebarItemBg)
-							} else if row.Hovered() {
-								row.Background(th.Overlay)
-							}
-							row.Children(func() {
-								ui.Row(c).Shrink(1).AlignItems(ui.Center).Gap(6).Children(func() {
-									stCol := th.Warning
-									if file.status == "A" || file.status == "U" {
-										stCol = th.DiffAdded
-									} else if file.status == "D" {
-										stCol = th.DiffRemoved
-									}
-									ui.Text(c, file.status).TextColor(stCol).Font("monospace").FontSize(11).FontWeight(700).SingleLine()
-									ui.Text(c, file.path).TextColor(th.Text).Font("monospace").FontSize(11).SingleLine()
-								})
-								ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(4).Children(func() {
-									if file.adds > 0 {
-										ui.Textf(c, "+%d", file.adds).TextColor(th.DiffAdded).Font("monospace").FontSize(11).SingleLine()
-									}
-									if file.dels > 0 {
-										ui.Textf(c, "-%d", file.dels).TextColor(th.DiffRemoved).Font("monospace").FontSize(11).SingleLine()
-									}
-								})
+							ui.Row(c).Shrink(1).AlignItems(ui.Center).Gap(6).Children(func() {
+								countLbl := "No unstaged changes"
+								if len(files) > 0 {
+									countLbl = fmt.Sprintf("%d %s changed", len(files), wakuPlural(len(files), "file", "files"))
+								}
+								ui.Text(c, countLbl).TextColor(th.TextSecondary).FontSize(12).SingleLine()
+								layoutLbl := "Inline Diff"
+								if sideBySide {
+									layoutLbl = "Split Diff"
+								}
+								if tvGhostActionButton(c, th, layoutLbl) {
+									toggleLayout = true
+								}
+								if wakuIconButton(c, th, gui.IconChanges, "Refresh Changes", false, th.TextSecondary) {
+									refreshClicked = true
+								}
 							})
-							if row.Clicked() {
-								selectFilePath = file.path
+							commitBtn := ui.ButtonBase(c).
+								Key("rp-changes-commit-btn").
+								Height(26).
+								Padding(0, 10, 0, 10).
+								Radius(6).
+								Background(th.Overlay).
+								Border(1, th.BorderStrong).
+								AlignItems(ui.Center).
+								Justify(ui.Center).
+								Gap(6).
+								Cursor(ui.CursorPointer).
+								Label("Commit")
+							if commitBtn.Hovered() {
+								commitBtn.Background(th.OverlayStrong)
 							}
-						}
-					})
-				})
+							commitBtn.Children(func() {
+								gui.IconView(c, gui.IconGitBranch, 12, th.Text)
+								ui.Text(c, "Commit").TextColor(th.Text).FontSize(12).FontWeight(500).SingleLine()
+							})
+							if commitBtn.Clicked() {
+								openCommitDlg = true
+							}
+						})
 
-				ui.Box(c).FillWidth().Height(1).Background(th.Border)
-
-				// Active file DiffViewer
-				var activeFile *wakuChangedFile
-				for idx := range files {
-					if files[idx].path == selected {
-						activeFile = &files[idx]
-						break
-					}
-				}
-				if activeFile == nil {
-					activeFile = &files[0]
-				}
-
-				diffArea := ui.Scroll(c).FillWidth().Grow(1).Padding(8)
-				diffArea.Children(func() {
-					if activeFile.patch == "" {
-						ui.Text(c, "Loading diff for "+activeFile.path+"...").TextColor(th.TextTertiary).FontSize(12)
+					if len(files) == 0 {
+						ui.Column(c).
+							Fill().
+							AlignItems(ui.Center).
+							Justify(ui.Center).
+							Gap(8).
+							Padding(24).
+							Children(func() {
+								gui.IconView(c, gui.IconCheck, 22, th.Success)
+								ui.Text(c, "Working tree clean").TextColor(th.TextSecondary).FontSize(13).FontWeight(500)
+								ui.Text(c, "Edited or unstaged workspace files will appear here.").
+									TextColor(th.TextTertiary).FontSize(12).Wrap()
+							})
 						return
 					}
-					dv := rp.ensureDiffViewer(activeFile.path, activeFile.patch, sideBySide, th)
-					dv.View(c)
-				})
-			})
-		} else {
-			// Session Tree tab (render from thread-safe snapshot)
-			rp.mu.Lock()
-			hasTree := rp.hasTreeSession
-			treeItems := append([]wakuTreeFlatItem(nil), rp.treeItems...)
-			leafId := rp.treeLeafID
-			rp.mu.Unlock()
-			ui.Column(c).Fill().Children(func() {
-				if !hasTree {
-					ui.Box(c).Fill().AlignItems(ui.Center).Justify(ui.Center).Children(func() {
-						ui.Text(c, "No active session tree").TextColor(th.TextTertiary).FontSize(12)
-					})
-					return
-				}
 
-				treeScroll := ui.Scroll(c).FillWidth().Grow(1).Padding(8)
-				treeScroll.Children(func() {
-					ui.Column(c).FillWidth().Gap(2).Children(func() {
-						if len(treeItems) == 0 {
-							ui.Text(c, "Empty session tree").TextColor(th.TextTertiary).FontSize(12).Padding(8, 8, 8, 8)
-						}
-						for idx, item := range treeItems {
-							it := item
-							isLeaf := leafId != "" && it.id == leafId
-							indent := float32(min(it.depth, 6) * 12)
-							row := ui.ButtonBase(c).
-								Key(fmt.Sprintf("rp-tree-%d-%s", idx, it.id)).
-								FillWidth().
-								MinHeight(26).
-								Padding(3, 8, 3, 8+indent).
-								Radius(6).
-								AlignItems(ui.Center).
-								Justify(ui.SpaceBetween).
-								Gap(6).
-								Cursor(ui.CursorPointer)
-							if isLeaf {
-								row.Background(th.SidebarItemBg)
-							} else if row.Hovered() {
-								row.Background(th.Overlay)
+					// File selector list
+					listScroll := ui.Scroll(c).FillWidth().MaxHeight(200).Padding(6, 8)
+					listScroll.Children(func() {
+						ui.Column(c).FillWidth().Gap(2).Children(func() {
+							for idx, f := range files {
+								file := f
+								isSel := file.path == selected
+								row := ui.ButtonBase(c).
+									Key(fmt.Sprintf("rp-file-%d-%s", idx, file.path)).
+									FillWidth().
+									Height(28).
+									Padding(0, 8, 0, 8).
+									Radius(6).
+									AlignItems(ui.Center).
+									Justify(ui.SpaceBetween).
+									Gap(8).
+									Cursor(ui.CursorPointer).
+									Label(file.path)
+								if isSel {
+									row.Background(th.SidebarItemBg)
+								} else if row.Hovered() {
+									row.Background(th.Overlay)
+								}
+								row.Children(func() {
+									ui.Row(c).Shrink(1).AlignItems(ui.Center).Gap(6).Children(func() {
+										stCol := th.Warning
+										if file.status == "A" || file.status == "U" {
+											stCol = th.DiffAdded
+										} else if file.status == "D" {
+											stCol = th.DiffRemoved
+										}
+										ui.Text(c, file.status).TextColor(stCol).Font("monospace").FontSize(11).FontWeight(700).SingleLine()
+										ui.Text(c, file.path).TextColor(th.Text).Font("monospace").FontSize(11).SingleLine()
+									})
+									ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(4).Children(func() {
+										if file.adds > 0 {
+											ui.Textf(c, "+%d", file.adds).TextColor(th.DiffAdded).Font("monospace").FontSize(11).SingleLine()
+										}
+										if file.dels > 0 {
+											ui.Textf(c, "-%d", file.dels).TextColor(th.DiffRemoved).Font("monospace").FontSize(11).SingleLine()
+										}
+									})
+								})
+								if row.Clicked() {
+									selectFilePath = file.path
+								}
 							}
-							row.Children(func() {
-								ui.Row(c).Shrink(1).AlignItems(ui.Center).Gap(6).Children(func() {
-									dotCol := th.TextGhost
-									if isLeaf {
-										dotCol = th.Accent
+						})
+					})
+
+					ui.Box(c).FillWidth().Height(1).Background(th.Border)
+
+					var activeFile *wakuChangedFile
+					for idx := range files {
+						if files[idx].path == selected {
+							activeFile = &files[idx]
+							break
+						}
+					}
+					if activeFile == nil {
+						activeFile = &files[0]
+					}
+
+					diffArea := ui.Scroll(c).FillWidth().Grow(1).Padding(8)
+					diffArea.Children(func() {
+						if activeFile.patch == "" {
+							ui.Text(c, "Loading diff for "+activeFile.path+"...").TextColor(th.TextTertiary).FontSize(12)
+							return
+						}
+						dv := rp.ensureDiffViewer(activeFile.path, activeFile.patch, sideBySide, th)
+						dv.View(c)
+					})
+
+				case "files":
+					ui.Row(c).Fill().MinWidth(0).Gap(0).Children(func() {
+						// 184px left file tree pane
+						ui.Scroll(c).
+							Key("rp-files-tree").
+							Width(184).
+							Shrink(0).
+							FillHeight().
+							Padding(6).
+							Role(ui.RoleList).
+							Label("Workspace Files Tree").
+							Children(func() {
+								ui.Column(c).FillWidth().Gap(2).Children(func() {
+									if len(browseFiles) == 0 {
+										ui.Text(c, "Empty workspace").TextColor(th.TextTertiary).FontSize(12).Padding(6)
+										return
 									}
-									ui.Box(c).Size(6, 6).Radius(999).Background(dotCol)
-									ui.Text(c, it.kind).TextColor(th.TextTertiary).FontSize(10).FontWeight(600).SingleLine()
-									ui.Text(c, it.preview).TextColor(th.Text).FontSize(12).SingleLine()
+									for idx, rel := range browseFiles {
+										p := rel
+										isSel := p == selectedBrowse
+										btn := ui.ButtonBase(c).
+											Key(fmt.Sprintf("rp-browse-%d-%s", idx, p)).
+											FillWidth().
+											Height(26).
+											Padding(0, 8, 0, 8).
+											Radius(6).
+											AlignItems(ui.Center).
+											Justify(ui.Start).
+											Gap(6).
+											Cursor(ui.CursorPointer).
+											Label(p)
+										if isSel {
+											btn.Background(th.SidebarItemBg)
+										} else if btn.Hovered() {
+											btn.Background(th.Overlay)
+										}
+										btn.Children(func() {
+											gui.IconView(c, gui.IconFile, 12, th.TextSecondary)
+											ui.Text(c, p).TextColor(th.Text).FontSize(12).SingleLine().Shrink(1)
+										})
+										if btn.Clicked() {
+											selectBrowse = p
+										}
+									}
 								})
 							})
-							if row.Clicked() {
-								navigateTreeId = it.id
-							}
-						}
-					})
-				})
 
-				ui.Box(c).FillWidth().Height(1).Background(th.Border)
-				ui.Row(c).FillWidth().Height(36).Padding(0, 10, 0, 10).AlignItems(ui.Center).Justify(ui.End).Children(func() {
-					fullBtn := ui.ButtonBase(c).
-						Height(24).
-						Padding(0, 10, 0, 10).
-						Radius(6).
-						Background(th.Overlay).
-						Border(1, th.BorderStrong).
-						AlignItems(ui.Center).
-						Cursor(ui.CursorPointer).
-						Label("Open Full Tree")
-					fullBtn.Children(func() {
-						ui.Text(c, "Open Full Tree…").TextColor(th.Text).FontSize(11)
+						ui.Box(c).Width(1).FillHeight().Background(th.Border)
+
+						// File preview pane
+						ui.Scroll(c).FillHeight().Grow(1).MinWidth(0).Padding(12).Children(func() {
+							ui.Column(c).FillWidth().Gap(6).Children(func() {
+								if previewPath == "" {
+									ui.Text(c, "Select a file to preview").TextColor(th.TextTertiary).FontSize(12)
+									return
+								}
+								ui.Text(c, previewPath).TextColor(th.TextSecondary).Font("monospace").FontSize(11.5).FontWeight(600).SingleLine()
+								ui.Text(c, previewContent).TextColor(th.Text).Font("monospace").FontSize(12).Wrap().Selectable()
+							})
+						})
 					})
-					if fullBtn.Clicked() {
-						openFullTree = true
-					}
-				})
+
+				case "terminal":
+					ui.Column(c).
+						Key("rp-terminal-surface").
+						Fill().
+						Background(th.TerminalBg).
+						Padding(10, 12, 10, 12).
+						Gap(4).
+						Role(ui.RoleRegion).
+						Label("Terminal Surface").
+						Children(func() {
+							ui.Scroll(c).FillWidth().Grow(1).MinHeight(0).Children(func() {
+								ui.Text(c, termOut).TextColor(th.Text).Font("monospace").FontSize(12).Wrap().Selectable()
+							})
+							ui.Box(c).FillWidth().Height(1).Background(th.Border)
+							var cmdIn ui.Element
+							ui.Row(c).FillWidth().Height(30).AlignItems(ui.Center).Gap(6).Children(func() {
+								ui.Text(c, "$").TextColor(th.Accent).Font("monospace").FontSize(12).FontWeight(600)
+								cmdIn = ui.TextInputBase(c, &rp.termCmd).
+									Grow(1).
+									Shrink(1).
+									MinWidth(0).
+									Font("monospace").
+									FontSize(12).
+									TextColor(th.Text).
+									Placeholder("Run shell command…").
+									Label("Terminal Command Input")
+							})
+							cmdIn.OnTextKey(func(k ui.TextKey) bool {
+								if k.Key == ui.KeyEnter && k.Mods == 0 {
+									cmd := strings.TrimSpace(k.Text())
+									if cmd != "" {
+										runTermCmd = cmd
+										k.SetText("")
+									}
+									return true
+								}
+								return false
+							})
+						})
+
+				default:
+					// Session Tree tab (render from thread-safe snapshot)
+					rp.mu.Lock()
+					hasTree := rp.hasTreeSession
+					treeItems := append([]wakuTreeFlatItem(nil), rp.treeItems...)
+					leafId := rp.treeLeafID
+					rp.mu.Unlock()
+					ui.Column(c).Fill().Children(func() {
+						ui.Scroll(c).
+							Key("rp-tree-body").
+							Fill().
+							Padding(8).
+							Role(ui.RoleList).
+							Label("Session Tree Body").
+							Children(func() {
+								if !hasTree {
+									ui.Column(c).Fill().Padding(24).AlignItems(ui.Center).Justify(ui.Center).Gap(10).Children(func() {
+										ui.Text(c, "No active session tree").TextColor(th.TextTertiary).FontSize(12)
+										fullBtn := ui.ButtonBase(c).
+											Height(24).
+											Padding(0, 10, 0, 10).
+											Radius(6).
+											Background(th.Overlay).
+											Border(1, th.BorderStrong).
+											AlignItems(ui.Center).
+											Cursor(ui.CursorPointer).
+											Label("Open Full Tree")
+										fullBtn.Children(func() {
+											ui.Text(c, "Open Full Tree…").TextColor(th.Text).FontSize(11)
+										})
+										if fullBtn.Clicked() {
+											openFullTree = true
+										}
+									})
+									return
+								}
+								ui.Column(c).FillWidth().Gap(2).Children(func() {
+									if len(treeItems) == 0 {
+										ui.Text(c, "Empty session tree").TextColor(th.TextTertiary).FontSize(12).Padding(8, 8, 8, 8)
+									}
+									for idx, item := range treeItems {
+										it := item
+										isLeaf := leafId != "" && it.id == leafId
+										indent := float32(min(it.depth, 6) * 12)
+										row := ui.ButtonBase(c).
+											Key(fmt.Sprintf("rp-tree-%d-%s", idx, it.id)).
+											FillWidth().
+											MinHeight(26).
+											Padding(3, 8, 3, 8+indent).
+											Radius(6).
+											AlignItems(ui.Center).
+											Justify(ui.SpaceBetween).
+											Gap(6).
+											Cursor(ui.CursorPointer)
+										if isLeaf {
+											row.Background(th.SidebarItemBg)
+										} else if row.Hovered() {
+											row.Background(th.Overlay)
+										}
+										row.Children(func() {
+											ui.Row(c).Shrink(1).AlignItems(ui.Center).Gap(6).Children(func() {
+												dotCol := th.TextGhost
+												if isLeaf {
+													dotCol = th.Accent
+												}
+												ui.Box(c).Size(6, 6).Radius(999).Background(dotCol)
+												ui.Text(c, it.kind).TextColor(th.TextTertiary).FontSize(10).FontWeight(600).SingleLine()
+												ui.Text(c, it.preview).TextColor(th.Text).FontSize(12).SingleLine()
+											})
+										})
+										if row.Clicked() {
+											navigateTreeId = it.id
+										}
+									}
+									ui.Row(c).FillWidth().Padding(8, 2, 4, 2).AlignItems(ui.Center).Justify(ui.End).Children(func() {
+										fullBtn := ui.ButtonBase(c).
+											Height(24).
+											Padding(0, 10, 0, 10).
+											Radius(6).
+											Background(th.Overlay).
+											Border(1, th.BorderStrong).
+											AlignItems(ui.Center).
+											Cursor(ui.CursorPointer).
+											Label("Open Full Tree")
+										fullBtn.Children(func() {
+											ui.Text(c, "Open Full Tree…").TextColor(th.Text).FontSize(11)
+										})
+										if fullBtn.Clicked() {
+											openFullTree = true
+										}
+									})
+								})
+							})
+					})
+				}
 			})
-		}
 	})
+
+	rp.mu.Lock()
+	rp.addSurfaceOpen = addSurfaceOpen
+	rp.mu.Unlock()
 
 	if closeClicked {
 		rp.mu.Lock()
 		rp.open = false
 		rp.mu.Unlock()
 		m.saveLayoutPrefs()
+	}
+	if closeTab != "" {
+		rp.mu.Lock()
+		nextTabs := make([]string, 0, len(rp.openTabs))
+		for _, tID := range rp.openTabs {
+			if tID != closeTab {
+				nextTabs = append(nextTabs, tID)
+			}
+		}
+		if len(nextTabs) == 0 {
+			rp.open = false
+		} else {
+			rp.openTabs = nextTabs
+			if rp.activeTab == closeTab {
+				rp.activeTab = nextTabs[0]
+			}
+		}
+		rp.mu.Unlock()
+		m.saveLayoutPrefs()
+	}
+	if addTab != "" {
+		rp.mu.Lock()
+		found := false
+		for _, tID := range rp.openTabs {
+			if tID == addTab {
+				found = true
+				break
+			}
+		}
+		if !found {
+			rp.openTabs = append(rp.openTabs, addTab)
+		}
+		rp.activeTab = addTab
+		rp.mu.Unlock()
+		m.saveLayoutPrefs()
+		if addTab == "changes" {
+			m.refreshRightPanelChanges()
+		} else if addTab == "tree" {
+			m.refreshRightPanelTreeSnapshot()
+		}
 	}
 	if refreshClicked {
 		m.refreshRightPanelChanges()
@@ -1037,6 +1371,20 @@ func (m *GuiMode) renderWakuRightPanel(c *ui.Context, th *gui.GuiTheme) {
 		rp.mu.Lock()
 		rp.diffSideBySide = !rp.diffSideBySide
 		rp.mu.Unlock()
+	}
+	if openCommitDlg {
+		m.ShowCommitDialog()
+	}
+	if selectBrowse != "" {
+		prevTxt := rpReadFilePreview(wsCwd, selectBrowse)
+		rp.mu.Lock()
+		rp.selectedBrowseFile = selectBrowse
+		rp.previewPath = selectBrowse
+		rp.previewContent = prevTxt
+		rp.mu.Unlock()
+	}
+	if runTermCmd != "" && wsCwd != "" {
+		go m.runRightPanelTerminalCommand(wsCwd, runTermCmd)
 	}
 	if setTab != "" {
 		rp.mu.Lock()
@@ -1113,6 +1461,216 @@ func (r *wakuRightPanelState) ensureDiffViewer(filename, patch string, sideBySid
 	dv.SetLayout(layout)
 	dv.SetTheme(th)
 	return dv
+}
+
+func rpTabDisplayName(tabID string) string {
+	switch tabID {
+	case "changes":
+		return "Changes"
+	case "files":
+		return "Files"
+	case "terminal":
+		return "Terminal"
+	case "tree":
+		return "Tree"
+	default:
+		return tabID
+	}
+}
+
+func rpTabIcon(tabID string) *ui.SVG {
+	switch tabID {
+	case "changes":
+		return gui.IconFileDiff
+	case "files":
+		return gui.IconFolder
+	case "terminal":
+		return gui.IconTerminal
+	case "tree":
+		return gui.IconGitBranch
+	default:
+		return gui.IconFile
+	}
+}
+
+func rpRenderSurfaceTab(
+	c *ui.Context,
+	th *gui.GuiTheme,
+	tabID, label string,
+	active, closable bool,
+) (clicked, closed bool) {
+	return rpRenderSurfaceTabWithCompact(c, th, tabID, label, active, closable, false)
+}
+
+func rpRenderSurfaceTabWithCompact(
+	c *ui.Context,
+	th *gui.GuiTheme,
+	tabID, label string,
+	active, closable, compact bool,
+) (clicked, closed bool) {
+	padX := float32(8)
+	gap := float32(6)
+	if compact {
+		padX = 5
+		gap = 4
+	}
+	btn := ui.ButtonBase(c).
+		Key("rp-tab-"+tabID).
+		Height(28).
+		Shrink(0).
+		Padding(0, padX, 0, padX).
+		Radius(7).
+		AlignItems(ui.Center).
+		Gap(gap).
+		Cursor(ui.CursorPointer).
+		Role(ui.RoleTab).
+		Selected(active).
+		Label(label)
+	col := th.TextSecondary
+	weight := 500
+	if active {
+		btn.Background(th.Raised)
+		col = th.Text
+		weight = 600
+	} else if btn.Hovered() {
+		btn.Background(th.Overlay)
+	}
+	btn.Children(func() {
+		gui.IconView(c, rpTabIcon(tabID), 13, col)
+		ui.Text(c, label).TextColor(col).FontSize(12).FontWeight(weight).SingleLine()
+		if closable {
+			closeBtn := ui.ButtonBase(c).
+				Key("rp-tab-close-"+tabID).
+				Size(16, 16).
+				Radius(4).
+				AlignItems(ui.Center).
+				Justify(ui.Center).
+				Cursor(ui.CursorPointer).
+				Label("Close " + label + " tab")
+			if closeBtn.Hovered() {
+				closeBtn.Background(th.OverlayStrong)
+			}
+			closeBtn.Children(func() {
+				gui.IconView(c, gui.IconClose, 10, th.TextTertiary)
+			})
+			if closeBtn.Clicked() {
+				closed = true
+			}
+		}
+	})
+	if btn.Clicked() && !closed {
+		clicked = true
+	}
+	return clicked, closed
+}
+
+func rpListWorkspaceFiles(cwd string) []string {
+	entries, err := os.ReadDir(cwd)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+		if e.IsDir() {
+			out = append(out, name+"/")
+		} else {
+			out = append(out, name)
+		}
+	}
+	if len(out) > 100 {
+		out = out[:100]
+	}
+	return out
+}
+
+func rpReadFilePreview(cwd, relPath string) string {
+	if strings.HasSuffix(relPath, "/") {
+		sub := strings.TrimSuffix(relPath, "/")
+		subEntries, err := os.ReadDir(filepath.Join(cwd, sub))
+		if err != nil {
+			return err.Error()
+		}
+		var sb strings.Builder
+		for _, se := range subEntries {
+			sb.WriteString(se.Name())
+			if se.IsDir() {
+				sb.WriteByte('/')
+			}
+			sb.WriteByte('\n')
+		}
+		return sb.String()
+	}
+	clean := filepath.Clean(relPath)
+	if filepath.IsAbs(clean) || strings.HasPrefix(clean, "..") {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(cwd, clean))
+	if err != nil {
+		return err.Error()
+	}
+	if len(data) > 16384 {
+		data = data[:16384]
+	}
+	return string(data)
+}
+
+func (m *GuiMode) runRightPanelTerminalCommand(cwd, command string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	cmd.Dir = cwd
+	out, err := cmd.CombinedOutput()
+	text := string(out)
+	if err != nil && text == "" {
+		text = err.Error() + "\n"
+	}
+	if text != "" && !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	m.rightPanel.mu.Lock()
+	m.rightPanel.termOutput += "$ " + command + "\n" + text
+	if len(m.rightPanel.termOutput) > 16384 {
+		m.rightPanel.termOutput = m.rightPanel.termOutput[len(m.rightPanel.termOutput)-16384:]
+	}
+	m.rightPanel.mu.Unlock()
+	if m.host != nil {
+		m.host.RequestRender()
+	}
+}
+
+func rpGitCommit(cwd, message string, includeUnstaged bool) error {
+	if strings.TrimSpace(cwd) == "" {
+		return fmt.Errorf("no active repository path")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if includeUnstaged {
+		if out, err := exec.CommandContext(ctx, "git", "-C", cwd, "add", "-A").CombinedOutput(); err != nil {
+			return fmt.Errorf("git add failed: %s", strings.TrimSpace(string(out)))
+		}
+	}
+	out, err := exec.CommandContext(ctx, "git", "-C", cwd, "commit", "-m", message).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git commit failed: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func rpGitPush(cwd string) error {
+	if strings.TrimSpace(cwd) == "" {
+		return fmt.Errorf("no active repository path")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "-C", cwd, "push").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git push failed: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 func wakuSegmentTab(c *ui.Context, th *gui.GuiTheme, label string, active bool) bool {

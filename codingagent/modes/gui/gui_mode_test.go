@@ -39,6 +39,8 @@ type tgmFixtureOpts struct {
 	additionalExtensions []string
 	extensionFactories   []core.InlineExtension
 	defaultTools         []string
+	providerName         string
+	agentDir             string
 }
 
 type tgmFixture struct {
@@ -56,6 +58,9 @@ func tgmNewFixture(t *testing.T, opts *tgmFixtureOpts) *tgmFixture {
 	tempRoot := t.TempDir()
 	cwd := filepath.Join(tempRoot, "cwd")
 	agentDir := filepath.Join(tempRoot, "agent")
+	if opts != nil && strings.TrimSpace(opts.agentDir) != "" {
+		agentDir = opts.agentDir
+	}
 	sessionDir := filepath.Join(tempRoot, "sessions")
 	for _, d := range []string{cwd, agentDir, sessionDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
@@ -96,8 +101,13 @@ func tgmNewFixture(t *testing.T, opts *tgmFixtureOpts) *tgmFixture {
 		}
 	}
 
-	provName := t.Name() + "-" + time.Now().Format("150405.000000000")
-	provName = strings.ReplaceAll(provName, "/", "-")
+	provName := ""
+	if opts != nil && strings.TrimSpace(opts.providerName) != "" {
+		provName = strings.TrimSpace(opts.providerName)
+	} else {
+		provName = t.Name() + "-" + time.Now().Format("150405.000000000")
+		provName = strings.ReplaceAll(provName, "/", "-")
+	}
 	fauxReg := compat.RegisterFauxProvider(&providers.RegisterFauxProviderOptions{
 		Provider: tgmStrPtr(provName),
 		Models: []providers.FauxModelDefinition{

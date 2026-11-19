@@ -37,3 +37,7 @@ Both layers run without a live window server in tests:
 - `gui` tests use `github.com/egoist/mygo/ui.NewTester` and `DesktopHooks` stubs.
 - `codingagent/modes/gui` tests construct `NewGuiMode(runtime, &GuiModeOptions{SkipWindow: true, ...})` with faux providers.
 - Optional parity helpers in [`waku_composer_spec_test.go`](../codingagent/modes/gui/waku_composer_spec_test.go) and [`waku_parity_test.go`](../codingagent/modes/gui/waku_parity_test.go) stay inactive unless `PI_WAKU_SNAPSHOT_DIR` or `WAKU_REPO_DIR` is explicitly provided.
+- UI replication verification in [`waku_ui_replication_test.go`](../codingagent/modes/gui/waku_ui_replication_test.go) exercises all 35 `(surface, state, viewport)` scenarios, dark/light tokens, component surfaces, and interactive state transitions offline; when `PI_UI_REPLICATION_DIR` is set (use an absolute path such as `"$(pwd)/.agents/ui-replication"` from the repo root since `go test` runs inside the package directory) it emits measured `actual-layout/`, `actual-tokens.yaml`, `actual-components.yaml`, `actual-states.yaml`, `screenshots/candidate/`, and `test-results.json`:
+  ```bash
+  CGO_ENABLED=0 PI_UI_REPLICATION_DIR="$(pwd)/.agents/ui-replication" go test ./codingagent/modes/gui -run TestWakuUIReplication -v
+  ```

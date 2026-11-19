@@ -598,6 +598,7 @@ func wakuSidebarOptionRow(c *ui.Context, th *gui.GuiTheme, label string, selecte
 		Justify(ui.SpaceBetween).
 		Gap(8).
 		Cursor(ui.CursorPointer).
+		Role(ui.RoleMenuItem).
 		Label(label)
 	if btn.Hovered() {
 		btn.Background(th.Overlay)
@@ -605,7 +606,7 @@ func wakuSidebarOptionRow(c *ui.Context, th *gui.GuiTheme, label string, selecte
 	btn.Children(func() {
 		ui.Text(c, label).TextColor(th.Text).FontSize(12).SingleLine()
 		if selected {
-			gui.IconView(c, gui.IconCheck, 12, th.Accent)
+			gui.IconView(c, gui.IconCheck, 11, th.TextTertiary)
 		}
 	})
 	return btn.Clicked()
@@ -663,7 +664,9 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 		Width(width).
 		Shrink(0).
 		FillHeight().
-		Background(bg)
+		Background(bg).
+		Role(ui.RoleNavigation).
+		Label("Sidebar")
 
 	panel.Children(func() {
 		// 1. Top 48px sidebar-titlebar: macOS traffic-light clearance + Toggle Sidebar + history nav + drag spacer
@@ -679,6 +682,8 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 			Height(topH).
 			AlignItems(ui.Center).
 			Padding(0, 8, 0, titlePadLeft).
+			Role(ui.RoleRegion).
+			Label("Sidebar Titlebar").
 			Children(func() {
 				if inset > 0 {
 					ui.Box(c).Width(inset).FillHeight().DragWindow()
@@ -693,15 +698,15 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 			})
 
 		// 2. Pinned New Task action row (32px, regular weight)
-		ui.Box(c).FillWidth().Padding(0, 8, 0, 8).Children(func() {
+		ui.Box(c).FillWidth().Padding(0, 10, 0, 10).Children(func() {
 			newBtn := ui.ButtonBase(c).
 				FillWidth().
 				Height(wakuSidebarActionRowHeight).
-				Padding(0, 8, 0, 8).
+				Padding(0, 4, 0, 4).
 				Radius(6).
 				AlignItems(ui.Center).
 				Justify(ui.Start).
-				Gap(8).
+				Gap(10).
 				Cursor(ui.CursorPointer).
 				Label("New Task")
 			if newBtn.Hovered() {
@@ -718,7 +723,7 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 
 		// 3. Scrollable Search row + Session Groups & Cards
 		groups := wakuGroupSessions(sessions, pinned, groupBy, orderBy)
-		scroll := ui.Scroll(c).FillWidth().Grow(1).Clip().Padding(0, 8, 8, 8)
+		scroll := ui.Scroll(c).FillWidth().Grow(1).Clip().Padding(0, 10, 8, 10)
 		scroll.Children(func() {
 			ui.Column(c).FillWidth().Children(func() {
 				// Search row inside scroll (32px + 10px bottom margin, no shortcut badge)
@@ -726,11 +731,11 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 					searchBtn := ui.ButtonBase(c).
 						FillWidth().
 						Height(wakuSidebarActionRowHeight).
-						Padding(0, 8, 0, 8).
+						Padding(0, 4, 0, 4).
 						Radius(6).
 						AlignItems(ui.Center).
 						Justify(ui.Start).
-						Gap(8).
+						Gap(10).
 						Cursor(ui.CursorPointer).
 						Label("Search")
 					if searchBtn.Hovered() {
@@ -750,9 +755,12 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 						FillWidth().
 						Height(wakuSidebarGroupHeaderHeight).
 						Margin(0, 0, 2, 0).
+						Padding(0, 22, 0, 0).
 						AlignItems(ui.Center).
 						Justify(ui.SpaceBetween).
 						Gap(4).
+						Role(ui.RoleRegion).
+						Label("Sidebar Group Header").
 						Children(func() {
 							if isProjectGroup {
 								hdrBtn := ui.ButtonBase(c).
@@ -820,8 +828,8 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 
 							if showOptions {
 								optAnchor := ui.ButtonBase(c).
-									Size(24, 24).
-									Radius(6).
+									Size(20, 20).
+									Radius(5).
 									AlignItems(ui.Center).
 									Justify(ui.Center).
 									Cursor(ui.CursorPointer).
@@ -837,15 +845,17 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 								}
 
 								ui.PopoverBase(c, optAnchor, &optionsOpen, func(popPanel ui.Element) {
-									popPanel.Background(th.Surface).
-										Border(1, th.Border).
+									popPanel.Background(th.Raised).
+										Border(1, th.BorderStrong).
 										Radius(8).
-										Padding(6).
-										MinWidth(164).
+										Padding(4).
+										MinWidth(196).
 										Shadow(0, 6, 20, 0, ui.RGBA(0, 0, 0, 0.28)).
+										Role(ui.RoleMenu).
+										Label("Sidebar Options Popover").
 										Children(func() {
 											ui.Column(c).FillWidth().Gap(2).Children(func() {
-												ui.Box(c).Padding(4, 8, 2, 8).Children(func() {
+												ui.Row(c).FillWidth().Height(26).Padding(0, 8, 0, 8).AlignItems(ui.Center).Justify(ui.SpaceBetween).Role(ui.RoleMenuItem).Label("Group by").Children(func() {
 													ui.Text(c, "Group by").TextColor(th.TextTertiary).FontSize(11).FontWeight(500).SingleLine()
 												})
 												for _, opt := range []struct {
@@ -860,8 +870,8 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 														optionsOpen = false
 													}
 												}
-												ui.Box(c).FillWidth().Height(1).Background(th.Border).Margin(4, 0, 4, 0)
-												ui.Box(c).Padding(2, 8, 2, 8).Children(func() {
+												ui.Box(c).FillWidth().Height(1).Background(th.Border).Margin(2, 0, 2, 0)
+												ui.Row(c).FillWidth().Height(26).Padding(0, 8, 0, 8).AlignItems(ui.Center).Justify(ui.SpaceBetween).Role(ui.RoleMenuItem).Label("Order by").Children(func() {
 													ui.Text(c, "Order by").TextColor(th.TextTertiary).FontSize(11).FontWeight(500).SingleLine()
 												})
 												for _, opt := range []struct {
@@ -1039,29 +1049,31 @@ func (m *GuiMode) renderWakuSidebar(c *ui.Context, th *gui.GuiTheme) {
 			Height(wakuSidebarFooterHeight).
 			Padding(0, 10, 0, 10).
 			AlignItems(ui.Center).
+			Role(ui.RoleRegion).
+			Label("Sidebar Footer").
 			Children(func() {
 				if wakuIconButton(c, th, gui.IconSettings, "Open Settings", false, th.TextSecondary) {
 					openSettings = true
 				}
 			})
-	})
 
-	sb.split.view(
-		c,
-		"waku-sidebar-split",
-		th,
-		th.SidebarBorder,
-		width,
-		wakuSidebarMinWidth,
-		wakuSidebarMaxWidth,
-		false,
-		func(next float32) {
-			sb.mu.Lock()
-			sb.width = next
-			sb.mu.Unlock()
-		},
-		func() { m.saveLayoutPrefs() },
-	)
+		sb.split.view(
+			c,
+			"waku-sidebar-split",
+			th,
+			th.SidebarBorder,
+			width,
+			wakuSidebarMinWidth,
+			wakuSidebarMaxWidth,
+			false,
+			func(next float32) {
+				sb.mu.Lock()
+				sb.width = next
+				sb.mu.Unlock()
+			},
+			func() { m.saveLayoutPrefs() },
+		)
+	})
 
 	prefsChanged := false
 	sb.mu.Lock()

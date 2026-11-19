@@ -5151,9 +5151,12 @@ func (d *HotkeysDialog) Show(host *gui.GUI) *DialogHandle {
 // CommandPaletteEntry represents a single executable action in the Cmd+K palette.
 type CommandPaletteEntry struct {
 	ID          string
+	Section     string // "Suggested", "Tasks", "Commands", "Settings"
 	Label       string
 	Description string
 	Badge       string
+	Icon        *ui.SVG
+	IconColor   ui.Color
 	OnRun       func()
 }
 
@@ -5168,8 +5171,9 @@ type CommandPaletteConfig struct {
 // CommandPaletteDialog displays a Waku-styled Cmd+K quick command & action palette.
 type CommandPaletteDialog struct {
 	cfg     CommandPaletteConfig
-	entries map[string]CommandPaletteEntry
-	list    *gui.SelectList
+	entries []CommandPaletteEntry
+	query   string
+	hlIdx   int
 
 	mu            sync.Mutex
 	confirmHandle func()
@@ -5178,82 +5182,362 @@ type CommandPaletteDialog struct {
 
 // NewCommandPaletteDialog constructs a searchable CommandPaletteDialog.
 func NewCommandPaletteDialog(cfg CommandPaletteConfig) *CommandPaletteDialog {
-	d := &CommandPaletteDialog{
-		cfg:     cfg,
-		entries: make(map[string]CommandPaletteEntry, len(cfg.Entries)),
-	}
-	items := make([]gui.SelectItem, 0, len(cfg.Entries))
+	entries := make([]CommandPaletteEntry, 0, len(cfg.Entries))
 	for _, entry := range cfg.Entries {
 		if entry.ID == "" {
 			continue
 		}
-		d.entries[entry.ID] = entry
-		items = append(items, gui.SelectItem{
-			Value:       entry.ID,
-			Label:       entry.Label,
-			Description: entry.Description,
-			Badge:       entry.Badge,
-		})
+		if strings.TrimSpace(entry.Section) == "" {
+			entry.Section = "Commands"
+		}
+		entries = append(entries, entry)
 	}
-
-	sl := gui.NewSelectList(items)
-	sl.SetSearchable(true)
-	sl.SetAutoFocus(true)
-	sl.SetConfirmOnClick(true)
-	sl.SetPlaceholder("Type a command or search...")
-	sl.SetMaxHeight(360)
-	if cfg.Theme != nil {
-		sl.SetTheme(cfg.Theme)
+	return &CommandPaletteDialog{
+		cfg:     cfg,
+		entries: entries,
 	}
-	sl.SetOnSelect(func(item gui.SelectItem) {
-		entry, ok := d.entries[item.Value]
-		d.mu.Lock()
-		confirmFn := d.confirmHandle
-		d.mu.Unlock()
-		if confirmFn != nil {
-			confirmFn()
-		}
-		if ok && entry.OnRun != nil {
-			entry.OnRun()
-		}
-	})
-	sl.SetOnCancel(func() {
-		d.mu.Lock()
-		cancelFn := d.cancelHandle
-		d.mu.Unlock()
-		if cancelFn != nil {
-			cancelFn()
-		}
-	})
-	d.list = sl
-	return d
 }
 
-// View renders the command palette modal contents inside c.
+func (d *CommandPaletteDialog) filteredEntries() []CommandPaletteEntry {
+	q := strings.ToLower(strings.TrimSpace(d.query))
+	if q == "" {
+		// Fit unfiltered landing view cleanly inside 480px card height without partial row clipping
+		// (60px search + 30px Commands + 6*44px rows + 30px Settings + 2*44px rows + 8px bottom pad = 480px).
+		var cmds, sets []CommandPaletteEntry
+		for _, e := range d.entries {
+			switch e.Section {
+			case "Commands":
+				if len(cmds) < 6 {
+					cmds = append(cmds, e)
+				}
+			case "Settings":
+				if len(sets) < 2 {
+					sets = append(sets, e)
+				}
+			}
+			if len(cmds) == 6 && len(sets) == 2 {
+				break
+			}
+		}
+		out := make([]CommandPaletteEntry, 0, len(cmds)+len(sets))
+		out = append(out, cmds...)
+		out = append(out, sets...)
+		return out
+	}
+	out := make([]CommandPaletteEntry, 0, len(d.entries))
+	for _, e := range d.entries {
+		hay := strings.ToLower(e.Label + " " + e.Description + " " + e.Badge + " " + e.Section)
+		if strings.Contains(hay, q) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func (d *CommandPaletteDialog) runEntry(entry CommandPaletteEntry) {
+	d.mu.Lock()
+	confirmFn := d.confirmHandle
+	d.mu.Unlock()
+	if confirmFn != nil {
+		confirmFn()
+	}
+	if entry.OnRun != nil {
+		entry.OnRun()
+	}
+}
+
+func (d *CommandPaletteDialog) cancel() {
+	d.mu.Lock()
+	cancelFn := d.cancelHandle
+	d.mu.Unlock()
+	if cancelFn != nil {
+		cancelFn()
+	}
+}
+
+// View renders the Waku-aligned command palette contents inside c.
 func (d *CommandPaletteDialog) View(c *ui.Context) ui.Element {
 	th := gui.ResolveGuiTheme(c, d.cfg.Theme)
-	title := strings.TrimSpace(d.cfg.Title)
-	if title == "" {
-		title = "Command Palette"
+
+	d.mu.Lock()
+	prevQuery := d.query
+	hlIdx := d.hlIdx
+	d.mu.Unlock()
+
+	filtered := d.filteredEntries()
+	if len(filtered) == 0 {
+		hlIdx = -1
+	} else if hlIdx < 0 || hlIdx >= len(filtered) {
+		hlIdx = 0
 	}
 
-	root := ui.Column(c).FillWidth().Gap(10)
+	root := ui.Column(c).FillWidth().Gap(0)
+	var escClearedThisFrame bool
+	var clickedEntry *CommandPaletteEntry
+
 	root.Children(func() {
-		selRenderDialogHeader(c, th, title, "Quick actions & slash commands", nil)
-		if d.list != nil {
-			d.list.View(c)
+		// 60px top search bar with bottom 1px border (exact Waku command_palette.rs)
+		var searchIn ui.Element
+		ui.Column(c).
+			Key("cmd-palette-search-wrap").
+			FillWidth().
+			Height(60).
+			Gap(0).
+			Children(func() {
+				ui.Row(c).
+					Key("cmd-palette-search-row").
+					FillWidth().
+					Height(59).
+					Padding(0, 19, 0, 19).
+					AlignItems(ui.Center).
+					Gap(8).
+					Role(ui.RoleRegion).
+					Label("Command Palette Search").
+					Children(func() {
+						gui.IconView(c, gui.IconSearch, 16, th.TextSecondary)
+						searchIn = ui.TextInputBase(c, &d.query).
+							Grow(1).
+							Shrink(1).
+							MinWidth(0).
+							FontSize(15).
+							TextColor(th.Text).
+							Placeholder("Search tasks or run a command…").
+							Label("Search tasks or run a command…").
+							AutoFocus()
+					})
+				ui.Box(c).FillWidth().Height(1).Background(th.Border)
+			})
+
+		if d.query != prevQuery {
+			filtered = d.filteredEntries()
+			hlIdx = 0
+			if len(filtered) == 0 {
+				hlIdx = -1
+			}
+			d.mu.Lock()
+			d.hlIdx = hlIdx
+			d.mu.Unlock()
 		}
-		selRenderDialogFooter(c, th, "↑/↓ navigate · Enter run · Esc close", nil)
+
+		searchIn.OnTextKey(func(k ui.TextKey) bool {
+			switch {
+			case k.Key == ui.KeyDown && k.Mods == 0:
+				if len(filtered) > 0 {
+					next := (hlIdx + 1) % len(filtered)
+					d.mu.Lock()
+					d.hlIdx = next
+					d.mu.Unlock()
+				}
+				return true
+			case k.Key == ui.KeyUp && k.Mods == 0:
+				if len(filtered) > 0 {
+					next := hlIdx - 1
+					if next < 0 {
+						next = len(filtered) - 1
+					}
+					d.mu.Lock()
+					d.hlIdx = next
+					d.mu.Unlock()
+				}
+				return true
+			case k.Key == ui.KeyEnter && k.Mods == 0:
+				if len(filtered) > 0 {
+					pick := hlIdx
+					if pick < 0 || pick >= len(filtered) {
+						pick = 0
+					}
+					d.runEntry(filtered[pick])
+				}
+				return true
+			case k.Key == ui.KeyEscape && k.Mods == 0:
+				if strings.TrimSpace(k.Text()) != "" {
+					escClearedThisFrame = true
+					k.SetText("")
+					d.mu.Lock()
+					d.query = ""
+					d.hlIdx = 0
+					d.mu.Unlock()
+					return true
+				}
+				d.cancel()
+				return true
+			}
+			return false
+		})
+
+		if root.OverlayShortcut(0, ui.KeyEscape) && !escClearedThisFrame {
+			if strings.TrimSpace(d.query) != "" {
+				d.mu.Lock()
+				d.query = ""
+				d.hlIdx = 0
+				d.mu.Unlock()
+			} else {
+				d.cancel()
+			}
+		}
+
+		if len(filtered) == 0 {
+			ui.Scroll(c).
+				Key("cmd-palette-results").
+				FillWidth().
+				Height(179).
+				Padding(0, 8, 0, 8).
+				Role(ui.RoleList).
+				Label("Command Palette Results").
+				Children(func() {
+					ui.Column(c).
+						Key("cmd-palette-empty").
+						FillWidth().
+						Height(179).
+						AlignItems(ui.Center).
+						Justify(ui.Center).
+						Gap(5).
+						Role(ui.RoleRegion).
+						Label("No matching tasks or commands").
+						Children(func() {
+							gui.IconView(c, gui.IconSearch, 18, th.TextGhost)
+							ui.Text(c, "No matching tasks or commands").
+								TextColor(th.TextSecondary).
+								FontSize(13).
+								FontWeight(500).
+								SingleLine()
+						})
+				})
+			return
+		}
+
+		results := ui.Scroll(c).
+			Key("cmd-palette-results").
+			FillWidth().
+			Height(420).
+			Padding(0, 8, 8, 8).
+			Role(ui.RoleList).
+			Label("Command Palette Results")
+		results.Children(func() {
+			ui.Column(c).FillWidth().Gap(0).Children(func() {
+				prevSec := ""
+				secIdx := 0
+				for idx, entry := range filtered {
+					item := entry
+					sec := strings.TrimSpace(item.Section)
+					if sec == "" {
+						sec = "Commands"
+					}
+					if sec != prevSec {
+						prevSec = sec
+						secLabel := sec
+						ui.Row(c).
+							Key(fmt.Sprintf("cp-sec-%d-%s", secIdx, secLabel)).
+							FillWidth().
+							Height(30).
+							Padding(10, 9, 0, 9).
+							AlignItems(ui.Center).
+							Role(ui.RoleHeading).
+							Label(secLabel).
+							Children(func() {
+								ui.Text(c, secLabel).
+									TextColor(th.TextTertiary).
+									FontSize(12.5).
+									FontWeight(500).
+									SingleLine()
+							})
+						secIdx++
+					}
+
+					isSelected := idx == hlIdx
+					rowBtn := ui.ButtonBase(c).
+						Key("cp-row-"+item.ID).
+						FillWidth().
+						Height(44).
+						Padding(0, 11, 0, 11).
+						Radius(9).
+						AlignItems(ui.Center).
+						Justify(ui.SpaceBetween).
+						Gap(10).
+						Cursor(ui.CursorPointer).
+						Label(item.Label)
+					if isSelected {
+						rowBtn.Background(th.Overlay).Border(1, th.BorderStrong)
+					} else if rowBtn.Hovered() {
+						rowBtn.Background(th.Overlay.Alpha(0.6)).Border(1, ui.Color{})
+					} else {
+						rowBtn.Border(1, ui.Color{})
+					}
+
+					rowBtn.Children(func() {
+						ui.Row(c).Grow(1).Shrink(1).MinWidth(0).AlignItems(ui.Center).Gap(10).Children(func() {
+							ic := item.Icon
+							if ic == nil {
+								ic = gui.IconTerminal
+							}
+							icCol := item.IconColor
+							if icCol.A == 0 {
+								icCol = th.TextSecondary
+							}
+							gui.IconView(c, ic, 16, icCol)
+							ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(1).Children(func() {
+								ui.Text(c, item.Label).
+									TextColor(th.Text).
+									FontSize(13).
+									FontWeight(500).
+									SingleLine().
+									Shrink(1)
+								if strings.TrimSpace(item.Description) != "" {
+									ui.Text(c, item.Description).
+										TextColor(th.TextTertiary).
+										FontSize(11.5).
+										SingleLine().
+										Shrink(1)
+								}
+							})
+						})
+						if strings.TrimSpace(item.Badge) != "" {
+							ui.Row(c).
+								Height(20).
+								Padding(0, 6, 0, 6).
+								Radius(5).
+								Background(th.Surface).
+								Border(1, th.Border).
+								AlignItems(ui.Center).
+								Shrink(0).
+								Children(func() {
+									ui.Text(c, item.Badge).
+										TextColor(th.TextTertiary).
+										FontSize(11).
+										Font("monospace").
+										SingleLine()
+								})
+						}
+					})
+					if rowBtn.Clicked() {
+						cp := item
+						clickedEntry = &cp
+					}
+				}
+			})
+		})
 	})
+
+	if clickedEntry != nil {
+		d.runEntry(*clickedEntry)
+	}
 	return root
 }
 
-// Show pushes CommandPaletteDialog onto host as a modal overlay.
+// Show pushes CommandPaletteDialog onto host as a top-anchored modal overlay.
 func (d *CommandPaletteDialog) Show(host *gui.GUI) *DialogHandle {
 	return selShowOverlay(host, gui.OverlayOptions{
-		Width:            560,
-		MaxWidthPercent:  90,
-		MaxHeightPercent: 84,
+		Width:            680,
+		MaxWidth:         680,
+		MaxHeight:        480,
+		MaxWidthPercent:  92,
+		MaxHeightPercent: 86,
+		Radius:           15,
+		AlignTop:         72,
+		ZeroPadding:      true,
+		DisableEscape:    true,
+		Role:             ui.RoleDialog,
+		Label:            "Command Palette",
 	}, func() {
 		d.mu.Lock()
 		d.confirmHandle = nil
@@ -5281,30 +5565,38 @@ func (m *GuiMode) ShowCommandPalette() {
 	entries := []CommandPaletteEntry{
 		{
 			ID:          "action:new-task",
+			Section:     "Commands",
 			Label:       "New Task",
 			Description: "Start a fresh agent session",
 			Badge:       "⌘N",
+			Icon:        gui.IconCompose,
 			OnRun:       func() { go m.newSession(m.currentCtx()) },
 		},
 		{
 			ID:          "action:toggle-sidebar",
+			Section:     "Commands",
 			Label:       "Toggle Left Sidebar",
 			Description: "Show or hide the session history sidebar",
 			Badge:       "⌘B",
+			Icon:        gui.IconPanelLeft,
 			OnRun:       func() { m.toggleLeftSidebar() },
 		},
 		{
 			ID:          "action:toggle-right-panel",
+			Section:     "Commands",
 			Label:       "Toggle Right Panel (Changes)",
 			Description: "Show or hide workspace git diffs and changes",
 			Badge:       "⌘J",
+			Icon:        gui.IconPanelRight,
 			OnRun:       func() { m.toggleRightPanel() },
 		},
 		{
 			ID:          "action:session-tree-panel",
+			Section:     "Commands",
 			Label:       "Session Tree Panel",
 			Description: "Open the interactive session tree in the right panel",
 			Badge:       "Panel",
+			Icon:        gui.IconFork,
 			OnRun: func() {
 				m.ensureWakuState()
 				m.rightPanel.mu.Lock()
@@ -5319,81 +5611,122 @@ func (m *GuiMode) ShowCommandPalette() {
 		},
 		{
 			ID:          "action:select-model",
+			Section:     "Commands",
 			Label:       "Select Model…",
 			Description: "Switch the active provider and model",
 			Badge:       "/model",
+			Icon:        gui.IconSparkle,
 			OnRun:       func() { m.ToggleModelPickerPopover() },
 		},
 		{
 			ID:          "action:select-thinking",
+			Section:     "Commands",
 			Label:       "Select Thinking Level…",
 			Description: "Adjust reasoning budget for responses",
 			Badge:       "/thinking",
+			Icon:        gui.IconSparkle,
 			OnRun:       func() { m.ShowThinkingSelector() },
 		},
 		{
-			ID:          "action:switch-theme",
-			Label:       "Switch Theme…",
-			Description: "Choose a color theme preset",
-			Badge:       "/theme",
-			OnRun:       func() { m.ShowThemeSelector() },
-		},
-		{
-			ID:          "action:toggle-appearance",
-			Label:       "Toggle Dark / Light Appearance",
-			Description: "Switch between Waku Dark and Waku Light",
-			Badge:       "Theme",
-			OnRun:       func() { m.toggleQuickThemeDarkLight() },
-		},
-		{
-			ID:          "action:open-settings",
-			Label:       "Open Settings…",
-			Description: "Configure pi runtime and GUI preferences",
-			Badge:       "/settings",
-			OnRun:       func() { m.ShowSettingsSelector() },
-		},
-		{
-			ID:          "action:navigate-tree",
-			Label:       "Navigate Session Tree…",
-			Description: "Jump to any branch or turn in the session",
-			Badge:       "/tree",
-			OnRun:       func() { m.ShowTreeSelector() },
-		},
-		{
-			ID:          "action:fork-session",
-			Label:       "Fork Session…",
-			Description: "Branch a new session from an earlier message",
-			Badge:       "/fork",
-			OnRun:       func() { m.ShowForkSelector() },
-		},
-		{
-			ID:          "action:resume-session",
-			Label:       "Resume Session…",
-			Description: "Browse and load saved sessions",
-			Badge:       "/resume",
-			OnRun:       func() { m.ShowSessionSelector() },
-		},
-		{
 			ID:          "action:compact-context",
+			Section:     "Commands",
 			Label:       "Compact Context",
 			Description: "Summarize older turns to free context window space",
 			Badge:       "/compact",
+			Icon:        gui.IconFilter,
 			OnRun:       func() { go m.runCompactCommand(m.currentCtx(), "") },
 		},
 		{
 			ID:          "action:copy-last-reply",
+			Section:     "Commands",
 			Label:       "Copy Last Reply",
 			Description: "Copy the most recent assistant message to clipboard",
 			Badge:       "/copy",
+			Icon:        gui.IconCopy,
 			OnRun:       func() { m.copyLastAssistantMessage() },
 		},
 		{
+			ID:          "action:navigate-tree",
+			Section:     "Commands",
+			Label:       "Navigate Session Tree…",
+			Description: "Jump to any branch or turn in the session",
+			Badge:       "/tree",
+			Icon:        gui.IconFork,
+			OnRun:       func() { m.ShowTreeSelector() },
+		},
+		{
+			ID:          "action:fork-session",
+			Section:     "Commands",
+			Label:       "Fork Session…",
+			Description: "Branch a new session from an earlier message",
+			Badge:       "/fork",
+			Icon:        gui.IconFork,
+			OnRun:       func() { m.ShowForkSelector() },
+		},
+		{
+			ID:          "action:resume-session",
+			Section:     "Commands",
+			Label:       "Resume Session…",
+			Description: "Browse and load saved sessions",
+			Badge:       "/resume",
+			Icon:        gui.IconFolderOpen,
+			OnRun:       func() { m.ShowSessionSelector() },
+		},
+		{
+			ID:          "action:open-settings",
+			Section:     "Settings",
+			Label:       "Open Settings…",
+			Description: "Configure pi runtime and GUI preferences",
+			Badge:       "⌘,",
+			Icon:        gui.IconSettings,
+			OnRun:       func() { m.ShowSettingsSelector() },
+		},
+		{
+			ID:          "action:toggle-appearance",
+			Section:     "Settings",
+			Label:       "Toggle Dark / Light Appearance",
+			Description: "Switch between Waku Dark and Waku Light",
+			Badge:       "Theme",
+			Icon:        gui.IconAppearance,
+			OnRun:       func() { m.toggleQuickThemeDarkLight() },
+		},
+		{
+			ID:          "action:switch-theme",
+			Section:     "Settings",
+			Label:       "Switch Theme…",
+			Description: "Choose a color theme preset",
+			Badge:       "/theme",
+			Icon:        gui.IconAppearance,
+			OnRun:       func() { m.ShowThemeSelector() },
+		},
+		{
 			ID:          "action:hotkeys",
+			Section:     "Settings",
 			Label:       "Keyboard Shortcuts",
 			Description: "View available keyboard shortcuts",
 			Badge:       "/hotkeys",
+			Icon:        gui.IconTerminal,
 			OnRun:       func() { m.ShowHotkeysDialog() },
 		},
+	}
+
+	if m.sidebar != nil {
+		for _, sessInfo := range m.sidebar.sessionsSnapshot() {
+			sp := sessInfo
+			if sp.Path == "" {
+				continue
+			}
+			title := wakuSessionTitle(sp)
+			entries = append(entries, CommandPaletteEntry{
+				ID:          "task:" + sp.Path,
+				Section:     "Tasks",
+				Label:       title,
+				Description: utils.ShortenHomePath(sp.Cwd),
+				Badge:       "Task",
+				Icon:        gui.IconCompose,
+				OnRun:       func() { m.switchToSessionPath(sp.Path, true) },
+			})
+		}
 	}
 
 	for _, cmd := range m.buildSlashCommandList() {
@@ -5403,9 +5736,11 @@ func (m *GuiMode) ShowCommandPalette() {
 		}
 		entries = append(entries, CommandPaletteEntry{
 			ID:          "slash:" + cmdName,
+			Section:     "Commands",
 			Label:       "/" + cmdName,
 			Description: cmd.Description,
 			Badge:       "Command",
+			Icon:        gui.IconTerminal,
 			OnRun: func() {
 				m.HandleSlashCommand(m.currentCtx(), "/"+cmdName)
 			},
@@ -5416,6 +5751,375 @@ func (m *GuiMode) ShowCommandPalette() {
 		Title:   "Command Palette",
 		Entries: entries,
 		Theme:   m.currentGuiTheme(),
+	})
+	m.setActiveDialog(dlg.Show(m.host))
+}
+
+// CommitDialogConfig configures the Waku-aligned git CommitDialog modal.
+type CommitDialogConfig struct {
+	Branch          string
+	Additions       int
+	Deletions       int
+	FileCount       int
+	InitialMessage  string
+	IncludeUnstaged bool
+	Theme           *gui.GuiTheme
+	OnCommit        func(message string, includeUnstaged bool) error
+	OnPush          func() error
+	OnClose         func()
+}
+
+// CommitDialog presents a Waku-styled modal for composing and creating a git commit.
+type CommitDialog struct {
+	cfg             CommitDialogConfig
+	message         string
+	includeUnstaged bool
+	errMsg          string
+
+	mu            sync.Mutex
+	confirmHandle func()
+	cancelHandle  func()
+}
+
+// NewCommitDialog constructs a CommitDialog with cfg.
+func NewCommitDialog(cfg CommitDialogConfig) *CommitDialog {
+	return &CommitDialog{
+		cfg:             cfg,
+		message:         cfg.InitialMessage,
+		includeUnstaged: cfg.IncludeUnstaged,
+	}
+}
+
+func (d *CommitDialog) submit(andPush bool) {
+	msg := strings.TrimSpace(d.message)
+	if msg == "" {
+		msg = "Update workspace changes"
+	}
+	if d.cfg.OnCommit != nil {
+		if err := d.cfg.OnCommit(msg, d.includeUnstaged); err != nil {
+			d.mu.Lock()
+			d.errMsg = err.Error()
+			d.mu.Unlock()
+			return
+		}
+	}
+	if andPush && d.cfg.OnPush != nil {
+		if err := d.cfg.OnPush(); err != nil {
+			d.mu.Lock()
+			d.errMsg = err.Error()
+			d.mu.Unlock()
+			return
+		}
+	}
+	d.mu.Lock()
+	confirmFn := d.confirmHandle
+	d.mu.Unlock()
+	if confirmFn != nil {
+		confirmFn()
+	}
+}
+
+func (d *CommitDialog) pushOnly() {
+	if d.cfg.OnPush != nil {
+		if err := d.cfg.OnPush(); err != nil {
+			d.mu.Lock()
+			d.errMsg = err.Error()
+			d.mu.Unlock()
+			return
+		}
+	}
+	d.mu.Lock()
+	confirmFn := d.confirmHandle
+	d.mu.Unlock()
+	if confirmFn != nil {
+		confirmFn()
+	}
+}
+
+func (d *CommitDialog) cancel() {
+	d.mu.Lock()
+	cancelFn := d.cancelHandle
+	d.mu.Unlock()
+	if cancelFn != nil {
+		cancelFn()
+	}
+}
+
+// View renders CommitDialog inside c matching Waku's commit_dialog.rs layout.
+func (d *CommitDialog) View(c *ui.Context) ui.Element {
+	th := gui.ResolveGuiTheme(c, d.cfg.Theme)
+	branch := strings.TrimSpace(d.cfg.Branch)
+	if branch == "" {
+		branch = "main"
+	}
+
+	d.mu.Lock()
+	errText := d.errMsg
+	d.mu.Unlock()
+
+	root := ui.Column(c).FillWidth().Gap(0)
+	var submitCommit, submitAndPush, submitPush, cancelNow, toggleUnstaged bool
+
+	root.Children(func() {
+		// 48px Branch header
+		ui.Row(c).
+			Key("commit-dlg-header").
+			FillWidth().
+			Height(48).
+			Padding(0, 16, 0, 16).
+			AlignItems(ui.Center).
+			Justify(ui.Start).
+			Gap(9).
+			Role(ui.RoleRegion).
+			Label("Commit Dialog Header").
+			Children(func() {
+				gui.IconView(c, gui.IconGitBranch, 15, th.TextSecondary)
+				ui.Text(c, branch).
+					TextColor(th.Text).
+					FontSize(14).
+					FontWeight(600).
+					SingleLine().
+					Shrink(1).
+					MinWidth(0)
+			})
+
+		// 112px multi-line commit message editor (borderless directly on ComposerBg, matching Waku commit_dialog.rs)
+		var msgIn ui.Element
+		ui.Box(c).
+			Key("commit-dlg-msg-wrap").
+			FillWidth().
+			Height(112).
+			Padding(10, 16, 10, 16).
+			Role(ui.RoleRegion).
+			Label("Commit Message Area").
+			Children(func() {
+				msgIn = ui.TextAreaBase(c, &d.message).
+					Fill().
+					FontSize(13).
+					TextColor(th.Text).
+					Placeholder("Commit message…").
+					Label("Commit message").
+					AutoFocus()
+			})
+
+		msgIn.OnTextKey(func(k ui.TextKey) bool {
+			switch {
+			case k.Key == ui.KeyEnter && (k.Mods&(ui.Cmd|ui.Ctrl)) != 0:
+				submitCommit = true
+				return true
+			case k.Key == ui.KeyEscape && k.Mods == 0:
+				cancelNow = true
+				return true
+			}
+			return false
+		})
+
+		// 44px Include unstaged toggle + +adds / -dels summary
+		var unstagedBtn ui.Element
+		ui.Box(c).FillWidth().Padding(0, 8, 0, 8).Children(func() {
+			unstagedBtn = ui.ButtonBase(c).
+				Key("commit-dlg-include-unstaged").
+				FillWidth().
+				Height(44).
+				Padding(0, 12, 0, 12).
+				Radius(9).
+				AlignItems(ui.Center).
+				Justify(ui.SpaceBetween).
+				Gap(10).
+				Cursor(ui.CursorPointer).
+				Role(ui.RoleCheckBox).
+				Checked(d.includeUnstaged).
+				Label("Include unstaged")
+			if unstagedBtn.Hovered() {
+				unstagedBtn.Background(th.Overlay)
+			}
+			unstagedBtn.Children(func() {
+				ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+					boxBg := th.Inset
+					boxBorder := th.TextTertiary
+					if d.includeUnstaged {
+						boxBg = th.ComposerBg
+						boxBorder = th.BorderStrong
+					}
+					ui.Box(c).
+						Size(16, 16).
+						Radius(4).
+						Background(boxBg).
+						Border(1, boxBorder).
+						Center().
+						Children(func() {
+							if d.includeUnstaged {
+								gui.IconView(c, gui.IconCheck, 11, th.Text)
+							}
+						})
+					ui.Text(c, "Include unstaged").TextColor(th.Text).FontSize(13).SingleLine()
+				})
+				ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(6).Children(func() {
+					if d.cfg.Additions > 0 || d.cfg.Deletions == 0 {
+						ui.Textf(c, "+%d", d.cfg.Additions).TextColor(th.DiffAdded).Font("monospace").FontSize(12).SingleLine()
+					}
+					if d.cfg.Deletions > 0 || d.cfg.Additions == 0 {
+						ui.Textf(c, "-%d", d.cfg.Deletions).TextColor(th.DiffRemoved).Font("monospace").FontSize(12).SingleLine()
+					}
+				})
+			})
+		})
+		if unstagedBtn.Clicked() {
+			toggleUnstaged = true
+		}
+
+		if errText != "" {
+			ui.Box(c).FillWidth().Padding(4, 16, 4, 16).Children(func() {
+				ui.Text(c, errText).TextColor(th.Error).FontSize(12).Wrap()
+			})
+		}
+
+		// Commit / Commit & Push / Push 38px action rows matching Waku commit_dialog.rs (~353px total height)
+		ui.Box(c).FillWidth().Height(1).Background(th.Border).Margin(0, 8, 0, 8)
+		ui.Column(c).FillWidth().Padding(8, 8, 16, 8).Gap(4).Children(func() {
+			renderAct := func(key, label, hint string, ic *ui.SVG, disabled bool, onClick *bool) {
+				btn := ui.ButtonBase(c).
+					Key(key).
+					FillWidth().
+					Height(38).
+					Padding(0, 10, 0, 10).
+					Radius(9).
+					AlignItems(ui.Center).
+					Justify(ui.SpaceBetween).
+					Gap(10).
+					Label(label)
+				fg := th.Text
+				if disabled {
+					fg = th.TextGhost
+					btn.Disabled(true)
+				} else {
+					btn.Cursor(ui.CursorPointer)
+					if btn.Hovered() {
+						btn.Background(th.OverlayStrong)
+					}
+				}
+				btn.Children(func() {
+					ui.Row(c).Grow(1).Shrink(1).MinWidth(0).AlignItems(ui.Center).Gap(10).Children(func() {
+						gui.IconView(c, ic, 15, fg)
+						ui.Text(c, label).TextColor(fg).FontSize(13.5).FontWeight(500).SingleLine()
+					})
+					if hint != "" {
+						hintCol := th.TextSecondary
+						if disabled {
+							hintCol = th.TextGhost
+						}
+						ui.Row(c).
+							Height(22).
+							MinWidth(34).
+							Padding(0, 7, 0, 7).
+							Radius(11).
+							Background(th.OverlayStrong).
+							AlignItems(ui.Center).
+							Justify(ui.Center).
+							Shrink(0).
+							Children(func() {
+								ui.Text(c, hint).TextColor(hintCol).FontSize(12.5).SingleLine()
+							})
+					}
+				})
+				if !disabled && btn.Clicked() {
+					*onClick = true
+				}
+			}
+			renderAct("commit-dlg-submit", "Commit", "⌘↩", gui.IconGitCommitHorizontal, false, &submitCommit)
+			renderAct("commit-dlg-commit-push", "Commit & Push", "", gui.IconCloudUpload, false, &submitAndPush)
+			renderAct("commit-dlg-push", "Push", "", gui.IconCloudUpload, false, &submitPush)
+		})
+	})
+
+	if toggleUnstaged {
+		d.includeUnstaged = !d.includeUnstaged
+	}
+	if submitCommit {
+		d.submit(false)
+	} else if submitAndPush {
+		d.submit(true)
+	} else if submitPush {
+		d.pushOnly()
+	} else if cancelNow {
+		d.cancel()
+	}
+	return root
+}
+
+// Show pushes CommitDialog onto host as a Waku-styled modal overlay.
+func (d *CommitDialog) Show(host *gui.GUI) *DialogHandle {
+	return selShowOverlay(host, gui.OverlayOptions{
+		Width:            420,
+		MaxWidth:         420,
+		MaxWidthPercent:  92,
+		MaxHeightPercent: 86,
+		Radius:           18,
+		ZeroPadding:      true,
+		PanelBackground:  d.cfg.Theme.ComposerBg,
+		Role:             ui.RoleDialog,
+		Label:            "Commit Dialog",
+	}, func() {
+		d.mu.Lock()
+		d.confirmHandle = nil
+		d.cancelHandle = nil
+		fn := d.cfg.OnClose
+		d.mu.Unlock()
+		if fn != nil {
+			fn()
+		}
+	}, func(c *ui.Context, confirmDone func(), cancel func()) {
+		d.mu.Lock()
+		d.confirmHandle = confirmDone
+		d.cancelHandle = cancel
+		d.mu.Unlock()
+		d.View(c)
+	})
+}
+
+// ShowCommitDialog opens the Waku git commit modal pre-populated with branch and diff totals.
+func (m *GuiMode) ShowCommitDialog() {
+	if m == nil || m.host == nil {
+		return
+	}
+	m.ensureWakuState()
+	_, branch := m.rightPanel.gitBranchesSnapshot()
+	cwd, adds, dels, fileCount := m.rightPanel.snapshotChangedTotals()
+	if cwd == "" {
+		cwd = gmRuntimeCwd(m.runtime)
+	}
+	th := m.currentGuiTheme()
+	dlg := NewCommitDialog(CommitDialogConfig{
+		Branch:          branch,
+		Additions:       adds,
+		Deletions:       dels,
+		FileCount:       fileCount,
+		IncludeUnstaged: true,
+		Theme:           th,
+		OnCommit: func(message string, includeUnstaged bool) error {
+			if err := rpGitCommit(cwd, message, includeUnstaged); err != nil {
+				return err
+			}
+			m.toast.show(wakuToastSuccess, "Committed", selTruncateSingleLine(message, 60), func() {
+				if m.host != nil {
+					m.host.RequestRender()
+				}
+			})
+			m.refreshRightPanelChanges()
+			m.refreshGitBranchesAsync()
+			return nil
+		},
+		OnPush: func() error {
+			if err := rpGitPush(cwd); err != nil {
+				return err
+			}
+			m.toast.show(wakuToastSuccess, "Pushed", branch, func() {
+				if m.host != nil {
+					m.host.RequestRender()
+				}
+			})
+			return nil
+		},
 	})
 	m.setActiveDialog(dlg.Show(m.host))
 }
